@@ -197,28 +197,28 @@ body.keyboard-open .fab-btn {
     </button>
 
     <div class="nav-container">
-        <nav class="glass-nav rounded-2xl flex justify-between items-center px-1.5 py-1.5">
-            <button onclick="switchTab('finish')" class="nav-btn flex-1 flex flex-col items-center py-2 rounded-xl" id="btn-finish">
-                <i data-lucide="circle-check" class="w-4 h-4"></i>
-                <span class="text-[9px] mt-0.5 font-medium">打卡</span>
-            </button>
-            <button onclick="switchTab('menstrual')" class="nav-btn flex-1 flex flex-col items-center py-2 rounded-xl text-gray-400" id="btn-menstrual">
-                <i data-lucide="heart" class="w-4 h-4"></i>
-                <span class="text-[9px] mt-0.5 font-medium">经期</span>
-            </button>
-            <button onclick="switchTab('home')" class="nav-btn flex-1 flex flex-col items-center py-2 rounded-xl text-gray-400" id="btn-home">
-                <i data-lucide="home" class="w-4 h-4"></i>
-                <span class="text-[9px] mt-0.5 font-medium">首页</span>
-            </button>
-            <button onclick="switchTab('bill')" class="nav-btn flex-1 flex flex-col items-center py-2 rounded-xl text-gray-400" id="btn-bill">
-                <i data-lucide="wallet" class="w-4 h-4"></i>
-                <span class="text-[9px] mt-0.5 font-medium">记账</span>
-            </button>
-            <button onclick="switchTab('note')" class="nav-btn flex-1 flex flex-col items-center py-2 rounded-xl text-gray-400" id="btn-note">
-                <i data-lucide="sticky-note" class="w-4 h-4"></i>
-                <span class="text-[9px] mt-0.5 font-medium">记事</span>
-            </button>
-        </nav>
+<nav class="glass-nav rounded-2xl flex justify-between items-center px-1.5 py-1.5">
+    <button onclick="if(currentTab !== 'finish') switchTab('finish')" class="nav-btn flex-1 flex flex-col items-center py-2 rounded-xl" id="btn-finish">
+        <i data-lucide="circle-check" class="w-4 h-4"></i>
+        <span class="text-[9px] mt-0.5 font-medium">打卡</span>
+    </button>
+    <button onclick="if(currentTab !== 'menstrual') switchTab('menstrual')" class="nav-btn flex-1 flex flex-col items-center py-2 rounded-xl text-gray-400" id="btn-menstrual">
+        <i data-lucide="heart" class="w-4 h-4"></i>
+        <span class="text-[9px] mt-0.5 font-medium">经期</span>
+    </button>
+    <button onclick="if(currentTab !== 'home') switchTab('home')" class="nav-btn flex-1 flex flex-col items-center py-2 rounded-xl text-gray-400" id="btn-home">
+        <i data-lucide="home" class="w-4 h-4"></i>
+        <span class="text-[9px] mt-0.5 font-medium">首页</span>
+    </button>
+    <button onclick="if(currentTab !== 'bill') switchTab('bill')" class="nav-btn flex-1 flex flex-col items-center py-2 rounded-xl text-gray-400" id="btn-bill">
+        <i data-lucide="wallet" class="w-4 h-4"></i>
+        <span class="text-[9px] mt-0.5 font-medium">记账</span>
+    </button>
+    <button onclick="if(currentTab !== 'note') switchTab('note')" class="nav-btn flex-1 flex flex-col items-center py-2 rounded-xl text-gray-400" id="btn-note">
+        <i data-lucide="sticky-note" class="w-4 h-4"></i>
+        <span class="text-[9px] mt-0.5 font-medium">记事</span>
+    </button>
+</nav>
     </div>
 
     <div id="fullscreen-modal" class="fullscreen-modal" onclick="closeModal(event)">
@@ -2631,7 +2631,7 @@ function renderMeView() {
                 </div>
             </div>
 
-            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v3.4.2</p></div>
+            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v3.4.3</p></div>
         </div>
     `;
     return html;
@@ -2649,7 +2649,7 @@ function showAbout() {
                     <i data-lucide="sparkles" class="w-8 h-8 text-white"></i>
                 </div>
                 <p class="text-lg font-bold text-gray-800">Life Manager</p>
-                <p class="text-xs text-gray-400 mt-1">v3.4.2</p>
+                <p class="text-xs text-gray-400 mt-1">v3.4.3</p>
             </div>
             <div class="glass-card rounded-2xl overflow-hidden mt-4" style="padding: 0;">
                 <div class="setting-item" onclick="openGithubRepo()" style="margin-bottom: 0; border-radius: 0;">
@@ -3472,7 +3472,7 @@ function switchTab(tab, forceRender = false) {
     else if (tab === 'bill') mainEl.style.paddingBottom = '48px';
     else mainEl.style.paddingBottom = '68px';
 
-    document.querySelectorAll('.nav-btn').forEach(btn => {
+    document.querySelectorAll('nav .nav-btn').forEach(btn => {
         btn.classList.add('text-gray-400');
         btn.classList.remove('active-tab');
     });
