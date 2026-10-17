@@ -4,13 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Life Manager</title>
+    <link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#3B82F6">
 <link rel="apple-touch-icon" href="app-icon.png">
 <link rel="icon" sizes="192x192" href="app-icon.png">
 <link rel="icon" sizes="512x512" href="app-icon.png">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <script src="https://cdn.bootcdn.net/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script src="./tailwind.js"></script>
+<script src="./lucide.min.js"></script>
+<script src="./confetti.min.js"></script>
+<script src="./chart.min.js"></script>
     <style>
         :root { --bg-color: #F0F4F8; --accent-color: #3B82F6; --glass-bg: rgba(255, 255, 255, 0.6); --glass-border: rgba(255, 255, 255, 0.4); }
         * { -webkit-tap-highlight-color: transparent; touch-action: manipulation; box-sizing: border-box; }
@@ -18,8 +20,8 @@
         html, body { margin: 0; padding: 0; }
         body { background: transparent; padding-top: env(safe-area-inset-top); font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'STHeiti', 'Segoe UI', sans-serif; color: #2D3748; min-height: 100vh; padding-bottom: 12px; overflow-x: hidden; }
         .glass { background: var(--glass-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid var(--glass-border); }
-        .glass-card { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.5); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.8); }
-        .glass-nav { background: rgba(255, 255, 255, 0.65); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px); border: 1px solid rgba(255, 255, 255, 0.35); box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.06); }
+        .glass-card { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(1px); -webkit-backdrop-filter: blur(1px); border: 1px solid rgba(255, 255, 255, 0.5); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.8); }
+        .glass-nav { background: rgba(255, 255, 255, 0.65); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); border: 1px solid rgba(255, 255, 255, 0.35); box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.06); }
         .nav-container { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); width: calc(100% - 28px); max-width: 380px; z-index: 100; }
         .nav-btn { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); padding: 8px 0; cursor: pointer; }
         .nav-btn:active { transform: scale(0.92); }
@@ -50,7 +52,7 @@
         .sync-progress-bar { width: 100%; height: 100%; background: linear-gradient(90deg, #3b82f6, #60a5fa); animation: sync-progress-anim 1.2s ease-in-out infinite; }
         @keyframes sync-progress-anim { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
         .note-card { background: rgba(255, 255, 255, 0.85); border-radius: 14px; padding: 14px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.03); transition: all 0.2s ease; cursor: pointer; }
-        .habit-card { background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.75) 100%); backdrop-filter: blur(12px); border-radius: 32px; padding: 12px 17px; margin-bottom: 16px; border: 1px solid rgba(255,255,255,0.6); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.02); transition: all 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1); display: flex; align-items: center; gap: 6px; cursor: pointer; }
+        .habit-card { background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.75) 100%); backdrop-filter: blur(1px); border-radius: 32px; padding: 12px 17px; margin-bottom: 16px; border: 1px solid rgba(255,255,255,0.6); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.02); transition: all 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1); display: flex; align-items: center; gap: 6px; cursor: pointer; }
         .habit-card:active { transform: scale(0.98); box-shadow: 0 5px 12px -3px rgba(0, 0, 0, 0.1); }
         .habit-card.completed { background: linear-gradient(135deg, rgba(240, 253, 244, 0.9) 0%, rgba(220, 252, 231, 0.8) 100%); border-color: rgba(34, 197, 94, 0.3); }
         .habit-icon { width: 56px; height: 56px; background: transparent !important; border-radius: 0; display: flex; align-items: center; justify-content: center; font-size: 32px; }
@@ -70,7 +72,7 @@
         .add-task-inline { background: rgba(255, 255, 255, 0.95); border-radius: 18px; padding: 16px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); margin-bottom: 12px; animation: slideDown 0.3s ease; }
         @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
         .income-card { background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white; padding: 16px 18px; border-radius: 18px; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.2); }
-        .action-sheet-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); backdrop-filter: blur(6px); z-index: 2000; display: flex; align-items: flex-end; justify-content: center; opacity: 0; visibility: hidden; transition: all 0.3s ease; }
+        .action-sheet-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); backdrop-filter: blur(1px); z-index: 2000; display: flex; align-items: flex-end; justify-content: center; opacity: 0; visibility: hidden; transition: all 0.3s ease; }
         .action-sheet-overlay.active { opacity: 1; visibility: visible; }
         .action-sheet { background: white; width: 100%; max-width: 420px; border-radius: 24px 24px 0 0; padding: 12px 20px 30px; transform: translateY(100%); transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
         .action-sheet-overlay.active .action-sheet { transform: translateY(0); }
@@ -3369,7 +3371,11 @@ const views = {
     me: { title: '设置', subtitle: '数据及账户管理', render: renderMeView }
 };
 
+// 新增：页面缓存池
+const pageCache = {};
+
 function switchTab(tab, resetView = false) {
+    const previousTab = currentTab; // 记录切换前的页面
     currentTab = tab;
     const content = document.getElementById('content');
     const data = views[tab];
@@ -3397,24 +3403,43 @@ function switchTab(tab, resetView = false) {
             document.getElementById('page-subtitle').innerText = '记录每一笔支出';
         }
         document.getElementById('page-title').innerText = '记账';
-        requestAnimationFrame(() => {
-            const ib = document.getElementById('btn-income-type');
-            const eb = document.getElementById('btn-expense-type');
-            if (currentBillType === 'income') { ib.classList.add('active-tab'); eb.classList.remove('active-tab'); }
-            else { eb.classList.add('active-tab'); ib.classList.remove('active-tab'); }
-        });
     } else {
         switchContainer.style.display = 'none';
         document.getElementById('page-title').innerText = data.title;
         document.getElementById('page-subtitle').innerText = data.subtitle;
     }
 
-    try { content.innerHTML = data.render(); }
-    catch (e) {
-        console.error('渲染错误:', e);
-        content.innerHTML = `<div class="text-center text-red-500 p-4">页面渲染出错，请重试</div>`;
+    // 🌟 核心智能判断：
+    // 如果是从其他页面切过来的（tab !== previousTab），且没有要求重置，就用缓存
+    // 如果是在当前页面刷新（比如打完卡重新渲染），或者要求重置，就强制重绘
+    const isSamePageRefresh = (tab === previousTab);
+    
+    let pageDiv = document.getElementById('page-wrapper-' + tab);
+    
+    if (!pageDiv || isSamePageRefresh || resetView) {
+        if (!pageDiv) {
+            pageDiv = document.createElement('div');
+            pageDiv.id = 'page-wrapper-' + tab;
+            pageDiv.className = 'page-content';
+            content.appendChild(pageDiv);
+        }
+        
+        // 强制重绘 HTML
+        try { 
+            pageDiv.innerHTML = data.render(); 
+            lucide.createIcons(); // 只有重绘的时候才转图标，极大降低卡顿！
+        } catch (e) {
+            console.error('渲染错误:', e);
+            pageDiv.innerHTML = `<div class="text-center text-red-500 p-4">页面渲染出错，请重试</div>`;
+        }
     }
 
+    // 隐藏其他所有页面，只显示当前页面
+    Array.from(content.children).forEach(child => {
+        child.style.display = (child.id === 'page-wrapper-' + tab) ? 'block' : 'none';
+    });
+
+    // 下面是你原本的 FAB 按钮、导航栏高亮代码（保持不变）
     const mainEl = document.getElementById('content');
     if (tab === 'me') mainEl.style.paddingBottom = '0px';
     else if (tab === 'bill') mainEl.style.paddingBottom = '48px';
@@ -3435,12 +3460,18 @@ function switchTab(tab, resetView = false) {
 
     if (tab === 'bill') setTimeout(() => { initIncomeChart(); initExpenseChart(); }, 100);
 
-lucide.createIcons();
-vibrate(3);
-_fabHidden = false;
-const _f = document.getElementById('fab-add-btn');
-if (_f) { _f.style.transform = ''; _f.style.opacity = '1'; _f.style.pointerEvents = 'auto'; }
-requestAnimationFrame(() => { _fabLastY = window.scrollY; });
+    // 重新初始化 Lucide（只在需要的时候）
+    if (!pageDiv || isSamePageRefresh || resetView) {
+        // 已经在上面的 data.render() 里执行过了，这里不用重复
+    }
+
+    vibrate(3);
+    if (typeof _fabHidden !== 'undefined') {
+        _fabHidden = false;
+        const _f = document.getElementById('fab-add-btn');
+        if (_f) { _f.style.transform = ''; _f.style.opacity = '1'; _f.style.pointerEvents = 'auto'; }
+        if (typeof _fabLastY !== 'undefined') _fabLastY = window.scrollY;
+    }
 
     if (tab === 'menstrual' && appData.settings.syncMenstrualFrom && appData.settings.giteeToken && appData.settings.giteeRepo) {
         setTimeout(() => { fetchRemoteMenstrual(false); }, 300);
@@ -3544,7 +3575,14 @@ window.addEventListener('scroll', () => {
 // 预初始化加密密钥，避免首次打卡/同步时 PBKDF2 阻塞主线程
 setTimeout(() => { getEncryptionKey().catch(() => {}); }, 500);
 
-
+// 注册 PWA Service Worker
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('service-worker.js')
+            .then(reg => console.log('PWA 已注册!'))
+            .catch(err => console.log('PWA 注册失败!', err));
+    });
+}
     </script>
 </body>
 </html>
