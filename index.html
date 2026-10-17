@@ -9,10 +9,22 @@
 <link rel="apple-touch-icon" href="app-icon.png">
 <link rel="icon" sizes="192x192" href="app-icon.png">
 <link rel="icon" sizes="512x512" href="app-icon.png">
-<script src="./tailwind.js"></script>
-<script src="./lucide.min.js"></script>
-<script src="./confetti.min.js"></script>
-<script src="./chart.min.js"></script>
+<script>
+    // 判断：只要是 http 或 https 线上环境，就用本地文件
+    if (location.protocol === 'http:' || location.protocol === 'https:') {
+        // 线上：极速、离线可用
+        document.write('<script src="./tailwind.min.js"><\/script>');
+        document.write('<script src="./lucide.min.js"><\/script>');
+        document.write('<script src="./confetti.min.js"><\/script>');
+        document.write('<script src="./chart.min.js"><\/script>');
+    } else {
+        // 本地：不管是 file:// 还是 content://，为了调试方便，一律走 CDN
+        document.write('<script src="https://cdn.tailwindcss.com"><\/script>');
+        document.write('<script src="https://unpkg.com/lucide@latest"><\/script>');
+        document.write('<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"><\/script>');
+        document.write('<script src="https://cdn.bootcdn.net/ajax/libs/Chart.js/3.9.1/chart.min.js"><\/script>');
+    }
+</script>
     <style>
         :root { --bg-color: #F0F4F8; --accent-color: #3B82F6; --glass-bg: rgba(255, 255, 255, 0.6); --glass-border: rgba(255, 255, 255, 0.4); }
         * { -webkit-tap-highlight-color: transparent; touch-action: manipulation; box-sizing: border-box; }
@@ -182,23 +194,23 @@ body.keyboard-open .fab-btn {
 
     <div class="nav-container">
         <nav class="glass-nav rounded-2xl flex justify-between items-center px-1.5 py-1.5">
-            <button onclick="switchTab('finish', true)" class="nav-btn flex-1 flex flex-col items-center py-2 rounded-xl" id="btn-finish">
+            <button onclick="switchTab('finish')" class="nav-btn flex-1 flex flex-col items-center py-2 rounded-xl" id="btn-finish">
                 <i data-lucide="circle-check" class="w-4 h-4"></i>
                 <span class="text-[9px] mt-0.5 font-medium">打卡</span>
             </button>
-            <button onclick="switchTab('menstrual', true)" class="nav-btn flex-1 flex flex-col items-center py-2 rounded-xl text-gray-400" id="btn-menstrual">
+            <button onclick="switchTab('menstrual')" class="nav-btn flex-1 flex flex-col items-center py-2 rounded-xl text-gray-400" id="btn-menstrual">
                 <i data-lucide="heart" class="w-4 h-4"></i>
                 <span class="text-[9px] mt-0.5 font-medium">经期</span>
             </button>
-            <button onclick="switchTab('home', true)" class="nav-btn flex-1 flex flex-col items-center py-2 rounded-xl text-gray-400" id="btn-home">
+            <button onclick="switchTab('home')" class="nav-btn flex-1 flex flex-col items-center py-2 rounded-xl text-gray-400" id="btn-home">
                 <i data-lucide="home" class="w-4 h-4"></i>
                 <span class="text-[9px] mt-0.5 font-medium">首页</span>
             </button>
-            <button onclick="switchTab('bill', true)" class="nav-btn flex-1 flex flex-col items-center py-2 rounded-xl text-gray-400" id="btn-bill">
+            <button onclick="switchTab('bill')" class="nav-btn flex-1 flex flex-col items-center py-2 rounded-xl text-gray-400" id="btn-bill">
                 <i data-lucide="wallet" class="w-4 h-4"></i>
                 <span class="text-[9px] mt-0.5 font-medium">记账</span>
             </button>
-            <button onclick="switchTab('note', true)" class="nav-btn flex-1 flex flex-col items-center py-2 rounded-xl text-gray-400" id="btn-note">
+            <button onclick="switchTab('note')" class="nav-btn flex-1 flex flex-col items-center py-2 rounded-xl text-gray-400" id="btn-note">
                 <i data-lucide="sticky-note" class="w-4 h-4"></i>
                 <span class="text-[9px] mt-0.5 font-medium">记事</span>
             </button>
@@ -481,9 +493,19 @@ function normalizeFilename(name) {
 }
 function saveData(skipAutoSync = false) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+    
+    // 🌟 核心：数据一旦改变，立刻把除当前页面外的其他页面缓存 DOM 删掉
+    const content = document.getElementById('content');
+    if (content) {
+        Array.from(content.children).forEach(child => {
+            if (child.id !== 'page-wrapper-' + currentTab) {
+                child.remove();
+            }
+        });
+    }
+
     if (!skipAutoSync) {
         if (appData.settings.autoSync) {
-            // 直接调用 triggerSync，由它统一做 300ms 防抖
             triggerSync(false);
         }
     }
@@ -2122,9 +2144,7 @@ function renderMenstrualView() {
 
 function refreshMenstrualView() {
     if (currentTab === 'menstrual') {
-        const content = document.getElementById('content');
-        content.innerHTML = renderMenstrualView();
-        lucide.createIcons();
+        switchTab('menstrual', true);
     }
 }
 
@@ -2539,20 +2559,8 @@ function setBillMode(mode) { billViewMode = mode; switchTab('bill'); }
 function setBillType(type) {
     currentBillType = type;
     if (type === 'expense') billViewMode = 'daily';
-    const incomeBtn = document.getElementById('btn-income-type');
-    const expenseBtn = document.getElementById('btn-expense-type');
-    if (incomeBtn && expenseBtn) {
-        if (type === 'income') { incomeBtn.classList.add('active-tab'); expenseBtn.classList.remove('active-tab'); }
-        else { expenseBtn.classList.add('active-tab'); incomeBtn.classList.remove('active-tab'); }
-    }
-    if (currentTab === 'bill') {
-        document.getElementById('page-title').innerText = '记账';
-        document.getElementById('page-subtitle').innerText = type === 'income' ? '记录每一笔收入' : '记录每一笔支出';
-        const content = document.getElementById('content');
-        content.innerHTML = renderBillView();
-        setTimeout(() => { initIncomeChart(); initExpenseChart(); }, 100);
-        lucide.createIcons();
-    }
+    // 直接交给 switchTab 去强制刷新当前页面，既安全又不会破坏缓存结构
+    switchTab('bill', true);
 }
 
 // ==================== 设置页 ====================
@@ -2605,7 +2613,7 @@ function renderMeView() {
                 </div>
             </div>
 
-            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v3.0</p></div>
+            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v3.4</p></div>
         </div>
     `;
     return html;
@@ -2623,7 +2631,7 @@ function showAbout() {
                     <i data-lucide="sparkles" class="w-8 h-8 text-white"></i>
                 </div>
                 <p class="text-lg font-bold text-gray-800">Life Manager</p>
-                <p class="text-xs text-gray-400 mt-1">v3.0</p>
+                <p class="text-xs text-gray-400 mt-1">v3.4</p>
             </div>
             <div class="glass-card rounded-2xl overflow-hidden mt-4" style="padding: 0;">
                 <div class="setting-item" onclick="openGithubRepo()" style="margin-bottom: 0; border-radius: 0;">
@@ -2693,7 +2701,7 @@ function showContact() {
 function copyContactEmail() {
     navigator.clipboard.writeText('781199149@qq.com')
         .then(() => showToast('邮箱已复制'))
-        .catch(() => showToast('复制失败，请手动复制'));
+        .catch(() => showToast('复制失败'));
 }
 
 function showFeedback() {
@@ -3191,14 +3199,14 @@ function doExport(module, method) {
         navigator.clipboard.writeText(jsonStr).then(() => {
             logOp('导出', module);
             showToast('已复制到剪贴板'); closeModal();
-        }).catch(() => showToast('复制失败，请手动复制'));
+        }).catch(() => showToast('复制失败，请尝试下载'));
     }
 }
 
 function exportSyncConfig() {
     const config = { giteeToken: appData.settings.giteeToken, giteeRepo: appData.settings.giteeRepo, giteeFilename: appData.settings.giteeFilename };
     const jsonStr = JSON.stringify(config, null, 2);
-    navigator.clipboard.writeText(jsonStr).then(() => { showToast('云同步配置已复制到剪贴板'); closeModal(); }).catch(() => showToast('复制失败，请手动复制'));
+    navigator.clipboard.writeText(jsonStr).then(() => { showToast('云同步配置已复制到剪贴板'); closeModal(); }).catch(() => showToast('复制失败，请尝试下载'));
 }
 
 // ==================== 导入功能 ====================
@@ -3306,7 +3314,7 @@ async function confirmImport() {
     window._pendingImportData = null;
     saveData();
     logOp('导入数据', details.join(' / '));
-    showToast('导入成功'); closeModal(); switchTab(currentTab);
+    showToast('导入成功'); closeModal(); switchTab(currentTab,true);
 }
 
 function oneClickFill() {
@@ -3332,7 +3340,7 @@ function doOneClickFill() {
         if (appData.settings.giteeToken && appData.settings.giteeRepo && !appData.settings.autoSync) appData.settings.autoSync = true;
         saveData(true);
         logOp('一键填充配置');
-        switchTab('home');
+        switchTab('home', true);
         showToast('填充成功，自动同步默认开启');
         closeModal();
     } catch (e) { showToast('JSON格式错误'); }
@@ -3358,7 +3366,7 @@ if (_syncTimer) { clearTimeout(_syncTimer); _syncTimer = null; }
     saveData();
     logOp('清除所有数据', `${taskCount}习惯/${incomeCount}收入/${expenseCount}支出/${noteCount}记事/${menstrualCount}经期`);
     showToast('数据已清除');
-    switchTab('home');
+    switchTab('home', true);
 }
 
 // ==================== 视图路由 ====================
@@ -3371,18 +3379,24 @@ const views = {
     me: { title: '设置', subtitle: '数据及账户管理', render: renderMeView }
 };
 
-// 新增：页面缓存池
-const pageCache = {};
+// 新增：记录各页面的滚动位置
+let _scrollPositions = {};
 
-function switchTab(tab, resetView = false) {
-    const previousTab = currentTab; // 记录切换前的页面
+function switchTab(tab, forceRender = false) {
+    const previousTab = currentTab;
+    
+    // 离开页面时，记住当前的滚动高度
+    if (previousTab && previousTab !== tab) {
+        _scrollPositions[previousTab] = window.scrollY;
+    }
+    
     currentTab = tab;
     const content = document.getElementById('content');
     const data = views[tab];
     const switchContainer = document.getElementById('bill-type-switch');
     const gearBtn = document.getElementById('settings-gear-btn');
 
-    if (resetView) {
+    if (forceRender) {
         if (tab === 'bill') currentMonth = new Date();
         if (tab === 'menstrual') menstrualViewMonth = new Date();
     }
@@ -3409,14 +3423,11 @@ function switchTab(tab, resetView = false) {
         document.getElementById('page-subtitle').innerText = data.subtitle;
     }
 
-    // 🌟 核心智能判断：
-    // 如果是从其他页面切过来的（tab !== previousTab），且没有要求重置，就用缓存
-    // 如果是在当前页面刷新（比如打完卡重新渲染），或者要求重置，就强制重绘
+    // 判断是否重绘
+    let pageDiv = document.getElementById('page-wrapper-' + tab);
     const isSamePageRefresh = (tab === previousTab);
     
-    let pageDiv = document.getElementById('page-wrapper-' + tab);
-    
-    if (!pageDiv || isSamePageRefresh || resetView) {
+    if (!pageDiv || forceRender || isSamePageRefresh) {
         if (!pageDiv) {
             pageDiv = document.createElement('div');
             pageDiv.id = 'page-wrapper-' + tab;
@@ -3424,22 +3435,20 @@ function switchTab(tab, resetView = false) {
             content.appendChild(pageDiv);
         }
         
-        // 强制重绘 HTML
         try { 
             pageDiv.innerHTML = data.render(); 
-            lucide.createIcons(); // 只有重绘的时候才转图标，极大降低卡顿！
+            lucide.createIcons(); 
         } catch (e) {
             console.error('渲染错误:', e);
             pageDiv.innerHTML = `<div class="text-center text-red-500 p-4">页面渲染出错，请重试</div>`;
         }
     }
 
-    // 隐藏其他所有页面，只显示当前页面
+    // 隐藏其他，显示当前
     Array.from(content.children).forEach(child => {
         child.style.display = (child.id === 'page-wrapper-' + tab) ? 'block' : 'none';
     });
 
-    // 下面是你原本的 FAB 按钮、导航栏高亮代码（保持不变）
     const mainEl = document.getElementById('content');
     if (tab === 'me') mainEl.style.paddingBottom = '0px';
     else if (tab === 'bill') mainEl.style.paddingBottom = '48px';
@@ -3460,17 +3469,25 @@ function switchTab(tab, resetView = false) {
 
     if (tab === 'bill') setTimeout(() => { initIncomeChart(); initExpenseChart(); }, 100);
 
-    // 重新初始化 Lucide（只在需要的时候）
-    if (!pageDiv || isSamePageRefresh || resetView) {
-        // 已经在上面的 data.render() 里执行过了，这里不用重复
-    }
-
     vibrate(3);
     if (typeof _fabHidden !== 'undefined') {
         _fabHidden = false;
         const _f = document.getElementById('fab-add-btn');
         if (_f) { _f.style.transform = ''; _f.style.opacity = '1'; _f.style.pointerEvents = 'auto'; }
         if (typeof _fabLastY !== 'undefined') _fabLastY = window.scrollY;
+    }
+
+    // 恢复滚动位置
+    if (previousTab !== tab || forceRender) {
+        setTimeout(() => {
+            if (_scrollPositions[tab] !== undefined && !forceRender) {
+                window.scrollTo({ top: _scrollPositions[tab], behavior: 'instant' });
+                if (typeof _fabLastY !== 'undefined') _fabLastY = window.scrollY;
+            } else {
+                window.scrollTo({ top: 0, behavior: 'instant' });
+                if (typeof _fabLastY !== 'undefined') _fabLastY = window.scrollY;
+            }
+        }, 0);
     }
 
     if (tab === 'menstrual' && appData.settings.syncMenstrualFrom && appData.settings.giteeToken && appData.settings.giteeRepo) {
@@ -3576,7 +3593,7 @@ window.addEventListener('scroll', () => {
 setTimeout(() => { getEncryptionKey().catch(() => {}); }, 500);
 
 // 注册 PWA Service Worker
-if ('serviceWorker' in navigator) {
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('service-worker.js')
             .then(reg => console.log('PWA 已注册!'))
