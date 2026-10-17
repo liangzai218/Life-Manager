@@ -449,26 +449,36 @@ function normalizeFilename(name) {
             return false;
         }
 
-        async function fetchRemoteMenstrual(showResult = false) {
-            const { giteeToken, giteeRepo, syncMenstrualFrom } = appData.settings;
-            if (!giteeToken || !giteeRepo || !syncMenstrualFrom) return;
-            try {
-                const getRes = await fetch(`https://gitee.com/api/v5/repos/${giteeRepo}/contents/${syncMenstrualFrom}?access_token=${giteeToken}`);
-                if (getRes.ok) {
-                    const fileInfo = await getRes.json();
-                    let remoteData;
-                    try { remoteData = await decryptData(fileInfo.content); } catch (err) { console.warn('对方文件解密失败:', err); if (showResult) showToast('无法读取 ' + syncMenstrualFrom + ' 的数据'); return; }
-                    if (remoteData && remoteData.menstrual) {
-                        appData.menstrual.records = (remoteData.menstrual.records || []).map(sanitizeMenstrualRecord).filter(Boolean);
-                        appData.menstrual.loveDates = (remoteData.menstrual.loveDates || []).map(sanitizeLoveDate).filter(Boolean);
-                        saveData(true);
-                        if (currentTab === 'menstrual') refreshMenstrualView();
-                        if (showResult) showToast('已更新对方经期数据');
-                    } else { if (showResult) showToast('对方暂无经期数据'); }
-                } else if (getRes.status === 404) { if (showResult) showToast('未找到文件 ' + syncMenstrualFrom); }
-                else { const err = await getRes.json(); console.warn('拉取对方经期失败:', err); if (showResult) showToast('拉取失败：' + (err.message || '未知错误')); }
-            } catch (e) { console.warn('拉取对方经期异常:', e); if (showResult) showToast('拉取失败：' + e.message); }
-        }
+let _isFetchingMenstrual = false; // 🌟 新增：防连点锁
+
+async function fetchRemoteMenstrual(showResult = false) {
+    if (_isFetchingMenstrual) return; // 🌟 如果正在请求，直接拦截
+    const { giteeToken, giteeRepo, syncMenstrualFrom } = appData.settings;
+    if (!giteeToken || !giteeRepo || !syncMenstrualFrom) return;
+
+    _isFetchingMenstrual = true; // 🌟 上锁
+    try {
+        const getRes = await fetch(`https://gitee.com/api/v5/repos/${giteeRepo}/contents/${syncMenstrualFrom}?access_token=${giteeToken}`);
+        if (getRes.ok) {
+            const fileInfo = await getRes.json();
+            let remoteData;
+            try { remoteData = await decryptData(fileInfo.content); } catch (err) { console.warn('对方文件解密失败:', err); if (showResult) showToast('无法读取 ' + syncMenstrualFrom + ' 的数据'); return; }
+            if (remoteData && remoteData.menstrual) {
+                appData.menstrual.records = (remoteData.menstrual.records || []).map(sanitizeMenstrualRecord).filter(Boolean);
+                appData.menstrual.loveDates = (remoteData.menstrual.loveDates || []).map(sanitizeLoveDate).filter(Boolean);
+                saveData(true);
+                if (currentTab === 'menstrual') refreshMenstrualView();
+                if (showResult) showToast('已更新对方经期数据');
+            } else { if (showResult) showToast('对方暂无经期数据'); }
+        } else if (getRes.status === 404) { if (showResult) showToast('未找到文件 ' + syncMenstrualFrom); }
+        else { const err = await getRes.json(); console.warn('拉取对方经期失败:', err); if (showResult) showToast('拉取失败：' + (err.message || '未知错误')); }
+    } catch (e) { 
+        console.warn('拉取对方经期异常:', e); 
+        if (showResult) showToast('拉取失败：' + e.message); 
+    } finally {
+        _isFetchingMenstrual = false; // 🌟 无论成功还是失败，最后都解锁
+    }
+}
 
         async function handleSyncMenstrualFromChange(newValue) {
             const oldValue = appData.settings.syncMenstrualFrom || '';
@@ -2148,7 +2158,11 @@ function renderMenstrualView() {
 
 function refreshMenstrualView() {
     if (currentTab === 'menstrual') {
-        switchTab('menstrual', true);
+        const pageDiv = document.getElementById('page-wrapper-menstrual');
+        if (pageDiv) {
+            pageDiv.innerHTML = renderMenstrualView();
+            lucide.createIcons();
+        }
     }
 }
 
@@ -2617,7 +2631,7 @@ function renderMeView() {
                 </div>
             </div>
 
-            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v3.4.1</p></div>
+            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v3.4.2</p></div>
         </div>
     `;
     return html;
@@ -2635,7 +2649,7 @@ function showAbout() {
                     <i data-lucide="sparkles" class="w-8 h-8 text-white"></i>
                 </div>
                 <p class="text-lg font-bold text-gray-800">Life Manager</p>
-                <p class="text-xs text-gray-400 mt-1">v3.4.1</p>
+                <p class="text-xs text-gray-400 mt-1">v3.4.2</p>
             </div>
             <div class="glass-card rounded-2xl overflow-hidden mt-4" style="padding: 0;">
                 <div class="setting-item" onclick="openGithubRepo()" style="margin-bottom: 0; border-radius: 0;">
