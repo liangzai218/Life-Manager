@@ -36,17 +36,17 @@
         html, body { margin: 0; padding: 0; }
         body { background: transparent; padding-top: env(safe-area-inset-top); font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'STHeiti', 'Segoe UI', sans-serif; color: #2D3748; min-height: 100vh; padding-bottom: 12px; overflow-x: hidden; }
         .glass { background: var(--glass-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid var(--glass-border); }
-        .glass-card { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(1px); -webkit-backdrop-filter: blur(1px); border: 1px solid rgba(255, 255, 255, 0.5); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.8); }
+        .glass-card { background: rgba(255, 255, 255, 0.92); border: 1px solid rgba(255, 255, 255, 0.6); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04); }
         .glass-nav { background: rgba(255, 255, 255, 0.65); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); border: 1px solid rgba(255, 255, 255, 0.35); box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.06); }
-        .nav-container { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); width: calc(100% - 28px); max-width: 380px; z-index: 100; }
+        .nav-container { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); width: calc(100% - 28px); max-width: 380px; z-index: 100; will-change: transform; }
         .nav-btn { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); padding: 8px 0; cursor: pointer; }
         .nav-btn:active { transform: scale(0.92); }
         .active-tab { background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%); color: white !important; box-shadow: 0 3px 12px rgba(59, 130, 246, 0.35); }
         .page-content { animation: fadeIn 0.35s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .fullscreen-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 1000; display: flex; align-items: flex-end; justify-content: center; opacity: 0; visibility: hidden; transition: all 0.3s ease; }
+        .fullscreen-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); z-index: 1000; display: flex; align-items: flex-end; justify-content: center; opacity: 0; visibility: hidden; transition: all 0.3s ease; }
         .fullscreen-modal.active { opacity: 1; visibility: visible; }
-        .modal-content { background: white; width: 100%; max-height: 90vh; border-radius: 24px 24px 0 0; transform: translateY(100%); transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1); overflow: hidden; }
+        .modal-content { background: #FFFFFF; box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.1); width: 100%; max-height: 90vh; border-radius: 24px 24px 0 0; transform: translateY(100%); transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1); overflow: hidden; }
         .fullscreen-modal.active .modal-content { transform: translateY(0); }
         .input-field { background: rgba(243, 244, 246, 0.8); border: 1px solid rgba(229, 231, 235, 0.8); border-radius: 12px; padding: 12px 14px; font-size: 15px; transition: all 0.2s ease; width: 100%; outline: none; }
         .input-field:focus { background: white; border-color: #3B82F6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12); }
@@ -55,7 +55,13 @@
         .btn-secondary { background: rgba(243, 244, 246, 0.9); color: #4B5563; }
         .fab-btn { position: fixed; right: 20px; bottom: 90px; width: 52px; height: 52px; background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%); color: white; border-radius: 50%; box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4); display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; z-index: 50; cursor: pointer; border: none; }
         .fab-btn:active { transform: scale(0.92); box-shadow: 0 2px 10px rgba(59, 130, 246, 0.3); }
-        .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(10px); color: white; padding: 10px 24px; border-radius: 12px; font-size: 14px; z-index: 2000; opacity: 0; visibility: hidden; transition: all 0.3s ease; pointer-events: none; white-space: nowrap; }
+.toast { 
+            position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); 
+            background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(10px); color: white; 
+            padding: 10px 24px; border-radius: 12px; font-size: 14px; 
+            z-index: 9999; /* 👈 改成9999 */
+            opacity: 0; visibility: hidden; transition: all 0.3s ease; pointer-events: none; white-space: nowrap; 
+        }
         .toast.show { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0); }
         .setting-item { display: flex; align-items: center; justify-content: space-between; padding: 14px; background: rgba(255, 255, 255, 0.85); border-radius: 14px; margin-bottom: 10px; transition: all 0.2s ease; cursor: pointer; }
         .setting-item:active { background: rgba(255, 255, 255, 1); transform: scale(0.99); }
@@ -73,7 +79,7 @@
         .habit-card.completed { background: linear-gradient(135deg, rgba(240, 253, 244, 0.9) 0%, rgba(220, 252, 231, 0.8) 100%); border-color: rgba(34, 197, 94, 0.3); }
         .habit-icon { width: 56px; height: 56px; background: transparent !important; border-radius: 0; display: flex; align-items: center; justify-content: center; font-size: 32px; }
         .habit-content { flex: 1; }
-        .habit-name { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.3px; background: linear-gradient(135deg, #1e293b, #334155); background-clip: text; -webkit-background-clip: text; color: transparent; }
+        .habit-name { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.3px; color: #1e293b; }
         .habit-card.completed .habit-name { text-decoration: line-through; background: none; color: #9ca3af; }
         .habit-badge { font-size: 11px; font-weight: 600; background: #eef2ff; padding: 4px 10px; border-radius: 30px; color: #2563eb; }
         .habit-card.completed .habit-badge { background: #dcfce7; color: #16a34a; }
@@ -85,22 +91,29 @@
         .check-btn:active { transform: scale(0.92); }
         .check-btn.unchecked { background: #f1f5f9; border: 1.5px solid #cbd5e1; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
         .check-btn.checked { background: linear-gradient(135deg, #22c55e, #16a34a); box-shadow: 0 4px 12px rgba(34,197,94,0.3); }
-        .add-task-inline { background: rgba(255, 255, 255, 0.95); border-radius: 18px; padding: 16px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); margin-bottom: 12px; animation: slideDown 0.3s ease; }
-        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
         .income-card { background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white; padding: 16px 18px; border-radius: 18px; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.2); }
-        .action-sheet-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); backdrop-filter: blur(1px); z-index: 2000; display: flex; align-items: flex-end; justify-content: center; opacity: 0; visibility: hidden; transition: all 0.3s ease; }
-        .action-sheet-overlay.active { opacity: 1; visibility: visible; }
-        .action-sheet { background: white; width: 100%; max-width: 420px; border-radius: 24px 24px 0 0; padding: 12px 20px 30px; transform: translateY(100%); transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
-        .action-sheet-overlay.active .action-sheet { transform: translateY(0); }
-        .action-sheet .handle { width: 40px; height: 4px; background: #D1D5DB; border-radius: 2px; margin: 0 auto 16px; }
-        .action-sheet .action-item { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 14px; background: #F9FAFB; transition: all 0.15s ease; cursor: pointer; margin-bottom: 8px; }
-        .action-sheet .action-item:active { transform: scale(0.97); background: #F3F4F6; }
-        .action-sheet .action-item .icon-wrap { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
-        .action-sheet .action-item .icon-wrap.pink { background: #FCE4EC; }
-        .action-sheet .action-item .icon-wrap.blue { background: #E3F2FD; }
-        .action-sheet .action-item .icon-wrap.red { background: #FFEBEE; }
-        .action-sheet .action-item .label { font-size: 14px; font-weight: 600; color: #1F2937; }
-        .action-sheet .action-item .desc { font-size: 11px; color: #9CA3AF; }
+/* 全局高级毛玻璃底部抽屉 */
+.action-sheet-overlay { 
+    position: fixed; inset: 0; 
+    background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); 
+    z-index: 2000; display: flex; align-items: flex-end; justify-content: center; 
+    opacity: 0; visibility: hidden; transition: all 0.3s ease; 
+}
+.action-sheet-overlay.active { opacity: 1; visibility: visible; }
+.action-sheet { 
+    background: rgba(255, 255, 255, 0.85); 
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); 
+    border-top: 1px solid rgba(255, 255, 255, 0.6);
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.1);
+    width: 100%; max-width: 420px; 
+    border-radius: 28px 28px 0 0; 
+    padding: 16px 20px 30px; 
+    transform: translateY(100%); 
+    transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1); 
+}
+.action-sheet-overlay.active .action-sheet { transform: translateY(0); }
+.action-sheet .handle { width: 40px; height: 5px; background: rgba(0,0,0,0.15); border-radius: 3px; margin: 0 auto 16px; }
         .date-picker-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.35); backdrop-filter: blur(6px); z-index: 3000; display: flex; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: all 0.25s ease; }
         .date-picker-modal.active { opacity: 1; visibility: visible; }
         .date-picker-modal .picker-box { background: white; border-radius: 20px; padding: 24px 20px 20px; width: 90%; max-width: 340px; transform: scale(0.9); transition: transform 0.25s ease; }
@@ -157,8 +170,7 @@
         ::-webkit-scrollbar { display: none; }
         body, .glass-card, .nav-btn, .btn-primary, .fab-btn, .setting-item, .note-card, .record-item { -webkit-touch-callout: none; user-select: none; }
         input, textarea { -webkit-touch-callout: default; user-select: text; }
-        #custom-confirm .glass-card { background: white; }
-        #note-modal .glass-card { background: white; }
+
 body.keyboard-open .nav-container {
     transform: translate(-50%, 200%) !important;
     opacity: 0;
@@ -169,6 +181,91 @@ body.keyboard-open .fab-btn {
     opacity: 0;
     pointer-events: none;
 }        
+
+
+/* 居中纯白高级卡片（再次瘦身版） */
+.center-modal-overlay { 
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.35); /* 遮罩变浅，不压抑 */
+    z-index: 4000; display: flex; align-items: center; justify-content: center; 
+    opacity: 0; visibility: hidden; transition: all 0.3s ease; 
+}
+.center-modal-overlay.active { opacity: 1; visibility: visible; }
+/* 居中弹窗（保持自适应，但去掉了固定高度） */
+        .center-modal-content { 
+            background: #FFFFFF; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+            width: 85%; max-width: 320px; border-radius: 20px; padding: 16px; 
+            transform: scale(0.9) translateY(20px); 
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+.center-modal-overlay.active .center-modal-content { transform: scale(1) translateY(0); }
+
+.finance-input {
+    background: #F3F4F6; border: none; border-radius: 9px;
+    padding: 8px 10px; font-size: 14px; font-weight: 700;
+    width: 100%; outline: none; color: #1F2937; transition: all 0.2s ease; text-align: center;
+}
+.finance-input:focus { background: #E5E7EB; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+.finance-input::placeholder { font-size: 13px; font-weight: 400; color: #9CA3AF; }
+
+/* 流水卡片（改成高级蓝） */
+.day-card { background: rgba(255, 255, 255, 0.9); border-radius: 12px; overflow: hidden; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); }
+.day-card-header { background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%); color: white; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; }
+.day-card-body { padding: 0 12px; }
+.record-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px dashed rgba(0,0,0,0.1); cursor: pointer; transition: opacity 0.2s; }
+.record-row:last-child { border-bottom: none; }
+.record-row:active { opacity: 0.6; }
+.bill-list-container { content-visibility: auto; }
+
+/* 顶部总览卡片（改成高级蓝） */
+.overview-card { background: rgba(255, 255, 255, 0.9); border-radius: 16px; overflow: hidden; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); }
+.overview-header { background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white; padding: 26px 16px; text-align: center; }
+.overview-body { padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; background: #F9FAFB; }
+
+/* 美化后的日期选择器（伪装成胶囊按钮） */
+.date-picker-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    background: #F3F4F6; padding: 6px 14px; border-radius: 20px;
+    font-size: 13px; font-weight: 600; color: #4B5563;
+    position: relative; overflow: hidden; cursor: pointer;
+}
+/* 隐藏原生 input 的丑陋外观，但保留点击呼出系统的功能 */
+.date-picker-btn input[type="date"] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}
+/* 隐藏日期输入框的默认图标 */
+input[type="date"]::-webkit-calendar-picker-indicator {
+    position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;
+}
+
+/* 极简纯白悬浮卡片 */
+.center-modal-content { 
+    background: #FFFFFF; 
+    /* 关键：弥散投影。用大范围低透明度的阴影营造悬浮感，而不是生硬的边框 */
+    box-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.18), 0 4px 16px -4px rgba(0, 0, 0, 0.08);
+    width: 78%; max-width: 280px; 
+    border-radius: 24px; /* 加大圆角，更像现代 App */
+    padding: 20px 16px 16px; /* 顶部内边距稍微加大，留白更美 */
+    transform: scale(0.9) translateY(20px); 
+    /* 使用苹果同款阻尼弹簧动画 */
+    transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.center-modal-overlay.active .center-modal-content { 
+    transform: scale(1) translateY(0); 
+    /* 动画结束后再加模糊，防止手机渲染闪烁变灰 */
+    backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+}
+/* 极限缩小的图标分类网格（5列，更紧凑） */
+.category-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 8px; }
+.category-item {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 6px 0; background: #F9FAFB; border-radius: 8px;
+    font-size: 10px; font-weight: 600; color: #6B7280;
+    border: 1px solid transparent; transition: all 0.2s ease; cursor: pointer;
+}
+.category-item.active {
+    background: #EFF6FF; border-color: #3B82F6; color: #2563EB;
+}
+.category-item .icon { font-size: 16px; margin-bottom: 2px; }
     </style>
 </head>
 <body>
@@ -178,15 +275,11 @@ body.keyboard-open .fab-btn {
                 <h2 id="page-title" class="text-2xl font-bold text-gray-800">首页</h2>
                 <p id="page-subtitle" class="text-gray-500 text-sm mt-1">今日概览</p>
             </div>
-            <div class="flex items-center gap-2">
-                <div id="bill-type-switch" class="glass-nav rounded-2xl flex gap-1 p-1" style="display: none;">
-                    <button onclick="setBillType('income')" id="btn-income-type" class="nav-btn px-4 py-1.5 rounded-xl text-sm font-medium text-gray-800">收入</button>
-                    <button onclick="setBillType('expense')" id="btn-expense-type" class="nav-btn px-4 py-1.5 rounded-xl text-sm font-medium text-gray-800">支出</button>
-                </div>
-                <button id="settings-gear-btn" onclick="openSettings()" class="w-9 h-9 rounded-full bg-white/70 backdrop-blur-sm border border-white/50 shadow-sm flex items-center justify-center text-gray-600" style="display: none;">
-                    <i data-lucide="settings-2" class="w-4 h-4"></i>
-                </button>
-            </div>
+<div class="flex items-center gap-2">
+    <button id="settings-gear-btn" onclick="openSettings()" class="w-9 h-9 rounded-full bg-white/70 backdrop-blur-sm border border-white/50 shadow-sm flex items-center justify-center text-gray-600" style="display: none;">
+        <i data-lucide="settings-2" class="w-4 h-4"></i>
+    </button>
+</div>
         </div>
     </header>
 
@@ -228,29 +321,34 @@ body.keyboard-open .fab-btn {
     </div>
 
     <div id="toast" class="toast"></div>
+    <!-- 全新的居中财务卡片 -->
+<div id="center-modal-overlay" class="center-modal-overlay" onclick="closeCenterModal(event)">
+    <div class="center-modal-content" onclick="event.stopPropagation()">
+        <div id="center-modal-body"></div>
+    </div>
+</div>
 
-    <div id="custom-confirm" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-[4000] flex items-center justify-center opacity-0 invisible transition-all duration-300" onclick="hideCustomConfirm()">
-        <div class="glass-card rounded-2xl w-[85%] max-w-[300px] p-5 transform scale-95 transition-all duration-300" onclick="event.stopPropagation()">
-            <p id="confirm-message" class="text-center text-gray-700 text-sm mb-6 whitespace-pre-line">确认操作？</p>
-            <div class="flex gap-3">
-                <button id="confirm-cancel-btn" class="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-medium text-sm">取消</button>
-                <button id="confirm-ok-btn" class="flex-1 py-2.5 rounded-xl btn-primary font-medium text-sm">确定</button>
-            </div>
+    <div id="custom-confirm" class="center-modal-overlay" onclick="hideCustomConfirm()">
+    <div class="center-modal-content" onclick="event.stopPropagation()">
+        <p id="confirm-message" class="text-center text-gray-700 text-[15px] font-medium mb-6 whitespace-pre-line">确认操作？</p>
+        <div class="flex gap-2">
+            <button id="confirm-cancel-btn" class="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-medium text-sm">取消</button>
+            <button id="confirm-ok-btn" class="flex-1 py-2.5 rounded-xl btn-primary font-medium text-sm">确定</button>
         </div>
     </div>
+</div>
 
-    <div id="note-modal" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-[5000] flex items-center justify-center opacity-0 invisible transition-all duration-300" onclick="closeNoteModal()">
+    <div id="note-modal" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-[5000] flex items-center justify-center opacity-0 invisible transition-all duration-300" onclick="closeActionSheet()">
         <div class="glass-card rounded-2xl w-[90%] max-w-[400px] p-5 transform scale-95 transition-all duration-300" onclick="event.stopPropagation()">
             <div id="note-modal-body"></div>
         </div>
     </div>
 
-    <div id="action-sheet-overlay" class="action-sheet-overlay" onclick="closeActionSheet(event)">
-        <div class="action-sheet" onclick="event.stopPropagation()">
-            <div class="handle"></div>
-            <div id="action-sheet-body"></div>
-        </div>
+<div id="action-sheet-overlay" class="action-sheet-overlay" onclick="closeActionSheet(event)">
+    <div class="action-sheet" onclick="event.stopPropagation()">
+        <div id="action-sheet-body"></div>
     </div>
+</div>
 
     <div id="date-picker-modal" class="date-picker-modal" onclick="closeDatePicker(event)">
         <div class="picker-box" onclick="event.stopPropagation()">
@@ -581,7 +679,19 @@ let menstrualViewMonth = new Date();
 let _menstrualRenderCache = null;   // 新增：经期页渲染缓存，让预测函数在一次渲染里只算一次
 
         function formatDate(date) { const d = new Date(date); return `${d.getMonth() + 1}月${d.getDate()}日 星期${['日','一','二','三','四','五','六'][d.getDay()]}`; }
-        function formatMoney(amount) { return '¥ ' + amount.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+        function formatAmount(num) {
+    const n = Number(num);
+    if (isNaN(n)) return '0';
+    return Number(n.toFixed(2)).toString();
+}
+function formatMoney(amount) {
+    const n = Number(amount);
+    if (isNaN(n)) return '¥ 0';
+    const parts = n.toFixed(2).split('.');
+    const integerPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    const decimalPart = parts[1] === '00' ? '' : '.' + parts[1];
+    return '¥ ' + integerPart + decimalPart;
+}
         function formatDateTime(timestamp) { const d = new Date(timestamp); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
         function formatTime(timestamp) { const d = new Date(timestamp); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
         function isFutureDate(dateStr) { const date = new Date(dateStr); const today = new Date(); today.setHours(23, 59, 59, 999); return date > today; }
@@ -589,36 +699,29 @@ let _menstrualRenderCache = null;   // 新增：经期页渲染缓存，让预�
         function parseDate(dateStr) { const parts = dateStr.split('-').map(Number); return new Date(parts[0], parts[1] - 1, parts[2]); }
         function formatDateLocal(date) { const year = date.getFullYear(); const month = String(date.getMonth() + 1).padStart(2, '0'); const day = String(date.getDate()).padStart(2, '0'); return `${year}-${month}-${day}`; }
 
-        function showCustomConfirm(message) {
-            return new Promise((resolve) => {
-                const modal = document.getElementById('custom-confirm');
-                const msgEl = document.getElementById('confirm-message');
-                const cancelBtn = document.getElementById('confirm-cancel-btn');
-                const okBtn = document.getElementById('confirm-ok-btn');
-                msgEl.textContent = message;
-                const onConfirm = () => { hideCustomConfirm(); resolve(true); };
-                const onCancel = () => { hideCustomConfirm(); resolve(false); };
-                okBtn.onclick = onConfirm; cancelBtn.onclick = onCancel; modal.onclick = onCancel;
-                modal.classList.remove('invisible', 'opacity-0'); modal.classList.add('opacity-100', 'visible');
-                const content = modal.querySelector('.glass-card'); content.classList.remove('scale-95'); content.classList.add('scale-100');
-            });
-        }
-        function hideCustomConfirm() {
-            const modal = document.getElementById('custom-confirm');
-            modal.classList.remove('opacity-100', 'visible'); modal.classList.add('invisible', 'opacity-0');
-            const content = modal.querySelector('.glass-card'); content.classList.remove('scale-100'); content.classList.add('scale-95');
-        }
+function showCustomConfirm(message) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('custom-confirm');
+        const msgEl = document.getElementById('confirm-message');
+        const cancelBtn = document.getElementById('confirm-cancel-btn');
+        const okBtn = document.getElementById('confirm-ok-btn');
+        msgEl.textContent = message;
+        const onConfirm = () => { hideCustomConfirm(); resolve(true); };
+        const onCancel = () => { hideCustomConfirm(); resolve(false); };
+        okBtn.onclick = onConfirm; cancelBtn.onclick = onCancel; modal.onclick = onCancel;
+        modal.classList.add('active'); // 触发纯白悬浮动画
+    });
+}
+function hideCustomConfirm() {
+    const modal = document.getElementById('custom-confirm');
+    modal.classList.remove('active'); // 触发收起动画
+}
         function openNoteModal(html) {
             const modal = document.getElementById('note-modal');
             document.getElementById('note-modal-body').innerHTML = html;
             modal.classList.remove('invisible', 'opacity-0'); modal.classList.add('opacity-100', 'visible');
             const content = modal.querySelector('.glass-card'); content.classList.remove('scale-95'); content.classList.add('scale-100');
             lucide.createIcons();
-        }
-        function closeNoteModal() {
-            const modal = document.getElementById('note-modal');
-            modal.classList.remove('opacity-100', 'visible'); modal.classList.add('invisible', 'opacity-0');
-            const content = modal.querySelector('.glass-card'); content.classList.remove('scale-100'); content.classList.add('scale-95');
         }
 
         function openSettings() { try { history.pushState({ from: 'home' }, '', ''); } catch(e) {} switchTab('me'); }
@@ -979,19 +1082,18 @@ function getMonthCompletions(task, year, month) {
     });
 }
 
-function toggleAddTaskInput() {
-    showAddInput = !showAddInput;
-    switchTab('finish');
-    if (showAddInput) {
-        setTimeout(() => {
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }, 60);
-    }
-}
-
-function cancelAddTask() {
-    showAddInput = false;
-    switchTab('finish');
+function showAddTaskModal() {
+    const html = `
+        <div class="flex flex-col">
+            <p class="text-[15px] font-bold text-gray-800 mb-4 text-center">想养成什么习惯？</p>
+            <input type="text" id="new-task-name" class="input-field mb-5" placeholder="输入习惯名称">
+            <div class="flex gap-2">
+                <button onclick="closeCenterModal()" class="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-medium text-sm">取消</button>
+                <button onclick="addTask()" class="flex-1 py-2.5 rounded-xl btn-primary font-medium text-sm">添加</button>
+            </div>
+        </div>
+    `;
+    openCenterModal(html);
 }
 
 function addTask() {
@@ -999,7 +1101,9 @@ function addTask() {
     if (!name) { showToast('请输入习惯名称'); return; }
     appData.tasks.push({ id: Date.now().toString(), name, createdAt: Date.now(), updatedAt: Date.now(), completions: [] });
     saveData(); logOp('添加习惯', name);
-    showAddInput = false; showToast('添加成功'); switchTab('finish');
+    closeCenterModal();
+    showToast('添加成功');
+    switchTab('finish'); // 数据变动自动刷新当前页
 }
 
 function toggleTaskComplete(taskId) {
@@ -1100,18 +1204,8 @@ function renderFinishView() {
     const today = new Date().toDateString();
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth();
-    let html = `
-        <div class="space-y-4 mt-2">
-            ${showAddInput ? `
-            <div class="add-task-inline">
-                <p class="text-sm text-gray-500 mb-3">想养成什么习惯？</p>
-                <input type="text" id="new-task-name" class="input-field mb-3" placeholder="输入习惯名称">
-                <div class="flex gap-3">
-                    <button onclick="cancelAddTask()" class="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 font-medium text-sm">取消</button>
-                    <button onclick="addTask()" class="flex-1 py-3 rounded-xl btn-primary font-medium text-sm">添加习惯</button>
-                </div>
-            </div>
-            ` : ''}
+let html = `
+    <div class="space-y-4 mt-2">
             ${appData.tasks.length > 0 ? appData.tasks.map(task => {
                 const isCompleted = task.completions.some(c => new Date(c.date).toDateString() === today);
                 const streak = calculateStreak(task);
@@ -1311,10 +1405,10 @@ function renderNoteView() {
     const filteredNotes = appData.notes.filter(n => n.type === noteType);
     let html = `
         <div class="space-y-3 mt-2">
-            <div class="glass-card p-1.5 rounded-xl flex">
-                <button onclick="setNoteType('text')" class="flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${noteType === 'text' ? 'bg-white shadow-sm text-blue-500' : 'text-gray-500'}">文字笔记</button>
-                <button onclick="setNoteType('password')" class="flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${noteType === 'password' ? 'bg-white shadow-sm text-blue-500' : 'text-gray-500'}">密码记录</button>
-            </div>
+<div class="glass-card p-1.5 rounded-xl flex">
+    <button onclick="setNoteType('text')" class="flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${noteType === 'text' ? 'bg-blue-500 shadow-sm text-white' : 'text-gray-500'}">文字笔记</button>
+    <button onclick="setNoteType('password')" class="flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${noteType === 'password' ? 'bg-blue-500 shadow-sm text-white' : 'text-gray-500'}">密码记录</button>
+</div>
             <div class="space-y-2">
                 ${filteredNotes.length > 0 ? filteredNotes.map(note => {
                     let preview = '';
@@ -1351,20 +1445,23 @@ function setNoteType(type) { noteType = type; switchTab('note'); }
 
 function showAddNoteModal() {
     const isPassword = noteType === 'password';
-    const html = `
-        <div class="p-5">
-            <div class="flex justify-between items-center mb-4"><h3 class="text-base font-bold">新建${isPassword ? '密码记录' : '笔记'}</h3><button onclick="closeModal()" class="p-2 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button></div>
+const html = `
+    <div class="flex flex-col">
+        <div class="flex justify-between items-center mb-3">
+            <h3 class="text-[15px] font-bold text-gray-800">新建${isPassword ? '密码记录' : '笔记'}</h3>
+            <button onclick="closeCenterModal()" class="p-1.5 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
+        </div>
             <div class="space-y-3">
                 <div><label class="text-xs text-gray-500 mb-1.5 block">标题</label><input type="text" id="note-title" class="input-field" placeholder="${isPassword ? '如：微信密码' : '笔记标题'}"></div>
                 ${isPassword ? `
                     <div><label class="text-xs text-gray-500 mb-1.5 block">账号</label><input type="text" id="note-account" class="input-field" placeholder="可选"></div>
                     <div><label class="text-xs text-gray-500 mb-1.5 block">密码</label><input type="text" id="note-password" class="input-field" placeholder="输入密码"></div>
                 ` : `<div><label class="text-xs text-gray-500 mb-1.5 block">内容</label><textarea id="note-content" class="input-field" rows="4" placeholder="输入笔记内容..."></textarea></div>`}
-                <button onclick="addNote()" class="btn-primary w-full py-3.5 rounded-xl font-semibold text-sm">保存</button>
+                <button onclick="addNote()" class="btn-primary w-full py-3.5 rounded-xl font-semibold text-sm shadow-md">保存</button>
             </div>
         </div>
     `;
-    openModal(html);
+openCenterModal(html);
 }
 
 function addNote() {
@@ -1380,7 +1477,7 @@ function addNote() {
     }
     appData.notes.push(note);
     saveData(); logOp('新建记事', title);
-    showToast('保存成功'); closeModal(); switchTab('note');
+    showToast('保存成功'); closeCenterModal(); switchTab('note');
 }
 
 function showNoteDetail(noteId) {
@@ -1416,15 +1513,15 @@ function showNoteDetail(noteId) {
     } else {
         contentHtml = `<div class="glass-card p-3 rounded-xl max-h-60 overflow-y-auto"><p class="text-gray-700 text-sm whitespace-pre-wrap break-words">${escapeHtml(note.content || '')}</p></div>`;
     }
-    const html = `
-        <div class="space-y-3">
-            <div class="flex justify-between items-start"><h3 class="text-lg font-bold">${escapeHtml(note.title)}</h3><button onclick="closeNoteModal()" class="p-1.5 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button></div>
+const html = `
+    <div class="space-y-3">
+        <div class="flex justify-between items-start"><h3 class="text-[15px] font-bold text-gray-800">${escapeHtml(note.title)}</h3><button onclick="closeCenterModal()" class="p-1.5 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button></div>
             ${contentHtml}
             <p class="text-[10px] text-gray-400 text-center">创建于 ${new Date(note.createdAt).toLocaleString()}</p>
             <div class="flex justify-center mt-2"><button onclick="editNote('${note.id}')" class="w-full py-2.5 rounded-xl bg-blue-50 text-blue-600 font-medium text-sm"><i data-lucide="pen-line" class="w-3.5 h-3.5 inline mr-1"></i>编辑</button></div>
         </div>
     `;
-    openNoteModal(html);
+    openCenterModal(html);
     lucide.createIcons();
 }
 
@@ -1455,21 +1552,21 @@ function editNote(noteId) {
     const note = appData.notes.find(n => n.id === noteId);
     if (!note) return;
     const isPassword = note.type === 'password';
-    const html = `
-        <div class="space-y-3">
-            <h3 class="text-lg font-bold mb-2">编辑${isPassword ? '密码记录' : '笔记'}</h3>
+const html = `
+    <div class="space-y-3">
+        <h3 class="text-[15px] font-bold text-gray-800 mb-2">编辑${isPassword ? '密码记录' : '笔记'}</h3>
             <div><label class="text-xs text-gray-500 block mb-1">标题</label><input type="text" id="edit-note-title" class="input-field text-sm" value="${escapeHtml(note.title)}"></div>
             ${isPassword ? `
                 <div><label class="text-xs text-gray-500 block mb-1">账号</label><input type="text" id="edit-note-account" class="input-field text-sm" value="${escapeHtml(note.account || '')}"></div>
                 <div><label class="text-xs text-gray-500 block mb-1">密码</label><input type="text" id="edit-note-password" class="input-field text-sm" value="${escapeHtml(note.password || '')}"></div>
             ` : `<div><label class="text-xs text-gray-500 block mb-1">内容</label><textarea id="edit-note-content" class="input-field text-sm" rows="6">${escapeHtml(note.content || '')}</textarea></div>`}
             <div class="flex gap-3 mt-4">
-                <button onclick="closeNoteModal()" class="flex-1 py-2 rounded-xl bg-gray-100 text-gray-600 text-sm">取消</button>
-                <button onclick="updateNote('${noteId}')" class="flex-1 py-2 rounded-xl btn-primary text-sm">保存修改</button>
-            </div>
+            <button onclick="closeCenterModal()" class="flex-1 py-2 rounded-xl bg-gray-100 text-gray-600 text-sm">取消</button>
+            <button onclick="updateNote('${noteId}')" class="flex-1 py-2 rounded-xl btn-primary text-sm">保存修改</button>
         </div>
-    `;
-    openNoteModal(html);
+    </div>
+`;
+openCenterModal(html);
 }
 
 function updateNote(noteId) {
@@ -1486,7 +1583,7 @@ function updateNote(noteId) {
         note.content = document.getElementById('edit-note-content').value;
     }
     saveData(); logOp('编辑记事', newTitle);
-    showToast('修改成功'); closeNoteModal(); switchTab('note');
+    showToast('修改成功'); closeCenterModal(); switchTab('note');
 }
 
 // ==================== 经期模块 ====================
@@ -1838,7 +1935,7 @@ async function handleSetPeriodStart(dateStr) {
             active.startDate = dateStr;
             active.updatedAt = Date.now();
             saveData(); logOp('修改经期开始', dateStr);
-            closeModal(); refreshMenstrualView(); showToast('经期开始日期已更新');
+            closeCenterModal(); refreshMenstrualView(); showToast('经期开始日期已更新');
             return;
         } else { showToast('已有活跃经期，不能新建'); return; }
     }
@@ -1858,12 +1955,12 @@ async function handleSetPeriodStart(dateStr) {
         }
         adjacent.updatedAt = Date.now();
         saveData(); logOp('合并经期', `${newStart} ~ ${adjacent.endDate}`);
-        closeModal(); refreshMenstrualView(); showToast('经期已合并');
+        closeCenterModal(); refreshMenstrualView(); showToast('经期已合并');
         return;
     }
     appData.menstrual.records.push({ id: Date.now().toString(), startDate: dateStr, endDate: null, isActive: true, updatedAt: Date.now() });
     saveData(); logOp('经期开始', dateStr);
-    closeModal(); refreshMenstrualView(); showToast('经期开始已记录'); playSuccessSound();
+    closeCenterModal(); refreshMenstrualView(); showToast('经期开始已记录'); playSuccessSound();
 }
 
 function addPeriodEnd(dateStr) {
@@ -1877,7 +1974,7 @@ function addPeriodEnd(dateStr) {
     active.isActive = false;
     active.updatedAt = Date.now();
     saveData(); logOp('经期结束', dateStr);
-    closeModal(); refreshMenstrualView(); showToast('经期结束已记录'); playSuccessSound();
+    closeCenterModal(); refreshMenstrualView(); showToast('经期结束已记录'); playSuccessSound();
 }
 
 function handleModifyPeriodEnd(recordId, newEndDate) {
@@ -1891,7 +1988,7 @@ function handleModifyPeriodEnd(recordId, newEndDate) {
     record.endDate = newEndDate;
     record.updatedAt = Date.now();
     saveData(); logOp('修改经期结束', newEndDate);
-    closeModal(); refreshMenstrualView(); showToast('结束日期已更新');
+    closeCenterModal(); refreshMenstrualView(); showToast('结束日期已更新');
 }
 
 function addLoveFromDate(dateStr) {
@@ -1901,7 +1998,7 @@ function addLoveFromDate(dateStr) {
     if (appData.menstrual.loveDates.some(item => item.date === dateStr)) { showToast('该日已记录爱爱'); return; }
     appData.menstrual.loveDates.push({ id: Date.now().toString(), date: dateStr, updatedAt: Date.now() });
     saveData(); logOp('记录爱爱', dateStr);
-    closeModal(); refreshMenstrualView(); showToast('爱爱已记录 ❤️'); playSuccessSound();
+    closeCenterModal(); refreshMenstrualView(); showToast('爱爱已记录 ❤️'); playSuccessSound();
 }
 
 function removeLoveDate(dateStr) {
@@ -1912,7 +2009,7 @@ function removeLoveDate(dateStr) {
         if (!confirmed) return;
         appData.menstrual.loveDates = appData.menstrual.loveDates.filter(d => d.id !== item.id);
         saveData(); logOp('删除爱爱', dateStr);
-        closeModal(); refreshMenstrualView(); showToast('已删除');
+        closeCenterModal(); refreshMenstrualView(); showToast('已删除');
     });
 }
 
@@ -1926,7 +2023,7 @@ function deleteMenstrualRecord(recordId, clickedDate) {
     if (!record.endDate || click.getTime() === start.getTime()) {
         appData.menstrual.records = appData.menstrual.records.filter(r => r.id !== recordId);
         saveData(); logOp('删除经期', clickedDate);
-        closeModal(); refreshMenstrualView(); showToast('已删除');
+        closeCenterModal(); refreshMenstrualView(); showToast('已删除');
         return;
     }
     if (click.getTime() === end.getTime()) {
@@ -1935,7 +2032,7 @@ function deleteMenstrualRecord(recordId, clickedDate) {
         if (newEnd < start) appData.menstrual.records = appData.menstrual.records.filter(r => r.id !== recordId);
         else { record.endDate = formatDateLocal(newEnd); record.updatedAt = Date.now(); }
         saveData(); logOp('删除经期', clickedDate);
-        closeModal(); refreshMenstrualView(); showToast('已删除');
+        closeCenterModal(); refreshMenstrualView(); showToast('已删除');
         return;
     }
     const newEnd = new Date(click);
@@ -1943,7 +2040,7 @@ function deleteMenstrualRecord(recordId, clickedDate) {
     if (newEnd < start) appData.menstrual.records = appData.menstrual.records.filter(r => r.id !== recordId);
     else { record.endDate = formatDateLocal(newEnd); record.updatedAt = Date.now(); }
     saveData(); logOp('删除经期', clickedDate);
-    closeModal(); refreshMenstrualView(); showToast('已删除');
+    closeCenterModal(); refreshMenstrualView(); showToast('已删除');
 }
 
 function onMenstrualDayClick(dateStr) {
@@ -1979,39 +2076,39 @@ function onMenstrualDayClick(dateStr) {
     if (isReadOnly) {
         actionsHtml = `<p class="text-center text-xs text-gray-400">只读模式，无法操作</p>`;
     } else {
-        if (!active) {
-            if (record && !record.isActive) {
-                const isStart = parseDate(dateStr).getTime() === parseDate(record.startDate).getTime();
-                const isEnd = record.endDate && parseDate(dateStr).getTime() === parseDate(record.endDate).getTime();
-                if (!isEnd) actionsHtml += `<button onclick="handleModifyPeriodEnd('${record.id}', '${dateStr}')" class="flex-1 py-3 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium">修改结束日期为此日</button>`;
-                actionsHtml += `<button onclick="deleteMenstrualRecord('${record.id}', '${dateStr}')" class="flex-1 py-3 rounded-xl bg-red-50 text-red-500 text-sm font-medium">删除</button>`;
-            } else if (!record) {
-                actionsHtml += `<button onclick="handleSetPeriodStart('${dateStr}')" class="flex-1 py-3 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">设为经期开始</button>`;
-            }
-        } else {
-            if (parseDate(dateStr) >= parseDate(active.startDate)) {
-                actionsHtml += `<button onclick="addPeriodEnd('${dateStr}')" class="flex-1 py-3 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium">设为经期结束</button>`;
-            } else {
-                actionsHtml += `<button onclick="handleSetPeriodStart('${dateStr}')" class="flex-1 py-3 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">扩展经期开始</button>`;
-            }
-        }
-        if (!isFutureDate(dateStr)) {
-            if (isLove) actionsHtml += `<button onclick="removeLoveDate('${dateStr}')" class="flex-1 py-3 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">❤️ 删除爱爱</button>`;
-            else actionsHtml += `<button onclick="addLoveFromDate('${dateStr}')" class="flex-1 py-3 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">❤️ 添加爱爱</button>`;
-        }
+if (!active) {
+    if (record && !record.isActive) {
+        const isStart = parseDate(dateStr).getTime() === parseDate(record.startDate).getTime();
+        const isEnd = record.endDate && parseDate(dateStr).getTime() === parseDate(record.endDate).getTime();
+        if (!isEnd) actionsHtml += `<button onclick="handleModifyPeriodEnd('${record.id}', '${dateStr}')" class="w-full py-2.5 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium">修改结束日期为此日</button>`;
+        actionsHtml += `<button onclick="deleteMenstrualRecord('${record.id}', '${dateStr}')" class="w-full py-2.5 rounded-xl bg-red-50 text-red-500 text-sm font-medium">删除</button>`;
+    } else if (!record) {
+        actionsHtml += `<button onclick="handleSetPeriodStart('${dateStr}')" class="w-full py-2.5 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">设为经期开始</button>`;
+    }
+} else {
+    if (parseDate(dateStr) >= parseDate(active.startDate)) {
+        actionsHtml += `<button onclick="addPeriodEnd('${dateStr}')" class="w-full py-2.5 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium">设为经期结束</button>`;
+    } else {
+        actionsHtml += `<button onclick="handleSetPeriodStart('${dateStr}')" class="w-full py-2.5 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">扩展经期开始</button>`;
+    }
+}
+if (!isFutureDate(dateStr)) {
+    if (isLove) actionsHtml += `<button onclick="removeLoveDate('${dateStr}')" class="w-full py-2.5 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">❤️ 删除爱爱</button>`;
+    else actionsHtml += `<button onclick="addLoveFromDate('${dateStr}')" class="w-full py-2.5 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">❤️ 添加爱爱</button>`;
+}
         if (!actionsHtml) actionsHtml = `<p class="text-center text-xs text-gray-400">无可用操作</p>`;
     }
-    const html = `
-        <div class="p-5 max-h-[70vh] overflow-y-auto">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-base font-bold">${dateStr}</h3>
-                <button onclick="closeModal()" class="p-2 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
-            </div>
-            ${contentHtml}
-            <div class="flex flex-wrap gap-2 mt-4 justify-center">${actionsHtml}</div>
+const html = `
+<div class="max-h-[60vh] overflow-y-auto flex flex-col">
+        <div class="flex justify-between items-center mb-3">
+            <h3 class="text-[15px] font-bold text-gray-800">${dateStr}</h3>
+            <button onclick="closeCenterModal()" class="p-1.5 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
         </div>
-    `;
-    openModal(html);
+        ${contentHtml}
+        <div class="flex flex-col gap-2 mt-4">${actionsHtml}</div>
+    </div>
+`;
+openCenterModal(html);
 }
 
 function renderMenstrualView() {
@@ -2171,414 +2268,481 @@ function changeMenstrualMonth(delta) {
     switchTab('menstrual');
 }
 
-// ==================== 记账模块 ====================
-function getMonthTotalIncome(year, month) {
-    const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
-    return appData.incomes.filter(i => i.date.startsWith(monthStr)).reduce((sum, i) => sum + i.amount, 0);
-}
-function getMonthTotalExpense(year, month) {
-    const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
-    return appData.expenses.filter(e => e.date.startsWith(monthStr)).reduce((sum, e) => sum + e.amount, 0);
-}
-function getDayIncomeByMode(dateStr, mode) {
-    return appData.incomes.filter(i => i.date === dateStr &&
-        (mode === 'daily' ? i.recordType === 'daily' : mode === 'monthly' ? i.recordType === 'monthly' : mode === 'work' ? i.recordType === 'work' : true))
-        .reduce((sum, i) => sum + i.amount, 0);
-}
-function getDayExpense(dateStr) {
-    return appData.expenses.filter(e => e.date === dateStr).reduce((sum, e) => sum + e.amount, 0);
-}
-function getMonthIncomeByMode(year, month, mode) {
-    const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
-    return appData.incomes.filter(i => i.date.startsWith(monthStr) &&
-        (mode === 'daily' ? i.recordType === 'daily' : mode === 'monthly' ? i.recordType === 'monthly' : mode === 'work' ? i.recordType === 'work' : true))
-        .reduce((sum, i) => sum + i.amount, 0);
+// ==================== 全新记账模块 ====================
+
+function selectCategory(el) {
+    document.querySelectorAll('#expense-category-wrap .category-item').forEach(item => item.classList.remove('active'));
+    el.classList.add('active');
+    _selectedCategory = el.dataset.val;
 }
 
-function renderDayCalendar() {
+function updateBillDate(val) {
+    const today = formatDateLocal(new Date());
+    if (val > today) {
+        showToast('不能选择未来日期');
+        const input = document.getElementById('bill-date-input');
+        if (input) input.value = _currentBillDate;
+        return;
+    }
+    _currentBillDate = val;
+    const display = document.getElementById('date-display-text');
+    if (display) display.textContent = val.replace(/-/g, '/');
+}
+
+let currentBillWeek = 1; 
+let _currentBillDate = ''; 
+let _currentIncomeType = 'expense'; // 默认支出
+let _editingBillId = null; // 用于判断是新增还是修改
+let _selectedCategory = '餐饮'; // 当前选中的支出分类
+
+function openCenterModal(html, isNarrow = false) {
+    const content = document.querySelector('.center-modal-content');
+    if (isNarrow) {
+        content.style.width = '65%';
+        content.style.maxWidth = '220px';
+    } else {
+        content.style.width = '78%';
+        content.style.maxWidth = '280px';
+    }
+    document.getElementById('center-modal-body').innerHTML = html;
+    document.getElementById('center-modal-overlay').classList.add('active');
+    lucide.createIcons();
+}
+function closeCenterModal(e) { 
+    if(!e || e.target === document.getElementById('center-modal-overlay')) {
+        document.getElementById('center-modal-overlay').classList.remove('active'); 
+        _editingBillId = null;
+    }
+}
+
+// 主渲染
+function renderBillView() {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
-    const firstDay = new Date(year, month, 1).getDay();
+    const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+    
+    let totalIn = 0, totalOut = 0;
+    appData.incomes.filter(i => i.date.startsWith(monthStr)).forEach(i => totalIn += i.amount);
+    appData.expenses.filter(e => e.date.startsWith(monthStr)).forEach(e => totalOut += e.amount);
+    const balance = totalIn - totalOut;
+
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const today = new Date();
-    const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
-    let html = `
-        <div class="flex justify-between items-center mb-2">
-            <button onclick="changeMonth(-1)" class="p-1.5 rounded-lg bg-gray-100"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
-            <span class="font-semibold text-sm">${year}年${month + 1}月</span>
-            <button onclick="changeMonth(1)" class="p-1.5 rounded-lg bg-gray-100"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
-        </div>
-        <div class="calendar-grid mb-1">
-            ${['日','一','二','三','四','五','六'].map(d => `<div class="text-center text-[10px] text-gray-400 py-1">${d}</div>`).join('')}
-        </div>
-        <div class="calendar-grid">
-    `;
-    for (let day = 1; day <= daysInMonth; day++) {
-        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        let amount = 0;
-        if (currentBillType === 'income') amount = getDayIncomeByMode(dateStr, billViewMode);
-        else amount = getDayExpense(dateStr);
-        const hasRecord = amount > 0;
-        const isToday = isCurrentMonth && today.getDate() === day;
-        const isFuture = isFutureDate(dateStr);
-        html += `
-            <div class="calendar-day ${hasRecord ? 'has-record' : 'bg-gray-50'} ${isToday ? 'today' : ''} ${isFuture ? 'disabled' : ''}"
-                 style="min-height:38px;"
-                 onclick="${isFuture ? '' : `onCalendarDayClick('${dateStr}', ${amount})`}">
-                <span class="text-[11px]">${day}</span>
-                ${hasRecord ? `<span class="record-amount">¥${Math.floor(amount)}</span>` : ''}
-            </div>
-        `;
+    const startDay = (currentBillWeek - 1) * 7 + 1;
+    const endDay = currentBillWeek === 5 ? daysInMonth : currentBillWeek * 7;
+    
+    const recordsInWeek = {};
+    appData.incomes.filter(i => i.date.startsWith(monthStr)).forEach(i => {
+        const d = parseInt(i.date.split('-')[2]);
+        if (d >= startDay && d <= endDay) {
+            if (!recordsInWeek[i.date]) recordsInWeek[i.date] = { in: [], out: [] };
+            recordsInWeek[i.date].in.push(i);
+        }
+    });
+    appData.expenses.filter(e => e.date.startsWith(monthStr)).forEach(e => {
+        const d = parseInt(e.date.split('-')[2]);
+        if (d >= startDay && d <= endDay) {
+            if (!recordsInWeek[e.date]) recordsInWeek[e.date] = { in: [], out: [] };
+            recordsInWeek[e.date].out.push(e);
+        }
+    });
+
+    const sortedDates = Object.keys(recordsInWeek).sort((a,b) => b.localeCompare(a)); 
+
+    let listHtml = '';
+    if (sortedDates.length === 0) {
+        listHtml = `<div class="text-center text-gray-400 text-xs py-10">这段时间还没有记录哦</div>`;
+    } else {
+        listHtml = sortedDates.map(dateStr => {
+            const data = recordsInWeek[dateStr];
+            const dayIn = data.in.reduce((s, i) => s + i.amount, 0);
+            const dayOut = data.out.reduce((s, e) => s + e.amount, 0);
+            const dateObj = parseDate(dateStr);
+            const weekStr = ['周日','周一','周二','周三','周四','周五','周六'][dateObj.getDay()];
+            
+            const allRecords = [...data.in.map(i=>({...i, isIncome:true})), ...data.out.map(e=>({...e, isIncome:false}))].sort((a, b) => {
+    const timeA = a.updatedAt || Number(a.id) || 0;
+    const timeB = b.updatedAt || Number(b.id) || 0;
+    return timeB - timeA;
+});
+            
+            return `
+                <div class="day-card">
+                    <div class="day-card-header">
+                        <span class="font-semibold text-xs">${dateObj.getMonth()+1}月${dateObj.getDate()}日 ${weekStr}</span>
+                        <div class="text-[10px] opacity-90">
+                            ${dayIn > 0 ? `<span class="text-green-200">收 ${dayIn.toFixed(0)}</span>` : ''}
+                            ${dayIn > 0 && dayOut > 0 ? ' / ' : ''}
+                            ${dayOut > 0 ? `<span class="text-red-200">支 ${dayOut.toFixed(0)}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="day-card-body">
+                        ${allRecords.map(r => {
+                            let typeName = '';
+                            let icon = '';
+                            if (r.isIncome) {
+                                if (r.recordType === 'work') { typeName = '工时'; icon = '🔧'; }
+                                else if (r.recordType === 'monthly') { typeName = '月薪'; icon = '💼'; }
+                                else { typeName = '日结'; icon = '🦺'; }
+                            } else {
+                                typeName = r.category || '其他';
+                                const expenseIconMap = { '餐饮': '🍜', '购物': '🛍️', '交通': '🚗', '娱乐': '🎬', '医疗': '💊', '人情': '🧧','宠物': '🐶','其他': '⭕' };
+                                icon = expenseIconMap[r.category] || '⭕';
+                            }
+                            
+                            const hasNote = !!(r.note && r.note.trim());
+                            
+// 计算应发金额和扣除明细
+let detailText = '';
+if (r.isIncome) {
+    let originalAmount = r.amount;
+    let deducts = [];
+    if (r.recordType === 'work' && r.hours && r.pricePerHour) {
+        originalAmount = r.hours * r.pricePerHour;
+        if (r.insurance > 0) deducts.push(`保险 ¥${formatAmount(r.insurance)}`);
+        detailText = `${r.hours}h×¥${formatAmount(r.pricePerHour)}=¥${formatAmount(originalAmount)}` + (deducts.length ? ` (扣${deducts.join(' ')})` : '');
+    } else {
+        if (r.insurance > 0) { originalAmount += r.insurance; deducts.push(`保险 ¥${formatAmount(r.insurance)}`); }
+        if (r.tax > 0) { originalAmount += r.tax; deducts.push(`个税 ¥${formatAmount(r.tax)}`); }
+        if (r.social > 0) { originalAmount += r.social; deducts.push(`社保 ¥${formatAmount(r.social)}`); }
+        
+        if (deducts.length > 0) {
+            detailText = `应发 ¥${formatAmount(originalAmount)} (扣${deducts.join(' ')})`;
+        }
     }
-    const totalCells = firstDay + daysInMonth;
-    const remaining = (7 - (totalCells % 7)) % 7;
-    for (let i = 0; i < remaining; i++) html += `<div class="calendar-day other-month"></div>`;
-    html += '</div>';
-    return html;
 }
 
-function renderMonthCalendar() {
-    const currentYear = currentMonth.getFullYear();
-    let html = `
-        <div class="flex justify-between items-center mb-2">
-            <button onclick="changeYear(-1)" class="p-1.5 rounded-lg bg-gray-100"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
-            <span class="font-semibold text-sm">${currentYear}年</span>
-            <button onclick="changeYear(1)" class="p-1.5 rounded-lg bg-gray-100"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
-        </div>
-        <div class="month-grid">
-    `;
-    for (let month = 0; month < 12; month++) {
-        let amount = 0;
-        if (currentBillType === 'income') amount = getMonthIncomeByMode(currentYear, month, billViewMode);
-        else amount = getMonthTotalExpense(currentYear, month);
-        const hasRecord = amount > 0;
-        const isSelected = currentMonth.getFullYear() === currentYear && currentMonth.getMonth() === month;
-        html += `
-            <div class="month-item ${hasRecord ? 'has-record' : ''} ${isSelected ? 'selected' : ''}" onclick="onMonthClick(${month})">
-                <span class="font-medium">${month + 1}月</span>
-                ${hasRecord ? `<span class="month-income">¥${(amount / 1000).toFixed(1)}k</span>` : '<span class="month-income">-</span>'}
-            </div>
-        `;
+                            return `
+                            <div class="record-row" onclick="showRecordActions('${r.id}', ${r.isIncome})">
+                                <div class="flex items-center gap-3 flex-1 min-w-0">
+                                    <span class="text-[24px] leading-none flex-shrink-0">${icon}</span>
+                                    ${hasNote ? `
+                                    <div class="min-w-0">
+                                        <p class="text-[13px] text-black font-medium truncate">${typeName}</p>
+                                        <p class="text-[11px] text-gray-500 font-normal truncate">${escapeHtml(r.note)}</p>
+                                    </div>
+                                    ` : `
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-[14px] text-black font-medium truncate">${typeName}</p>
+                                    </div>
+                                    `}
+                                </div>
+                                <div class="flex flex-col items-end flex-shrink-0 ml-2">
+                                    <span class="text-[13px] font-bold text-black">${r.isIncome ? '+' : '-'}¥${formatAmount(r.amount)}</span>
+                                    ${detailText ? `<span class="text-[10px] text-gray-500 font-normal mt-0.5 whitespace-nowrap">${detailText}</span>` : ''}
+                                </div>
+                            </div>
+`}).join('')}
+                    </div>
+                </div>
+            `;
+        }).join('');
     }
-    html += '</div>';
-    return html;
+
+    return `
+        <div class="space-y-4 mt-2 pb-6">
+            <div class="overview-card">
+                <div class="overview-header relative">
+                    <button onclick="changeBillMonth(-1)" class="absolute left-2 top-1/2 -translate-y-1/2 p-2 text-white/80 active:scale-75 transition-transform"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+                    <p class="text-sm opacity-90 mb-1">${year}年${month+1}月结余</p>
+                    <p class="text-4xl font-bold">${formatMoney(balance)}</p>
+                    <button onclick="changeBillMonth(1)" class="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-white/80 active:scale-75 transition-transform"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
+                </div>
+                <div class="overview-body">
+                    <div class="flex-1 border-r border-gray-200 text-center">
+                        <p class="text-[12px] text-gray-500 mb-0.5">总收入</p>
+                        <p class="text-sm font-bold text-gray-800">+¥${formatAmount(totalIn)}</p>
+                    </div>
+                    <div class="flex-1 text-center">
+                        <p class="text-[12px] text-gray-500 mb-0.5">总支出</p>
+                        <p class="text-sm font-bold text-red-500">-¥${formatAmount(totalOut)}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex bg-white/60 p-1 rounded-xl shadow-sm border border-white/50">
+                ${[1,2,3,4,5].map(w => {
+                    if (w === 5 && daysInMonth <= 28) return ''; 
+                    const sDay = (w-1)*7 + 1;
+                    const eDay = w === 5 ? daysInMonth : w*7;
+                    return `<button onclick="switchBillWeek(${w})" class="flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${currentBillWeek === w ? 'bg-blue-500 text-white shadow' : 'text-gray-500'}">${sDay}-${eDay}</button>`;
+                }).join('')}
+            </div>
+
+            <div class="bill-list-container space-y-3">
+                ${listHtml}
+            </div>
+        </div>
+    `;
 }
 
-function changeMonth(delta) { currentMonth.setMonth(currentMonth.getMonth() + delta); switchTab('bill'); }
-function changeYear(delta) { currentMonth.setFullYear(currentMonth.getFullYear() + delta); switchTab('bill'); }
-function onMonthClick(month) {
-    currentMonth.setMonth(month);
-    if (currentBillType === 'income') {
-        const monthStr = `${currentMonth.getFullYear()}-${String(month + 1).padStart(2, '0')}`;
-        const records = appData.incomes.filter(i => i.recordType === 'monthly' && i.date.startsWith(monthStr));
-        if (records.length > 0) showMonthDetail(monthStr);
-        else showAddBillModalForMonth(monthStr);
-    } else {
-        const monthStr = `${currentMonth.getFullYear()}-${String(month + 1).padStart(2, '0')}`;
-        showAddExpenseModalForMonth(monthStr);
+function changeBillMonth(delta) {
+    const now = new Date();
+    const targetMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + delta, 1);
+    // 如果目标月份大于当前自然月，拦截
+    if (targetMonth.getFullYear() > now.getFullYear() || 
+       (targetMonth.getFullYear() === now.getFullYear() && targetMonth.getMonth() > now.getMonth())) {
+        showToast('暂不支持查看未来的账单哦');
+        return;
+    }
+    currentMonth = targetMonth;
+    switchTab('bill', true);
+}
+
+function switchBillWeek(w) {
+    if (currentBillWeek === w) return;
+    currentBillWeek = w;
+    const pageDiv = document.getElementById('page-wrapper-bill');
+    if (pageDiv) {
+        pageDiv.innerHTML = renderBillView();
+        lucide.createIcons();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 }
-function showMonthDetail(monthStr) {
-    const records = appData.incomes.filter(i => i.recordType === 'monthly' && i.date.startsWith(monthStr));
-    const sorted = [...records].sort((a, b) => a.date.localeCompare(b.date));
-    const html = `
-        <div class="p-5 max-h-[80vh] overflow-y-auto">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-base font-bold">${monthStr} 记录</h3>
-                <button onclick="closeModal()" class="p-2 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
-            </div>
-            <div class="space-y-2">
-                ${sorted.length > 0 ? sorted.map(r => `
-                    <div class="glass-card p-3 rounded-xl flex justify-between items-center">
-                        <div><p class="text-sm font-medium">${r.note || '收入记录'}</p><p class="text-[10px] text-gray-400">${r.category === 'salary' ? '工资' : r.category === 'bonus' ? '奖金' : '其他'}</p></div>
-                        <div class="flex items-center gap-2"><span class="text-sm font-bold text-green-500">+${formatMoney(r.amount)}</span><button onclick="deleteIncome('${r.id}')" class="p-1.5 text-gray-400 hover:text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>
-                    </div>
-                `).join('') : '<p class="text-center text-gray-400 text-sm">暂无记录</p>'}
-            </div>
-            <button onclick="showAddBillModalForMonth('${monthStr}')" class="btn-primary w-full py-3.5 rounded-xl font-semibold text-sm mt-4">添加记录</button>
-        </div>
-    `;
-    openModal(html);
-}
-function onCalendarDayClick(dateStr, amount) {
-    if (currentBillType === 'income') {
-        if (amount > 0) showDayDetail(dateStr);
-        else showAddBillModal(dateStr);
+
+function showAddBillModal(dateStr = null) {
+    const isEditing = !!_editingBillId;
+    const record = isEditing ? (_currentIncomeType === 'expense' ? appData.expenses.find(e => e.id === _editingBillId) : appData.incomes.find(i => i.id === _editingBillId)) : null;
+    
+    if (!isEditing) {
+        _currentBillDate = dateStr || formatDateLocal(new Date());
+        _currentIncomeType = 'expense';
+        _selectedCategory = '餐饮';
+    }
+
+// 预设各种输入框的值（防止编辑时丢失）
+let amountVal = '', hoursVal = '', priceVal = '', insuranceVal = '', taxVal = '', socialVal = '', noteVal = '';
+if (record) {
+    noteVal = record.note || '';
+    insuranceVal = record.insurance ? formatAmount(record.insurance) : '';
+    taxVal = record.tax ? formatAmount(record.tax) : '';
+    socialVal = record.social ? formatAmount(record.social) : '';
+    if (_currentIncomeType === 'work') {
+        hoursVal = record.hours ? formatAmount(record.hours) : '';
+        priceVal = record.pricePerHour ? formatAmount(record.pricePerHour) : '';
     } else {
-        if (amount > 0) showExpenseDayDetail(dateStr);
-        else showAddExpenseModal(dateStr);
+        // 反算总金额（因为 record.amount 是扣除后的）
+        const total = record.amount + (record.insurance || 0) + (record.tax || 0) + (record.social || 0);
+        amountVal = total > 0 ? formatAmount(total) : '';
     }
 }
-function showDayDetail(dateStr) {
-    const records = appData.incomes.filter(i => i.date === dateStr);
+const typeTabHtml = `
+    <div class="flex bg-gray-100 p-1 rounded-xl mb-3">
+        <button id="type-btn-expense" onclick="switchRecordType('expense')" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${_currentIncomeType === 'expense' ? 'bg-blue-500 shadow-sm text-white' : 'text-gray-500'}">支出</button>
+        <button id="type-btn-daily" onclick="switchRecordType('daily')" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${_currentIncomeType === 'daily' ? 'bg-blue-500 shadow-sm text-white' : 'text-gray-500'}">日结</button>
+        <button id="type-btn-monthly" onclick="switchRecordType('monthly')" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${_currentIncomeType === 'monthly' ? 'bg-blue-500 shadow-sm text-white' : 'text-gray-500'}">月薪</button>
+        <button id="type-btn-work" onclick="switchRecordType('work')" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${_currentIncomeType === 'work' ? 'bg-blue-500 shadow-sm text-white' : 'text-gray-500'}">工时</button>
+    </div>
+`;
+
     const html = `
-        <div class="p-5 max-h-[80vh] overflow-y-auto">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-base font-bold">${dateStr} 记录</h3>
-                <button onclick="closeModal()" class="p-2 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
+        <div class="flex flex-col">
+            <div class="flex flex-col items-center mb-3">
+
+                <label class="date-picker-btn">
+                    <span id="date-display-text" class="text-xs">${_currentBillDate.replace(/-/g, '/')}</span>
+                    <input type="date" id="bill-date-input" value="${_currentBillDate}" max="${formatDateLocal(new Date())}" onchange="updateBillDate(this.value)">
+                </label>
             </div>
-            <div class="space-y-2">
-                ${records.map(r => `
-                    <div class="glass-card p-3 rounded-xl flex justify-between items-center">
-                        <div><p class="text-sm font-medium">${r.note || '收入记录'}</p><p class="text-[10px] text-gray-400">${r.recordType === 'work' ? '工时' : r.category === 'salary' ? '工资' : r.category === 'bonus' ? '奖金' : r.category === 'hourly' ? '时薪' : '其他'}</p></div>
-                        <div class="flex items-center gap-2"><span class="text-sm font-bold text-green-500">+${formatMoney(r.amount)}</span><button onclick="deleteIncome('${r.id}')" class="p-1.5 text-gray-400 hover:text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>
+            
+            ${typeTabHtml}
+
+            <div class="flex flex-col justify-center min-h-[180px] mb-2">
+                <!-- 正常金额框（支出/日结/月薪） -->
+                <div id="normal-amount-wrap" style="display: ${_currentIncomeType === 'work' ? 'none' : 'block'};">
+                    <input type="number" id="bill-amount" class="finance-input" placeholder="输入金额" value="${amountVal}" style="font-size: 15px; padding: 8px;">
+                </div>
+                
+                <!-- 工时专属框 -->
+                <div id="work-inputs-wrap" style="display: ${_currentIncomeType === 'work' ? 'block' : 'none'};" class="space-y-2">
+                    <input type="number" id="work-hours" class="finance-input" placeholder="时长(小时)" step="0.5" value="${hoursVal}">
+                    <input type="number" id="work-price" class="finance-input" placeholder="时薪(元)" value="${priceVal}">
+                </div>
+
+                <!-- 保险扣除框（日结/工时） -->
+                <div id="insurance-wrap" style="display: ${_currentIncomeType === 'daily' || _currentIncomeType === 'work' ? 'block' : 'none'};" class="mt-2">
+                    <input type="number" id="insurance-amount" class="finance-input" placeholder="扣除保险 (可选)" value="${insuranceVal}" style="border: 1px dashed #FCA5A5; background: #FEF2F2; color: #EF4444;">
+                </div>
+
+                <!-- 🌟 新增：个税与社保（月薪） -->
+                <div id="tax-social-wrap" style="display: ${_currentIncomeType === 'monthly' ? 'flex' : 'none'};" class="flex gap-2 mt-2">
+                    <input type="number" id="tax-amount" class="finance-input" placeholder="扣除个税(可选)" value="${taxVal}" style="border: 1px dashed #FCD34D; background: #FFFBEB; color: #D97706;">
+                    <input type="number" id="social-amount" class="finance-input" placeholder="扣除社保(可选)" value="${socialVal}" style="border: 1px dashed #FCD34D; background: #FFFBEB; color: #D97706;">
+                </div>
+                
+                <!-- 支出分类网格 -->
+                <div id="expense-category-wrap" style="display: ${_currentIncomeType === 'expense' ? 'block' : 'none'};" class="mt-3">
+                    <div class="category-grid">
+                        <div class="category-item ${_selectedCategory === '餐饮' ? 'active' : ''}" data-val="餐饮" onclick="selectCategory(this)"><span class="icon">🍜</span>餐饮</div>
+                        <div class="category-item ${_selectedCategory === '购物' ? 'active' : ''}" data-val="购物" onclick="selectCategory(this)"><span class="icon">🛍️</span>购物</div>
+                        <div class="category-item ${_selectedCategory === '交通' ? 'active' : ''}" data-val="交通" onclick="selectCategory(this)"><span class="icon">🚗</span>交通</div>
+                        <div class="category-item ${_selectedCategory === '娱乐' ? 'active' : ''}" data-val="娱乐" onclick="selectCategory(this)"><span class="icon">🎬</span>娱乐</div>
+                        <div class="category-item ${_selectedCategory === '医疗' ? 'active' : ''}" data-val="医疗" onclick="selectCategory(this)"><span class="icon">💊</span>医疗</div>
+                        <div class="category-item ${_selectedCategory === '宠物' ? 'active' : ''}" data-val="宠物" onclick="selectCategory(this)"><span class="icon">🐶</span>宠物</div>
+                        <div class="category-item ${_selectedCategory === '人情' ? 'active' : ''}" data-val="人情" onclick="selectCategory(this)"><span class="icon">🧧</span>人情</div>
+                        <div class="category-item ${_selectedCategory === '其他' ? 'active' : ''}" data-val="其他" onclick="selectCategory(this)"><span class="icon">⭕</span>其他</div>
                     </div>
-                `).join('')}
+                </div>
+
+                <input type="text" id="bill-note" class="finance-input mt-2" placeholder="添加备注..." value="${noteVal}" style="font-size: 12px; font-weight: normal; text-align: left; padding: 8px;">
             </div>
-            <button onclick="showAddBillModal('${dateStr}')" class="btn-primary w-full py-3.5 rounded-xl font-semibold text-sm mt-4">添加记录</button>
+            
+            <button onclick="saveBillRecord()" class="w-full py-2.5 rounded-xl font-bold text-white text-sm shadow-md active:scale-95 transition-transform mt-auto" style="background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);">保存</button>
         </div>
     `;
-    openModal(html);
+    openCenterModal(html);
 }
-function showExpenseDayDetail(dateStr) {
-    const records = appData.expenses.filter(e => e.date === dateStr);
-    const html = `
-        <div class="p-5 max-h-[80vh] overflow-y-auto">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-base font-bold">${dateStr} 支出记录</h3>
-                <button onclick="closeModal()" class="p-2 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
-            </div>
-            <div class="space-y-2">
-                ${records.map(r => `
-                    <div class="glass-card p-3 rounded-xl flex justify-between items-center">
-                        <div><p class="text-sm font-medium">${r.category}</p><p class="text-xs text-gray-500">${r.note || '无备注'}</p></div>
-                        <div class="flex items-center gap-2"><span class="text-sm font-bold text-red-500">-${formatMoney(r.amount)}</span><button onclick="deleteExpense('${r.id}')" class="p-1.5 text-gray-400 hover:text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>
-                    </div>
-                `).join('')}
-            </div>
-            <button onclick="showAddExpenseModal('${dateStr}')" class="btn-primary w-full py-3.5 rounded-xl font-semibold text-sm mt-4">添加支出</button>
-        </div>
-    `;
-    openModal(html);
+
+function switchRecordType(type) {
+    _currentIncomeType = type;
+    ['expense', 'daily', 'monthly', 'work'].forEach(t => {
+        const btn = document.getElementById(`type-btn-${t}`);
+        if (!btn) return;
+        btn.className = 'flex-1 py-1.5 text-xs font-bold rounded-lg transition-all';
+        if (t === type) {
+            btn.classList.add('bg-blue-500', 'shadow-sm', 'text-white');
+        } else {
+            btn.classList.add('text-gray-500');
+        }
+    });
+    
+    document.getElementById('normal-amount-wrap').style.display = type === 'work' ? 'none' : 'block';
+    document.getElementById('work-inputs-wrap').style.display = type === 'work' ? 'block' : 'none';
+    document.getElementById('expense-category-wrap').style.display = type === 'expense' ? 'block' : 'none';
+    
+    // 保险：日结和工时显示
+    document.getElementById('insurance-wrap').style.display = (type === 'daily' || type === 'work') ? 'block' : 'none';
+    // 个税社保：只有月薪显示
+    document.getElementById('tax-social-wrap').style.display = type === 'monthly' ? 'flex' : 'none';
 }
-function showAddBillModal(dateStr) {
-    if (isFutureDate(dateStr)) { showToast('不能添加未来日期的记录'); return; }
-    const isWorkMode = billViewMode === 'work';
-    const isMonthlyMode = billViewMode === 'monthly';
-    const html = `
-        <div class="p-5">
-            <div class="flex justify-between items-center mb-4"><h3 class="text-base font-bold">添加${isWorkMode ? '工时' : isMonthlyMode ? '月收入' : '收入'}记录</h3><button onclick="closeModal()" class="p-2 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button></div>
-            <div class="space-y-3">
-                <div><label class="text-xs text-gray-500 mb-1.5 block">日期</label><input type="date" id="bill-date" class="input-field" value="${dateStr}"></div>
-                ${isWorkMode ? `
-                    <div><label class="text-xs text-gray-500 mb-1.5 block">工作时长（小时）</label><input type="number" id="work-hours" class="input-field" placeholder="如：8" step="0.5"></div>
-                    <div><label class="text-xs text-gray-500 mb-1.5 block">时薪（元）</label><input type="number" id="work-price" class="input-field" placeholder="如：50"></div>
-                ` : `
-                    <div><label class="text-xs text-gray-500 mb-1.5 block">金额（元）</label><input type="number" id="bill-amount" class="input-field" placeholder="如：5000"></div>
-                    ${!isMonthlyMode ? `<div><label class="text-xs text-gray-500 mb-1.5 block">类型</label><select id="bill-category" class="input-field"><option value="salary">工资</option><option value="bonus">奖金</option><option value="hourly">时薪</option><option value="other">其他</option></select></div>` : ''}
-                `}
-                <div><label class="text-xs text-gray-500 mb-1.5 block">备注</label><input type="text" id="bill-note" class="input-field" placeholder="可选"></div>
-                <button onclick="addBillRecord()" class="btn-primary w-full py-3.5 rounded-xl font-semibold text-sm">保存</button>
-            </div>
-        </div>
-    `;
-    openModal(html);
-}
-function showAddBillModalForMonth(monthStr) {
-    const isWorkMode = billViewMode === 'work';
-    const isMonthlyMode = billViewMode === 'monthly';
-    const dateStr = monthStr + '-01';
-    const html = `
-        <div class="p-5">
-            <div class="flex justify-between items-center mb-4"><h3 class="text-base font-bold">添加${isWorkMode ? '工时' : isMonthlyMode ? '月收入' : '收入'}记录</h3><button onclick="closeModal()" class="p-2 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button></div>
-            <div class="space-y-3">
-                <div><label class="text-xs text-gray-500 mb-1.5 block">日期</label><input type="date" id="bill-date" class="input-field" value="${dateStr}"></div>
-                ${isWorkMode ? `
-                    <div><label class="text-xs text-gray-500 mb-1.5 block">工作时长（小时）</label><input type="number" id="work-hours" class="input-field" placeholder="如：8" step="0.5"></div>
-                    <div><label class="text-xs text-gray-500 mb-1.5 block">时薪（元）</label><input type="number" id="work-price" class="input-field" placeholder="如：50"></div>
-                ` : `
-                    <div><label class="text-xs text-gray-500 mb-1.5 block">金额（元）</label><input type="number" id="bill-amount" class="input-field" placeholder="如：5000"></div>
-                    ${!isMonthlyMode ? `<div><label class="text-xs text-gray-500 mb-1.5 block">类型</label><select id="bill-category" class="input-field"><option value="salary">工资</option><option value="bonus">奖金</option><option value="hourly">时薪</option><option value="other">其他</option></select></div>` : ''}
-                `}
-                <div><label class="text-xs text-gray-500 mb-1.5 block">备注</label><input type="text" id="bill-note" class="input-field" placeholder="可选"></div>
-                <button onclick="addBillRecord()" class="btn-primary w-full py-3.5 rounded-xl font-semibold text-sm">保存</button>
-            </div>
-        </div>
-    `;
-    openModal(html);
-}
-function addBillRecord() {
-    const date = document.getElementById('bill-date').value;
-    const isWorkMode = billViewMode === 'work';
-    const isMonthlyMode = billViewMode === 'monthly';
-    if (isFutureDate(date)) { showToast('不能添加未来日期的记录'); return; }
-    let amount, recordData;
-    if (isWorkMode) {
-        const hours = parseFloat(document.getElementById('work-hours').value);
-        const pricePerHour = parseFloat(document.getElementById('work-price').value);
-        if (!date || !hours || !pricePerHour) { showToast('请填写完整信息'); return; }
-        amount = hours * pricePerHour;
-        recordData = { id: Date.now().toString(), date, amount, hours, pricePerHour, note: document.getElementById('bill-note').value, category: 'work', recordType: 'work', updatedAt: Date.now() };
+
+function saveBillRecord() {
+    if (_currentBillDate > formatDateLocal(new Date())) { showToast('不能记录未来日期的账目'); return; }
+    let amount, isExpense = (_currentIncomeType === 'expense');
+    
+    const insurance = parseFloat(document.getElementById('insurance-amount')?.value) || 0;
+    const tax = parseFloat(document.getElementById('tax-amount')?.value) || 0;
+    const social = parseFloat(document.getElementById('social-amount')?.value) || 0;
+
+    let baseAmount = 0;
+    let workHours = 0, workPrice = 0;
+
+    if (_currentIncomeType === 'work') {
+        workHours = parseFloat(document.getElementById('work-hours').value);
+        workPrice = parseFloat(document.getElementById('work-price').value);
+        if (!workHours || !workPrice) { showToast('请填写时长和时薪'); return; }
+        amount = (workHours * workPrice) - insurance;
+    } else if (_currentIncomeType === 'monthly') {
+        baseAmount = parseFloat(document.getElementById('bill-amount').value);
+        if (!baseAmount || baseAmount <= 0) { showToast('请输入金额'); return; }
+        amount = baseAmount - tax - social;
+    } else if (_currentIncomeType === 'daily') {
+        baseAmount = parseFloat(document.getElementById('bill-amount').value);
+        if (!baseAmount || baseAmount <= 0) { showToast('请输入金额'); return; }
+        amount = baseAmount - insurance;
     } else {
         amount = parseFloat(document.getElementById('bill-amount').value);
-        if (!date || !amount || amount <= 0) { showToast('请填写完整信息'); return; }
-        recordData = { id: Date.now().toString(), date, amount, category: isMonthlyMode ? 'salary' : (document.getElementById('bill-category')?.value || 'other'), note: document.getElementById('bill-note').value, recordType: isMonthlyMode ? 'monthly' : 'daily', updatedAt: Date.now() };
+        if (!amount || amount <= 0) { showToast('请输入金额'); return; }
     }
-    appData.incomes.push(recordData);
-    saveData(); logOp('记收入', `${date} ${formatMoney(amount)}`);
-    showToast('添加成功'); closeModal(); switchTab('bill');
-}
-function showAddExpenseModal(dateStr) {
-    if (isFutureDate(dateStr)) { showToast('不能添加未来日期的记录'); return; }
-    const today = formatDateLocal(new Date());
-    const html = `
-        <div class="p-5">
-            <div class="flex justify-between items-center mb-4"><h3 class="text-base font-bold">添加支出记录</h3><button onclick="closeModal()" class="p-2 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button></div>
-            <div class="space-y-3">
-                <div><label class="text-xs text-gray-500 mb-1.5 block">日期</label><input type="date" id="expense-date" class="input-field" value="${dateStr || today}"></div>
-                <div><label class="text-xs text-gray-500 mb-1.5 block">金额（元）</label><input type="number" id="expense-amount" class="input-field" placeholder="如：29.9"></div>
-                <div><label class="text-xs text-gray-500 mb-1.5 block">分类</label><select id="expense-category" class="input-field"><option value="餐饮">🍜 餐饮</option><option value="购物">🛍️ 购物</option><option value="交通">🚗 交通</option><option value="娱乐">🎬 娱乐</option><option value="医疗">💊 医疗</option><option value="其他">📦 其他</option></select></div>
-                <div><label class="text-xs text-gray-500 mb-1.5 block">备注</label><input type="text" id="expense-note" class="input-field" placeholder="可选"></div>
-                <button onclick="addExpenseRecord()" class="btn-primary w-full py-3.5 rounded-xl font-semibold text-sm">保存</button>
-            </div>
-        </div>
-    `;
-    openModal(html);
-}
-function showAddExpenseModalForMonth(monthStr) {
-    const dateStr = monthStr + '-01';
-    showAddExpenseModal(dateStr);
-}
-function addExpenseRecord() {
-    const date = document.getElementById('expense-date').value;
-    const amount = parseFloat(document.getElementById('expense-amount').value);
-    if (!date || !amount || amount <= 0) { showToast('请填写完整信息'); return; }
-    const category = document.getElementById('expense-category').value;
-    const record = {
-        id: Date.now().toString(),
-        date: date,
-        amount: amount,
-        category: category,
-        note: document.getElementById('expense-note').value,
-        updatedAt: Date.now()
-    };
-    appData.expenses.push(record);
-    saveData(); logOp('记支出', `${date} ${category} ${formatMoney(amount)}`);
-    showToast('添加成功'); closeModal(); switchTab('bill');
-}
-async function deleteIncome(incomeId) {
-    const confirmed = await showCustomConfirm('确定要删除这条记录吗？');
-    if (!confirmed) return;
-    const rec = appData.incomes.find(i => i.id === incomeId);
-    appData.incomes = appData.incomes.filter(i => i.id !== incomeId);
-    saveData(); logOp('删除收入', rec ? `${rec.date} ${formatMoney(rec.amount)}` : '');
-    closeModal(); switchTab('bill'); showToast('已删除');
-}
-async function deleteExpense(expenseId) {
-    const confirmed = await showCustomConfirm('确定要删除这条支出记录吗？');
-    if (!confirmed) return;
-    const rec = appData.expenses.find(e => e.id === expenseId);
-    appData.expenses = appData.expenses.filter(e => e.id !== expenseId);
-    saveData(); logOp('删除支出', rec ? `${rec.date} ${formatMoney(rec.amount)}` : '');
-    closeModal(); switchTab('bill'); showToast('已删除');
-}
-function renderIncomeBillView() {
-    const year = currentMonth.getFullYear();
-    const month = currentMonth.getMonth();
-    const monthTotal = getMonthTotalIncome(year, month);
-    const totalRecords = appData.incomes.length;
-    let html = `
-        <div class="space-y-4 mt-2">
-            <div class="income-card">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <p class="text-base font-bold mb-1">本月总收入</p>
-                        <p class="text-2xl font-bold">${formatMoney(monthTotal)}</p>
-                    </div>
-                    <div class="flex gap-1">
-                        <button onclick="setBillMode('daily')" class="tab-btn-small ${billViewMode === 'daily' ? 'active' : ''}">按日</button>
-                        <button onclick="setBillMode('monthly')" class="tab-btn-small ${billViewMode === 'monthly' ? 'active' : ''}">按月</button>
-                        <button onclick="setBillMode('work')" class="tab-btn-small ${billViewMode === 'work' ? 'active' : ''}">工时</button>
-                    </div>
-                </div>
-            </div>
-            ${totalRecords < 3 ? `<p class="text-center text-gray-400 text-xs mt-1 mb-0 py-0 leading-none">操作方法：先在上方选择记录模式，然后点击下方日期添加记录</p>` : ''}
-            <div class="glass-card p-3 rounded-2xl">
-                ${billViewMode === 'monthly' ? renderMonthCalendar() : renderDayCalendar()}
-            </div>
-            ${renderIncomeChart()}
-        </div>
-    `;
-    return html;
-}
-function renderExpenseBillView() {
-    const year = currentMonth.getFullYear();
-    const month = currentMonth.getMonth();
-    const monthTotal = getMonthTotalExpense(year, month);
-    const totalExpenses = appData.expenses.length;
-    let html = `
-        <div class="space-y-4 mt-2">
-            <div class="bg-gradient-to-r from-red-500 to-red-600 text-white p-4 rounded-2xl shadow-lg" style="padding: 16px 18px; border-radius: 18px;">
-                <div>
-                    <p class="text-base font-bold mb-1">本月总支出</p>
-                    <p class="text-2xl font-bold">${formatMoney(monthTotal)}</p>
-                </div>
-            </div>
-            ${totalExpenses < 3 ? `<p class="text-center text-gray-400 text-xs mt-1 mb-0 py-0 leading-none">操作方法：先在上方选择记录模式，然后点击下方日期添加记录</p>` : ''}
-            <div class="glass-card p-3 rounded-2xl">
-                ${billViewMode === 'monthly' ? renderMonthCalendar() : renderDayCalendar()}
-            </div>
-            ${renderExpenseChart()}
-        </div>
-    `;
-    return html;
-}
-function renderBillView() {
-    if (currentBillType === 'income') return renderIncomeBillView();
-    else return renderExpenseBillView();
-}
-function renderIncomeChart() {
-    const year = currentMonth.getFullYear();
-    return `
-        <div class="mt-4">
-            <p class="text-xs font-semibold text-gray-700 mb-2">${year}年收入趋势</p>
-            <div class="glass-card p-3 rounded-xl"><canvas id="incomeChart" height="120"></canvas></div>
-        </div>
-    `;
-}
-function renderExpenseChart() {
-    const year = currentMonth.getFullYear();
-    return `
-        <div class="mt-4">
-            <p class="text-xs font-semibold text-gray-700 mb-2">${year}年支出趋势</p>
-            <div class="glass-card p-3 rounded-xl"><canvas id="expenseChart" height="120"></canvas></div>
-        </div>
-    `;
-}
-function initIncomeChart() {
-    const ctx = document.getElementById('incomeChart');
-    if (!ctx) return;
-    // 新增：如果之前有图表，先销毁，避免堆积
-    if (_incomeChartInst) { _incomeChartInst.destroy(); _incomeChartInst = null; }
-    const year = currentMonth.getFullYear();
-    const data = [];
-    for (let m = 0; m < 12; m++) data.push(getMonthTotalIncome(year, m));
-    _incomeChartInst = new Chart(ctx, {
-        type: 'line',
-        data: { labels: ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'], datasets: [{ label: '收入', data, borderColor: '#10B981', backgroundColor: 'rgba(16, 185, 129, 0.1)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 3, pointBackgroundColor: '#10B981' }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 10 } } }, y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 10 }, callback: value => value >= 1000 ? (value/1000).toFixed(1) + 'k' : value } } } }
-    });
-}
-function initExpenseChart() {
-    const ctx = document.getElementById('expenseChart');
-    if (!ctx) return;
-    // 新增：如果之前有图表，先销毁，避免堆积
-    if (_expenseChartInst) { _expenseChartInst.destroy(); _expenseChartInst = null; }
-    const year = currentMonth.getFullYear();
-    const data = [];
-    for (let m = 0; m < 12; m++) data.push(getMonthTotalExpense(year, m));
-    _expenseChartInst = new Chart(ctx, {
-        type: 'line',
-        data: { labels: ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'], datasets: [{ label: '支出', data, borderColor: '#EF4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 3, pointBackgroundColor: '#EF4444' }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 10 } } }, y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 10 }, callback: value => value >= 1000 ? (value/1000).toFixed(1) + 'k' : value } } } }
-    });
-}
-function setBillMode(mode) { billViewMode = mode; switchTab('bill'); }
-function setBillType(type) {
-    currentBillType = type;
-    if (type === 'expense') billViewMode = 'daily';
-    // 直接交给 switchTab 去强制刷新当前页面，既安全又不会破坏缓存结构
+
+    if (amount <= 0) { showToast('扣除后金额必须大于0'); return; }
+
+    const note = document.getElementById('bill-note').value;
+    const category = isExpense ? _selectedCategory : (_currentIncomeType === 'monthly' ? 'salary' : 'other');
+
+    // 把保险/税等金额也存起来，方便以后编辑时反算
+    const recordExtras = { insurance, tax, social };
+
+    if (_editingBillId) {
+        let record = isExpense ? appData.expenses.find(e => e.id === _editingBillId) : appData.incomes.find(i => i.id === _editingBillId);
+        if (record) {
+            record.amount = amount; record.note = note; record.category = category;
+            if (!isExpense) { record.recordType = _currentIncomeType; record.hours = workHours; record.pricePerHour = workPrice; }
+            Object.assign(record, recordExtras);
+            record.updatedAt = Date.now();
+        }
+    } else {
+        const id = Date.now().toString();
+        if (isExpense) {
+            appData.expenses.push({ id, date: _currentBillDate, amount, category, note, updatedAt: Date.now() });
+        } else {
+            const rec = { id, date: _currentBillDate, amount, category, note, recordType: _currentIncomeType, hours: workHours, pricePerHour: workPrice, updatedAt: Date.now(), ...recordExtras };
+            appData.incomes.push(rec);
+        }
+    }
+
+    saveData(); logOp(_editingBillId ? '修改记录' : '记一笔', `${_currentBillDate} ${amount}`);
+    showToast('保存成功'); 
+    closeCenterModal(); 
     switchTab('bill', true);
+}
+
+function editRecord(id, isIncome) {
+    const record = isIncome ? appData.incomes.find(i => i.id === id) : appData.expenses.find(e => e.id === id);
+    if (!record) return;
+    
+    _editingBillId = id;
+    _currentBillDate = record.date;
+    _currentIncomeType = isIncome ? (record.recordType || 'daily') : 'expense';
+    _selectedCategory = record.category || '餐饮';
+    
+    showAddBillModal();
+}
+
+function showRecordActions(id, isIncome) {
+    const record = isIncome ? appData.incomes.find(i => i.id === id) : appData.expenses.find(e => e.id === id);
+    if (!record) return;
+
+let originalAmount = record.amount;
+let calcText = '';
+let deductText = '';
+
+if (isIncome) {
+    let deducts = [];
+    if (record.recordType === 'work' && record.hours && record.pricePerHour) {
+        originalAmount = record.hours * record.pricePerHour;
+        calcText = `${record.hours}h × ¥${formatAmount(record.pricePerHour)} = ¥${formatAmount(originalAmount)}`;
+        if (record.insurance > 0) deducts.push(`保险 ¥${formatAmount(record.insurance)}`);
+    } else {
+        if (record.insurance > 0) { originalAmount += record.insurance; deducts.push(`保险 ¥${formatAmount(record.insurance)}`); }
+        if (record.tax > 0) { originalAmount += record.tax; deducts.push(`个税 ¥${formatAmount(record.tax)}`); }
+        if (record.social > 0) { originalAmount += record.social; deducts.push(`社保 ¥${formatAmount(record.social)}`); }
+        
+        if (deducts.length > 0) {
+            calcText = `应发 ¥${formatAmount(originalAmount)}`;
+        }
+    }
+    if (deducts.length > 0) {
+        deductText = `扣除 ${deducts.join(' / ')}`;
+    }
+}
+    const html = `
+        <div class="flex flex-col">
+            <div class="text-center mb-4">
+                <p class="text-base font-bold text-gray-800 mb-1">${escapeHtml(record.note || (isIncome ? '收入' : '支出'))}</p>
+                <p class="text-2xl font-bold ${isIncome ? 'text-green-500' : 'text-red-500'} mb-1">${isIncome ? '+' : '-'}¥${formatAmount(record.amount)}</p>
+                ${calcText ? `<p class="text-[12px] text-gray-500 mb-0.5">${calcText}</p>` : ''}
+                ${deductText ? `<p class="text-[12px] text-red-400 mb-1">${deductText}</p>` : ''}
+                <p class="text-xs text-gray-400">${record.date}</p>
+            </div>
+
+            <div class="flex gap-2">
+                <button onclick="closeCenterModal(); editRecord('${id}', ${isIncome})" class="flex-1 py-2.5 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium">修改</button>
+                <button onclick="deleteBillRecord('${id}', ${isIncome})" class="flex-1 py-2.5 rounded-xl bg-red-50 text-red-500 text-sm font-medium">删除</button>
+            </div>
+        </div>
+    `;
+    openCenterModal(html);
+}
+
+async function deleteBillRecord(id, isIncome) {
+    const confirmed = await showCustomConfirm('确定删除这条记录吗？');
+    if (!confirmed) return;
+    if (isIncome) appData.incomes = appData.incomes.filter(i => i.id !== id);
+    else appData.expenses = appData.expenses.filter(e => e.id !== id);
+    saveData(); logOp('删除记录', id);
+    closeCenterModal();
+    switchTab('bill', true);
+    showToast('已删除');
 }
 
 // ==================== 设置页 ====================
@@ -2631,7 +2795,7 @@ function renderMeView() {
                 </div>
             </div>
 
-            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v3.4.3</p></div>
+            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v4.0</p></div>
         </div>
     `;
     return html;
@@ -2649,7 +2813,7 @@ function showAbout() {
                     <i data-lucide="sparkles" class="w-8 h-8 text-white"></i>
                 </div>
                 <p class="text-lg font-bold text-gray-800">Life Manager</p>
-                <p class="text-xs text-gray-400 mt-1">v3.4.3</p>
+                <p class="text-xs text-gray-400 mt-1">v4.0</p>
             </div>
             <div class="glass-card rounded-2xl overflow-hidden mt-4" style="padding: 0;">
                 <div class="setting-item" onclick="openGithubRepo()" style="margin-bottom: 0; border-radius: 0;">
@@ -3150,42 +3314,42 @@ function showExportMenu() {
             </div>
             <p class="text-xs text-gray-500 mb-3">选择要导出的模块：</p>
             <div class="space-y-2">
-                <div class="glass-card p-3 rounded-xl flex justify-between items-center">
+                <div class="bg-gray-50 border border-gray-100 p-3 rounded-xl flex justify-between items-center">
                     <div><p class="text-sm font-medium">📦 全部数据</p><p class="text-[10px] text-gray-400">打卡 + 记账 + 记事 + 经期</p></div>
                     <div class="flex gap-1.5">
                         <button onclick="doExport('all', 'file')" class="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium">下载</button>
                         <button onclick="doExport('all', 'text')" class="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-medium">复制</button>
                     </div>
                 </div>
-                <div class="glass-card p-3 rounded-xl flex justify-between items-center">
+                <div class="bg-gray-50 border border-gray-100 p-3 rounded-xl flex justify-between items-center">
                     <div><p class="text-sm font-medium">✅ 打卡数据</p><p class="text-[10px] text-gray-400">仅习惯与打卡记录</p></div>
                     <div class="flex gap-1.5">
                         <button onclick="doExport('tasks', 'file')" class="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium">下载</button>
                         <button onclick="doExport('tasks', 'text')" class="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-medium">复制</button>
                     </div>
                 </div>
-                <div class="glass-card p-3 rounded-xl flex justify-between items-center">
+                <div class="bg-gray-50 border border-gray-100 p-3 rounded-xl flex justify-between items-center">
                     <div><p class="text-sm font-medium">💰 记账数据</p><p class="text-[10px] text-gray-400">仅收入与支出记录</p></div>
                     <div class="flex gap-1.5">
                         <button onclick="doExport('bill', 'file')" class="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium">下载</button>
                         <button onclick="doExport('bill', 'text')" class="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-medium">复制</button>
                     </div>
                 </div>
-                <div class="glass-card p-3 rounded-xl flex justify-between items-center">
+                <div class="bg-gray-50 border border-gray-100 p-3 rounded-xl flex justify-between items-center">
                     <div><p class="text-sm font-medium">📝 记事数据</p><p class="text-[10px] text-gray-400">仅笔记与密码记录</p></div>
                     <div class="flex gap-1.5">
                         <button onclick="doExport('notes', 'file')" class="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium">下载</button>
                         <button onclick="doExport('notes', 'text')" class="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-medium">复制</button>
                     </div>
                 </div>
-                <div class="glass-card p-3 rounded-xl flex justify-between items-center">
+                <div class="bg-gray-50 border border-gray-100 p-3 rounded-xl flex justify-between items-center">
                     <div><p class="text-sm font-medium">🌸 经期数据</p><p class="text-[10px] text-gray-400">仅经期与爱爱记录</p></div>
                     <div class="flex gap-1.5">
                         <button onclick="doExport('menstrual', 'file')" class="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium">下载</button>
                         <button onclick="doExport('menstrual', 'text')" class="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-medium">复制</button>
                     </div>
                 </div>
-                <div class="glass-card p-3 rounded-xl flex justify-between items-center">
+                <div class="bg-gray-50 border border-gray-100 p-3 rounded-xl flex justify-between items-center">
                     <div><p class="text-sm font-medium">☁️ 云同步配置</p><p class="text-[10px] text-gray-400">Token、仓库、文件名</p></div>
                     <button onclick="exportSyncConfig()" class="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-medium">复制</button>
                 </div>
@@ -3392,7 +3556,7 @@ const views = {
     home: { title: '首页', subtitle: '今日概览', render: renderHomeView },
     finish: { title: '打卡', subtitle: '完成每一件事', render: renderFinishView },
     menstrual: { title: '经期追踪', subtitle: '记录和预测经期周期', render: renderMenstrualView },
-    bill: { title: currentBillType === 'income' ? '记账' : '支出记账', subtitle: currentBillType === 'income' ? '记录每一笔收入' : '记录每一笔支出', render: renderBillView },
+    bill: { title: '记账', subtitle: '记录每一笔收支', render: renderBillView },
     note: { title: '记事', subtitle: '好记性不如烂笔头', render: renderNoteView },
     me: { title: '设置', subtitle: '数据及账户管理', render: renderMeView }
 };
@@ -3411,36 +3575,31 @@ function switchTab(tab, forceRender = false) {
     currentTab = tab;
     const content = document.getElementById('content');
     const data = views[tab];
-    const switchContainer = document.getElementById('bill-type-switch');
     const gearBtn = document.getElementById('settings-gear-btn');
 
-    if (forceRender) {
-        if (tab === 'bill') currentMonth = new Date();
-        if (tab === 'menstrual') menstrualViewMonth = new Date();
-    }
+if (forceRender) {
+    if (tab === 'menstrual') menstrualViewMonth = new Date();
+}
 
     if (gearBtn) gearBtn.style.display = tab === 'home' ? 'flex' : 'none';
 
     if (tab === 'bill') {
-        switchContainer.style.display = 'flex';
-        const incomeBtn = document.getElementById('btn-income-type');
-        const expenseBtn = document.getElementById('btn-expense-type');
-        if (currentBillType === 'income') {
-            incomeBtn.classList.add('active-tab');
-            expenseBtn.classList.remove('active-tab');
-            document.getElementById('page-subtitle').innerText = '记录每一笔收入';
-        } else {
-            expenseBtn.classList.add('active-tab');
-            incomeBtn.classList.remove('active-tab');
-            document.getElementById('page-subtitle').innerText = '记录每一笔支出';
-        }
         document.getElementById('page-title').innerText = '记账';
+        document.getElementById('page-subtitle').innerText = '记录每一笔收支';
+        
+        // 🌟 智能定位到当前周
+        const today = new Date();
+        if (currentMonth.getFullYear() === today.getFullYear() && currentMonth.getMonth() === today.getMonth()) {
+            currentBillWeek = Math.min(5, Math.ceil(today.getDate() / 7));
+        } else {
+            currentBillWeek = 1; 
+        }
     } else {
-        switchContainer.style.display = 'none';
         document.getElementById('page-title').innerText = data.title;
         document.getElementById('page-subtitle').innerText = data.subtitle;
     }
 
+    // 🚨 下面这部分绝对不能放进上面的 else 里！
     // 判断是否重绘
     let pageDiv = document.getElementById('page-wrapper-' + tab);
     const isSamePageRefresh = (tab === previousTab);
@@ -3472,6 +3631,7 @@ function switchTab(tab, forceRender = false) {
     else if (tab === 'bill') mainEl.style.paddingBottom = '48px';
     else mainEl.style.paddingBottom = '68px';
 
+    // 底部导航高亮
     document.querySelectorAll('nav .nav-btn').forEach(btn => {
         btn.classList.add('text-gray-400');
         btn.classList.remove('active-tab');
@@ -3479,13 +3639,16 @@ function switchTab(tab, forceRender = false) {
     const navBtn = document.getElementById('btn-' + tab);
     if (navBtn) { navBtn.classList.remove('text-gray-400'); navBtn.classList.add('active-tab'); }
 
+    // 右下角 FAB 按钮
     const fabBtn = document.getElementById('fab-add-btn');
-    if (tab === 'finish' || tab === 'note') {
+    if (tab === 'finish' || tab === 'note' || tab === 'bill') {
         fabBtn.style.display = 'flex';
-        fabBtn.onclick = tab === 'finish' ? toggleAddTaskInput : showAddNoteModal;
-    } else fabBtn.style.display = 'none';
-
-    if (tab === 'bill') setTimeout(() => { initIncomeChart(); initExpenseChart(); }, 100);
+        if (tab === 'finish') fabBtn.onclick = showAddTaskModal;
+        else if (tab === 'note') fabBtn.onclick = showAddNoteModal;
+        else if (tab === 'bill') fabBtn.onclick = () => showAddBillModal();
+    } else {
+        fabBtn.style.display = 'none';
+    }
 
     vibrate(3);
     if (typeof _fabHidden !== 'undefined') {
@@ -3563,48 +3726,51 @@ document.addEventListener('focusin', (e) => {
     }
 });
 
-// FAB 按钮滚动隐藏：向下滚累计 20px 隐藏，向上滚累计 20px 显示
-window.addEventListener('scroll', () => {
-    const fab = document.getElementById('fab-add-btn');
-    if (!fab || fab.style.display === 'none') {
-        _fabLastY = window.scrollY;
-        return;
-    }
-    const y = window.scrollY;
+// ==================== 性能优化：滚动监听 & FAB 按钮 ====================
+let _isScrolling = false;
 
-    // 接近顶部强制显示
-    if (y < 50) {
-        if (_fabHidden) {
+window.addEventListener('scroll', () => {
+    if (_isScrolling) return;
+    _isScrolling = true;
+    requestAnimationFrame(() => {
+        const fab = document.getElementById('fab-add-btn');
+        if (!fab || fab.style.display === 'none') {
+            _fabLastY = window.scrollY;
+            _isScrolling = false;
+            return;
+        }
+        const y = window.scrollY;
+        
+        if (y < 50) {
+            if (_fabHidden) {
+                _fabHidden = false;
+                fab.style.transform = '';
+                fab.style.opacity = '1';
+                fab.style.pointerEvents = 'auto';
+            }
+            _fabLastY = y;
+            _isScrolling = false;
+            return;
+        }
+        
+        const delta = y - _fabLastY;
+        if (delta > 20 && !_fabHidden) {
+            _fabHidden = true;
+            fab.style.transform = 'translateY(120px)';
+            fab.style.opacity = '0';
+            fab.style.pointerEvents = 'none';
+            _fabLastY = y;
+        } else if (delta < -20 && _fabHidden) {
             _fabHidden = false;
             fab.style.transform = '';
             fab.style.opacity = '1';
             fab.style.pointerEvents = 'auto';
+            _fabLastY = y;
+        } else if ((delta > 0 && _fabHidden) || (delta < 0 && !_fabHidden)) {
+            _fabLastY = y;
         }
-        _fabLastY = y;
-        return;
-    }
-
-    const delta = y - _fabLastY;
-
-    if (delta > 20 && !_fabHidden) {
-        // 情况A：往下滚累计 20px，隐藏
-        _fabHidden = true;
-        fab.style.transform = 'translateY(120px)';
-        fab.style.opacity = '0';
-        fab.style.pointerEvents = 'none';
-        _fabLastY = y;
-    } else if (delta < -20 && _fabHidden) {
-        // 情况B：往上滚累计 20px，显示
-        _fabHidden = false;
-        fab.style.transform = '';
-        fab.style.opacity = '1';
-        fab.style.pointerEvents = 'auto';
-        _fabLastY = y;
-    } else if ((delta > 0 && _fabHidden) || (delta < 0 && !_fabHidden)) {
-        // 情况C：状态已稳定，继续朝同方向滚 → 基准跟随，不累计
-        _fabLastY = y;
-    }
-    // 情况D：状态未切换但累积不够 20px → 什么都不做（保持 _fabLastY，继续累计）
+        _isScrolling = false;
+    });
 }, { passive: true });
 
 // 预初始化加密密钥，避免首次打卡/同步时 PBKDF2 阻塞主线程
