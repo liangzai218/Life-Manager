@@ -832,7 +832,7 @@ function hideCustomConfirm() {
         <p class="text-[11px] text-gray-500 mt-1">今日打卡</p>
     </div>
     <div class="glass-card p-3 rounded-xl text-center" style="background: rgba(254, 242, 242, 0.85); border-color: rgba(254, 202, 202, 0.5);">
-        <p class="text-2xl font-bold text-red-500">¥${Math.round(todayExpense)}</p>
+        <p class="text-2xl font-bold text-red-500">¥${formatAmount(todayExpense)}</p>
         <p class="text-[11px] text-gray-500 mt-1">今日支出</p>
     </div>
     <div class="glass-card p-3 rounded-xl text-center" style="background: rgba(253, 242, 248, 0.85); border-color: rgba(251, 207, 232, 0.5);">
@@ -2663,10 +2663,10 @@ function renderBillView() {
                     <div class="day-card-header">
                         <span class="font-semibold text-xs">${dateObj.getMonth()+1}月${dateObj.getDate()}日 ${weekStr}</span>
                         <div class="text-[10px] opacity-90">
-                            ${dayIn > 0 ? `<span class="text-green-200">收 ${dayIn.toFixed(0)}</span>` : ''}
-                            ${dayIn > 0 && dayOut > 0 ? ' / ' : ''}
-                            ${dayOut > 0 ? `<span class="text-red-200">支 ${dayOut.toFixed(0)}</span>` : ''}
-                        </div>
+    ${dayIn > 0 ? `<span class="text-green-200">收 ${formatAmount(dayIn)}</span>` : ''}
+    ${dayIn > 0 && dayOut > 0 ? ' / ' : ''}
+    ${dayOut > 0 ? `<span class="text-red-200">支 ${formatAmount(dayOut)}</span>` : ''}
+</div>
                     </div>
                     <div class="day-card-body">
                         ${allRecords.map(r => {
@@ -3255,7 +3255,7 @@ function renderMeView() {
                 </div>
             </div>
 
-            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v4.5</p></div>
+            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v4.5.1</p></div>
         </div>
     `;
     return html;
@@ -3273,7 +3273,7 @@ function showAbout() {
                     <i data-lucide="sparkles" class="w-8 h-8 text-white"></i>
                 </div>
                 <p class="text-lg font-bold text-gray-800">Life Manager</p>
-                <p class="text-xs text-gray-400 mt-1">v4.5</p>
+                <p class="text-xs text-gray-400 mt-1">v4.5.1</p>
             </div>
             <div class="glass-card rounded-2xl overflow-hidden mt-4" style="padding: 0;">
                 <div class="setting-item" onclick="openGithubRepo()" style="margin-bottom: 0; border-radius: 0;">
