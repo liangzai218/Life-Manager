@@ -158,7 +158,10 @@
         .menstrual-calendar-day.predicted-menstrual { background: #FBCFE8; color: #6B7280; }
         .menstrual-calendar-day.ovulation { color: #A78BFA; background: #F9FAFB; }
         .menstrual-calendar-day.safe { color: #34D399; background: #F9FAFB; }
-        .menstrual-calendar-day .love-icon { position: absolute; bottom: 2px; right: 4px; font-size: 12px; line-height: 1; }
+     .menstrual-calendar-day.safe { color: #34D399; background: #F9FAFB; }
+.menstrual-calendar-day.follicular { color: #60A5FA; background: #F9FAFB; } /* 卵泡期-浅蓝 */
+.menstrual-calendar-day.luteal { color: #A78BFA; background: #F9FAFB; } /* 黄体期-浅紫 */
+           .menstrual-calendar-day .love-icon { position: absolute; bottom: 2px; right: 4px; font-size: 12px; line-height: 1; }
         .predict-card { padding: 12px 16px; border-radius: 14px; }
         .predict-card .main-text { font-size: 15px; font-weight: 600; }
         .predict-card .sub-text { font-size: 11px; color: #9CA3AF; }
@@ -956,9 +959,10 @@ function renderSyncCard() {
         <div id="sync-card" class="glass-card p-4 rounded-2xl" style="${syncCardStyle}">
             <div class="flex justify-between items-start mb-3">
                 <div class="flex items-center gap-2.5">
-                    <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-500">
-                        <i data-lucide="cloud" class="w-4 h-4"></i>
-                    </div>
+    <!-- 把背景改成微渐变，图标改成白色，瞬间高级 -->
+    <div class="w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-sm" style="background: linear-gradient(135deg, #60A5FA 0%, #3B82F6 100%);">
+        <i data-lucide="git-branch" class="w-4 h-4"></i>
+    </div>
                     <div>
                         <p class="font-semibold text-sm">Gitee云同步</p>
                         <p class="text-[10px] text-gray-400">智能合并增量更新</p>
@@ -1728,14 +1732,25 @@ function predictNextPeriodStart() {
 function _computePredictNextPeriodStart() {
     const lengths = getCycleLengths();
     if (lengths.length === 0) {
-        const lastStart = getLastPeriodStart();
-        if (lastStart) {
-            const d = parseDate(lastStart);
-            d.setDate(d.getDate() + 28);
-            return { best: formatDateLocal(d), earliest: formatDateLocal(d), latest: formatDateLocal(d), confidence: '低', cycleLength: 28 };
-        }
-        return null;
+    const lastStart = getLastPeriodStart();
+    if (lastStart) {
+        const d = parseDate(lastStart);
+        d.setDate(d.getDate() + 28); // 默认按照28天算
+        
+        // 🌟 修复：即使只有一条数据，也生成前3天和后3天的合理范围
+        const earliestD = new Date(d); earliestD.setDate(earliestD.getDate() - 3);
+        const latestD = new Date(d); latestD.setDate(latestD.getDate() + 3);
+        
+        return { 
+            best: formatDateLocal(d), 
+            earliest: formatDateLocal(earliestD), 
+            latest: formatDateLocal(latestD), 
+            confidence: '低', 
+            cycleLength: 28 
+        };
     }
+    return null;
+}
     const avg = getWeightedAverageCycle();
     const trend = getTrendOffset();
     const lastStart = getLastPeriodStart();
@@ -1783,12 +1798,17 @@ function getCompletedCount() { return appData.menstrual.records.filter(r => r.en
 function getAverageDuration() {
     const completed = getCompletedPeriods();
     if (completed.length === 0) return 5;
-    const durations = completed.map(r => {
+    let durations = completed.map(r => {
         const s = parseDate(r.startDate);
         const e = parseDate(r.endDate);
-        return (e - s) / (1000 * 60 * 60 * 24) + 1;
+        return Math.round((e - s) / (1000 * 60 * 60 * 24)) + 1;
     });
-    return Math.round(durations.reduce((a, b) => a + b, 0) / durations.length);
+    
+    // 🌟 核心修复：过滤掉异常天数（小于2天，大于10天），防止历史脏数据毁掉未来的预测！
+    const validDurations = durations.filter(d => d >= 2 && d <= 10);
+    if (validDurations.length === 0) return 5; // 如果全是脏数据，默认按5天算
+    
+    return Math.round(validDurations.reduce((a, b) => a + b, 0) / validDurations.length);
 }
 function getLastPeriodStart() {
     const sorted = [...appData.menstrual.records].filter(r => r.endDate).sort((a, b) => parseDate(b.startDate) - parseDate(a.startDate));
@@ -1814,9 +1834,10 @@ function _computeAllCalculatedPeriods() {
     today.setHours(0, 0, 0, 0);
     for (let i = 0; i < records.length; i++) {
         const r = records[i];
-        const end = parseDate(r.endDate);
-        let cursor = new Date(end);
-        cursor.setDate(cursor.getDate() + 1);
+        const start = parseDate(r.startDate); // 🌟 改为从 start 开始算
+        let cursor = new Date(start);
+        cursor.setDate(cursor.getDate() + avgCycle + trend); // 🌟 预测下次的开始时间 = 本次开始 + 周期
+        
         const isLast = (i === records.length - 1);
         const limitDate = isLast ? new Date(today.getTime() + 6 * 30 * 24 * 60 * 60 * 1000) : parseDate(records[i + 1].startDate);
         let maxIter = 30;
@@ -1824,19 +1845,17 @@ function _computeAllCalculatedPeriods() {
             const periodStart = new Date(cursor);
             const periodEnd = new Date(cursor);
             periodEnd.setDate(periodEnd.getDate() + avgDuration - 1);
-            if (periodEnd >= limitDate) {
-                const adjustedEnd = new Date(limitDate);
-                adjustedEnd.setDate(adjustedEnd.getDate() - 1);
-                if (periodStart <= adjustedEnd) periods.push({ start: new Date(periodStart), end: new Date(adjustedEnd) });
-                break;
-            } else {
-                periods.push({ start: new Date(periodStart), end: new Date(periodEnd) });
-            }
+            
+            if (periodEnd >= limitDate && !isLast) break; // 不越过下一条真实记录
+            
+            periods.push({ start: new Date(periodStart), end: new Date(periodEnd) });
+            
             const nextStart = new Date(cursor);
             nextStart.setDate(nextStart.getDate() + avgCycle + trend);
             cursor = nextStart;
         }
     }
+    // ...下面保持不变
     periods.sort((a, b) => a.start - b.start);
     const merged = [];
     for (let p of periods) {
@@ -1866,13 +1885,15 @@ function isDateInPredictedPeriod(dateStr) {
     const d = parseDate(dateStr);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    if (d < today) return false;
-    if (isDateInPeriod(dateStr)) return false;
-    const pred = predictNextPeriodStart();
-    if (!pred) return false;
-    const earliest = parseDate(pred.earliest);
-    const latest = parseDate(pred.latest);
-    return d >= earliest && d <= latest;
+    if (d < today) return false; // 过去的日子不显示预测
+    if (isDateInPeriod(dateStr)) return false; // 已经记录过的不算预测
+    
+    // 🌟 核心修复：读取所有的计算周期，只要在起止区间内，就返回 true
+    const calculatedPeriods = getAllCalculatedPeriods();
+    for (let p of calculatedPeriods) {
+        if (d >= p.start && d <= p.end) return true;
+    }
+    return false;
 }
 
 function isDateInOvulation(dateStr) {
@@ -1965,16 +1986,21 @@ async function handleSetPeriodStart(dateStr) {
         if (existing.isActive) { showToast('该日已在当前经期内'); return; }
         else { showToast('该日属于已结束经期，请使用修改功能'); return; }
     }
-    const active = getActivePeriod();
-    if (active) {
-        if (parseDate(dateStr) < parseDate(active.startDate)) {
-            active.startDate = dateStr;
-            active.updatedAt = Date.now();
-            saveData(); logOp('修改经期开始', dateStr);
-            closeCenterModal(); refreshMenstrualView(); showToast('经期开始日期已更新');
+const active = getActivePeriod();
+if (active) {
+    if (parseDate(dateStr) < parseDate(active.startDate)) {
+        const diffDays = Math.round((parseDate(active.startDate) - parseDate(dateStr)) / (1000 * 60 * 60 * 24));
+        if (diffDays > 7) {
+            showToast('跨度太大，请先结束当前经期再记录');
             return;
-        } else { showToast('已有活跃经期，不能新建'); return; }
-    }
+        }
+        active.startDate = dateStr;
+        active.updatedAt = Date.now();
+        saveData(); logOp('修改经期开始', dateStr);
+        closeCenterModal(); refreshMenstrualView(); showToast('经期开始日期已更新');
+        return;
+    } else { showToast('已有活跃经期，不能新建'); return; }
+}
     const adjacent = findAdjacentCompletedPeriod(dateStr, 2);
     if (adjacent) {
         const start = adjacent.startDate;
@@ -2108,32 +2134,45 @@ let statusText = '';
     else if (isLove) statusText = '❤️ 有爱爱标记';
     else statusText = '当天无记录';
     contentHtml += `<p class="text-center text-xs text-gray-400">${statusText}</p>`;
-    let actionsHtml = '';
-    if (isReadOnly) {
-        actionsHtml = `<div class="bg-gray-50 text-gray-500 rounded-xl p-3 flex items-center justify-center gap-2 text-sm w-full mt-2"><i data-lucide="lock" class="w-4 h-4"></i>只读模式，无法操作</div>`;
-    } else {
-if (!active) {
-    if (record && !record.isActive) {
-        const isStart = parseDate(dateStr).getTime() === parseDate(record.startDate).getTime();
-        const isEnd = record.endDate && parseDate(dateStr).getTime() === parseDate(record.endDate).getTime();
-        if (!isEnd) actionsHtml += `<button onclick="handleModifyPeriodEnd('${record.id}', '${dateStr}')" class="w-full py-2.5 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium">修改结束日期为此日</button>`;
-        actionsHtml += `<button onclick="deleteMenstrualRecord('${record.id}', '${dateStr}')" class="w-full py-2.5 rounded-xl bg-red-50 text-red-500 text-sm font-medium">删除</button>`;
-    } else if (!record) {
-        actionsHtml += `<button onclick="handleSetPeriodStart('${dateStr}')" class="w-full py-2.5 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">设为经期开始</button>`;
-    }
+let actionsHtml = '';
+if (isReadOnly) {
+    actionsHtml = `<div class="bg-gray-50 text-gray-500 rounded-xl p-3 flex items-center justify-center gap-2 text-sm w-full mt-2"><i data-lucide="lock" class="w-4 h-4"></i>只读模式，无法操作</div>`;
 } else {
-    if (parseDate(dateStr) >= parseDate(active.startDate)) {
-        actionsHtml += `<button onclick="addPeriodEnd('${dateStr}')" class="w-full py-2.5 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium">设为经期结束</button>`;
-    } else {
-        actionsHtml += `<button onclick="handleSetPeriodStart('${dateStr}')" class="w-full py-2.5 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">扩展经期开始</button>`;
+    // 🌟 终极修复：历史记录绝对优先！
+    if (record && !record.isActive) {
+        const isEnd = record.endDate && parseDate(dateStr).getTime() === parseDate(record.endDate).getTime();
+        if (!isEnd) {
+            actionsHtml += `<button onclick="handleModifyPeriodEnd('${record.id}', '${dateStr}')" class="w-full py-2.5 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium">修改结束日期为此日</button>`;
+        }
+        actionsHtml += `<button onclick="deleteMenstrualRecord('${record.id}', '${dateStr}')" class="w-full py-2.5 rounded-xl bg-red-50 text-red-500 text-sm font-medium">删除</button>`;
+    } 
+    else if (!active) {
+        // 没活跃经期，且没点在历史记录上 -> 设为开始
+        if (!record) {
+            actionsHtml += `<button onclick="handleSetPeriodStart('${dateStr}')" class="w-full py-2.5 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">设为经期开始</button>`;
+        }
+    } 
+    else {
+        // 有活跃经期，且没点在历史记录上
+        if (parseDate(dateStr) >= parseDate(active.startDate)) {
+            actionsHtml += `<button onclick="addPeriodEnd('${dateStr}')" class="w-full py-2.5 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium">设为经期结束</button>`;
+        } else if (!record) {
+            // 只有点在空白日期，才判断能否扩展
+            const diffDays = Math.round((parseDate(active.startDate) - parseDate(dateStr)) / (1000 * 60 * 60 * 24));
+            if (diffDays <= 7) {
+                actionsHtml += `<button onclick="handleSetPeriodStart('${dateStr}')" class="w-full py-2.5 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">扩展经期开始</button>`;
+            } else {
+                actionsHtml += `<p class="text-center text-xs text-red-400 w-full mt-2">距离当前经期太久，无法扩展。<br>（如要记录更早的经期，请先结束当前经期）</p>`;
+            }
+        }
     }
-}
-if (!isFutureDate(dateStr)) {
-    if (isLove) actionsHtml += `<button onclick="removeLoveDate('${dateStr}')" class="w-full py-2.5 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">❤️ 删除爱爱</button>`;
-    else actionsHtml += `<button onclick="addLoveFromDate('${dateStr}')" class="w-full py-2.5 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">❤️ 添加爱爱</button>`;
-}
-        if (!actionsHtml) actionsHtml = `<p class="text-center text-xs text-gray-400">无可用操作</p>`;
+    
+    if (!isFutureDate(dateStr)) {
+        if (isLove) actionsHtml += `<button onclick="removeLoveDate('${dateStr}')" class="w-full py-2.5 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">❤️ 删除爱爱</button>`;
+        else actionsHtml += `<button onclick="addLoveFromDate('${dateStr}')" class="w-full py-2.5 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">❤️ 添加爱爱</button>`;
     }
+    if (!actionsHtml) actionsHtml = `<p class="text-center text-xs text-gray-400">无可用操作</p>`;
+}
 const html = `
 <div class="max-h-[60vh] overflow-y-auto flex flex-col">
         <div class="flex justify-between items-center mb-3">
@@ -2161,53 +2200,84 @@ function renderMenstrualView() {
         const pred = predictNextPeriodStart();
         const source = getPredictionSource();
         const isReadOnly = !!appData.settings.syncMenstrualFrom;
-        let predictMainText = '--';
-        let predictBadge = '';
-        let confidenceText = '';
-        if (active) {
-            const endDate = predictPeriodEnd(active.startDate);
-            const now = new Date(); now.setHours(0, 0, 0, 0);
-            const end = parseDate(endDate); end.setHours(0, 0, 0, 0);
-            const diffDays = Math.round((end - now) / (1000 * 60 * 60 * 24));
-            predictMainText = `预计结束：${endDate.slice(5)}`;
-            if (diffDays > 0) predictBadge = `还有 ${diffDays} 天`;
-            else if (diffDays === 0) predictBadge = '今天结束';
-            else predictBadge = `已过 ${Math.abs(diffDays)} 天`;
-            confidenceText = '当前经期中';
-        } else if (pred) {
-            const { best, earliest, latest, confidence } = pred;
-            if (earliest === latest) predictMainText = `预测开始： ${best.slice(5)}`;
-            else predictMainText = `预测开始： ${earliest.slice(5)} ~ ${latest.slice(5)}`;
-            const now = new Date();
-            const bestDate = parseDate(best);
-            const daysLeft = Math.max(0, Math.floor((bestDate - now) / (1000 * 60 * 60 * 24)));
-            predictBadge = daysLeft === 0 ? '就是今天' : `还有 ${daysLeft} 天`;
-            const confidenceMap = { '高': '🟢 可靠性高', '中': '🟡 可靠性一般', '低': '🟠 数据较少，仅供参考' };
-            confidenceText = confidenceMap[confidence] || confidenceMap['中'];
-            if (pred.cycleLength) confidenceText += ` · 周期 ${pred.cycleLength} 天`;
-        } else {
-            predictMainText = '数据不足，无法预测';
-            confidenceText = '请记录至少2次完整的经期';
-        }
+let predictMainText = '--';
+let predictBadge = '';
+let confidenceText = '';
+let sourceText = source; // 使用传入的预测来源依据
+
+if (active) {
+    const endDate = predictPeriodEnd(active.startDate);
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const end = parseDate(endDate); end.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((end - now) / (1000 * 60 * 60 * 24));
+    predictMainText = `预计结束：${endDate.slice(5)}`;
+    if (diffDays > 0) predictBadge = `还有 ${diffDays} 天`;
+    else if (diffDays === 0) predictBadge = '今天结束';
+    else predictBadge = `已过 ${Math.abs(diffDays)} 天`;
+    confidenceText = ''; // 🌟 正在经期时，去掉“当前经期中”的重复提示
+} else if (pred) {
+    const { best, earliest, latest, confidence } = pred;
+    if (earliest === latest) predictMainText = `预测开始： ${best.slice(5)}`;
+    else predictMainText = `预测开始： ${earliest.slice(5)} ~ ${latest.slice(5)}`;
+    const now = new Date();
+    const bestDate = parseDate(best);
+    const daysLeft = Math.max(0, Math.floor((bestDate - now) / (1000 * 60 * 60 * 24)));
+    predictBadge = daysLeft === 0 ? '就是今天' : `还有 ${daysLeft} 天`;
+    
+    // 🌟 可靠性文本单独拿出来
+    const confidenceMap = { '高': '可靠性高', '中': '可靠性一般', '低': '数据较少，仅供参考' };
+    confidenceText = confidenceMap[confidence] || confidenceMap['中'];
+    
+    // 🌟 将周期天数合并到 sourceText 里
+    if (pred.cycleLength) sourceText = `周期 ${pred.cycleLength} 天 · ${sourceText}`;
+} else {
+    predictMainText = '数据不足，无法预测';
+    confidenceText = '请记录至少2次完整的经期';
+    sourceText = '';
+}
         let rightContent = '';
-        if (active) {
-            rightContent = predictBadge ? `<span class="badge" style="background: #DBEAFE; color: #2563EB; padding: 3px 10px; border-radius: 30px; font-size: 11px; font-weight: 600; white-space: nowrap;">${predictBadge}</span>` : '';
-        } else if (pred) {
-            const bestDateStr = pred.best.slice(5);
-            const now = new Date();
-            const bestDate = parseDate(pred.best);
-            const diffDays = Math.floor((bestDate - now) / (1000 * 60 * 60 * 24));
-            let daysText;
-            if (diffDays === 0) daysText = '就是今天';
-            else if (diffDays > 0) daysText = `还有${diffDays}天`;
-            else daysText = `已过${Math.abs(diffDays)}天`;
-            rightContent = `
-                <div style="background: #DBEAFE; padding: 4px 12px; border-radius: 30px; text-align: center; line-height: 1.3;">
-                    <div style="font-size: 12px; font-weight: 700; color: #EF4444;">最可能 ${bestDateStr}</div>
-                    <div style="font-size: 11px; font-weight: 500; color: #2563EB;">${daysText}</div>
-                </div>
-            `;
-        } else rightContent = '';
+        // 🌟 动态主题色：根据状态切换卡片背景和右侧卡片文字颜色
+let theme = {
+    bg: 'linear-gradient(135deg, #F472B6 0%, #EC4899 100%)',
+    shadow: 'rgba(236, 72, 153, 0.4)',
+    badgeText: 'text-pink-600',
+    badgeSub: 'text-pink-400',
+    lightBg: 'bg-pink-50/70',
+    lightBorder: 'border-pink-100'
+};
+if (status.type === 'safe') {
+    theme = { bg: 'linear-gradient(135deg, #34D399 0%, #10B981 100%)', shadow: 'rgba(16, 185, 129, 0.4)', badgeText: 'text-emerald-600', badgeSub: 'text-emerald-400', lightBg: 'bg-emerald-50/70', lightBorder: 'border-emerald-100' };
+} else if (status.type === 'ovulation') {
+    theme = { bg: 'linear-gradient(135deg, #FBBF24 0%, #F59E0B 100%)', shadow: 'rgba(245, 158, 11, 0.4)', badgeText: 'text-amber-600', badgeSub: 'text-amber-400', lightBg: 'bg-amber-50/70', lightBorder: 'border-amber-100' };
+} else if (status.type === 'follicular') {
+    theme = { bg: 'linear-gradient(135deg, #60A5FA 0%, #3B82F6 100%)', shadow: 'rgba(59, 130, 246, 0.4)', badgeText: 'text-blue-600', badgeSub: 'text-blue-400', lightBg: 'bg-blue-50/70', lightBorder: 'border-blue-100' };
+} else if (status.type === 'luteal') {
+    theme = { bg: 'linear-gradient(135deg, #A78BFA 0%, #8B5CF6 100%)', shadow: 'rgba(139, 92, 246, 0.4)', badgeText: 'text-purple-600', badgeSub: 'text-purple-400', lightBg: 'bg-purple-50/70', lightBorder: 'border-purple-100' };
+} else if (status.type === 'empty') {
+    theme = { bg: 'linear-gradient(135deg, #9CA3AF 0%, #6B7280 100%)', shadow: 'rgba(107, 114, 128, 0.4)', badgeText: 'text-gray-600', badgeSub: 'text-gray-400', lightBg: 'bg-gray-50/70', lightBorder: 'border-gray-100' };
+}
+if (active) {
+    // 经期中：单行大白底胶囊
+    rightContent = predictBadge ? `<div class="bg-white/95 text-pink-600 px-3.5 py-1.5 rounded-xl text-[13px] font-bold whitespace-nowrap shadow-sm">${predictBadge}</div>` : '';
+} else if (pred) {
+    // 非经期：三行紧凑的白底胶囊
+    const bestDateStr = pred.best.slice(5);
+    const now = new Date();
+    const bestDate = parseDate(pred.best);
+    const diffDays = Math.floor((bestDate - now) / (1000 * 60 * 60 * 24));
+    let daysText;
+    if (diffDays === 0) daysText = '就是今天';
+    else if (diffDays > 0) daysText = `还有${diffDays}天`;
+    else daysText = `已过${Math.abs(diffDays)}天`;
+    
+    rightContent = `
+    <div class="bg-white/95 px-3 py-2 rounded-2xl text-center shadow-sm flex flex-col justify-center items-center min-w-[64px]">
+        <div class="text-[9px] font-semibold text-gray-400 leading-none">最可能</div>
+        <div class="text-[16px] font-black ${theme.badgeText} my-1 leading-none tracking-tight">${bestDateStr}</div>
+        <div class="text-[10px] font-bold ${theme.badgeSub} leading-none">${daysText}</div>
+    </div>
+`;
+} else rightContent = '';
         let calHtml = '';
         const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
         for (let day = 1; day <= daysInMonth; day++) {
@@ -2216,14 +2286,32 @@ function renderMenstrualView() {
             const isMenstrual = isDateInPeriod(dateStr);
             const isPredicted = !isMenstrual && isDateInPredictedPeriod(dateStr);
             const isOvulation = isDateInOvulation(dateStr) && !isMenstrual && !isPredicted;
-            const isSafe = isDateSafe(dateStr) && !isMenstrual && !isPredicted && !isOvulation;
-            const isLove = isDateLove(dateStr);
-            let classes = 'menstrual-calendar-day';
-            if (isToday) classes += ' today';
-            if (isMenstrual) classes += ' menstrual';
-            else if (isPredicted) classes += ' predicted-menstrual';
-            else if (isOvulation) classes += ' ovulation';
-            else if (isSafe) classes += ' safe';
+const isSafe = isDateSafe(dateStr) && !isMenstrual && !isPredicted && !isOvulation;
+
+// 🌟 新增：区分卵泡期和黄体期
+let isFollicular = false;
+let isLuteal = false;
+if (isSafe) {
+    // 获取下一次预测的日期，倒推 14 天作为排卵日
+    const nextPred = predictNextPeriodStart();
+    if (nextPred) {
+        const ovDate = parseDate(nextPred.best);
+        ovDate.setDate(ovDate.getDate() - 14);
+        // 如果今天在排卵日之前，就是卵泡期；之后就是黄体期
+        if (parseDate(dateStr) < ovDate) isFollicular = true;
+        else isLuteal = true;
+    }
+}
+
+const isLove = isDateLove(dateStr);
+let classes = 'menstrual-calendar-day';
+if (isToday) classes += ' today';
+if (isMenstrual) classes += ' menstrual';
+else if (isPredicted) classes += ' predicted-menstrual';
+else if (isOvulation) classes += ' ovulation';
+else if (isFollicular) classes += ' follicular'; // 蓝
+else if (isLuteal) classes += ' luteal';         // 紫
+else if (isSafe) classes += ' safe';             // 兜底绿色
             let loveIcon = '';
             if (isLove) loveIcon = `<span class="love-icon">${isMenstrual ? '🧡' : '💓'}</span>`;
             calHtml += `
@@ -2241,46 +2329,128 @@ function renderMenstrualView() {
                 <span>只读 · 正在查看 ${escapeHtml(appData.settings.syncMenstrualFrom.replace(/\.json$/i, ''))} 的经期数据</span>
             </div>
         ` : '';
-        const statusHtml = `<div class="text-center py-1.5"><span class="status-badge ${status.badgeClass}">${status.label}</span></div>`;
-        const predictHtml = `
-            <div class="glass-card predict-card mb-3">
-                <div class="flex justify-between items-center">
-                    <div class="flex flex-col text-left">
-                        <span class="main-text">${predictMainText}</span>
-                        <div class="sub-text mt-0.5">${confidenceText}</div>
-                        <div class="sub-text mt-0.5 text-[10px] text-gray-400">${source}</div>
-                    </div>
-                    ${rightContent ? `<div class="flex items-center flex-shrink-0 ml-3">${rightContent}</div>` : ''}
-                </div>
-            </div>
-        `;
+        // 🌟 合并状态与预测，做成粉色高光卡片
+            const combinedHeaderHtml = `
+<div class="mb-3 rounded-2xl p-4 text-white relative overflow-hidden transition-all duration-500" style="background: ${theme.bg}; box-shadow: 0 8px 20px -6px ${theme.shadow};">
+        <!-- 把 items-start 改成了 items-center，让右侧徽章绝对垂直居中 -->
+        <div class="flex justify-between items-center relative z-10 gap-3">
+            <div class="flex flex-col text-left flex-1 min-w-0">
+    <!-- 第一行：大状态（独立出来，视觉焦点） -->
+    <span class="text-xl font-bold tracking-wide text-white drop-shadow-sm">${status.label}</span>
+    
+    <!-- 下方的辅助信息统一放在一个组里，用 gap-1 控制统一行距 -->
+    <div class="flex flex-col gap-1.5 mt-2.5">
+        <!-- 第二行：预测日期（纯白，稍大） -->
+        <div class="text-[14px] font-bold text-white/95 leading-none truncate">${predictMainText}</div>
+        
+        <!-- 第三行：可靠性（浅粉色） -->
+        ${confidenceText ? `<div class="text-[11px] font-medium text-white/90 leading-none truncate">${confidenceText}</div>` : ''}
+        
+        <!-- 第四行：算法依据（半透明白，最弱化） -->
+        ${sourceText ? `<div class="text-[10px] font-normal text-white/70 leading-none truncate">${sourceText}</div>` : ''}
+    </div>
+</div>
+            
+            ${rightContent ? `<div class="flex-shrink-0">${rightContent}</div>` : ''}
+        </div>
+    </div>
+`;
         const legendHtml = `
-            <div class="flex justify-center gap-4 text-xs text-gray-500 mt-2 mb-1">
-                <span><span class="inline-block w-3 h-3 rounded-full bg-pink-500 align-middle mr-1"></span>经期</span>
-                <span><span class="inline-block w-3 h-3 rounded-full bg-pink-200 align-middle mr-1"></span>预测</span>
-                <span><span class="inline-block w-3 h-3 rounded-full bg-purple-400 align-middle mr-1"></span>排卵</span>
-                <span><span class="inline-block w-3 h-3 rounded-full bg-green-400 align-middle mr-1"></span>安全</span>
-            </div>
-        `;
+    <div class="flex flex-wrap justify-center gap-3 text-[10px] text-gray-500 mt-2 mb-1">
+        <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-pink-500 align-middle mr-1"></span>经期</span>
+        <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-pink-200 align-middle mr-1"></span>预测</span>
+        <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-purple-400 align-middle mr-1"></span>排卵</span>
+        <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-blue-400 align-middle mr-1"></span>卵泡</span>
+        <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-purple-300 align-middle mr-1"></span>黄体</span>
+    </div>
+`;
         return `
-<div class="space-y-1 mt-1">
+<div class="space-y-2 mt-1">
     ${readOnlyHint}
-                ${statusHtml}
-                ${predictHtml}
-                <div class="glass-card p-3 rounded-2xl">
-                    <div class="flex justify-between items-center mb-2">
-                        <button onclick="changeMenstrualMonth(-1)" class="p-1.5 rounded-lg bg-gray-100"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
-                        <span class="font-semibold text-sm">${year}年${month + 1}月</span>
-                        <button onclick="changeMenstrualMonth(1)" class="p-1.5 rounded-lg bg-gray-100"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
-                    </div>
-                    <div class="menstrual-calendar-grid">
+                ${combinedHeaderHtml}
+                <div class="glass-card rounded-2xl overflow-hidden">
+    <!-- 🌟 头部横幅：背景色延伸，左右拉满 -->
+    <div class="flex justify-between items-center p-3 ${theme.lightBg}">
+        <button onclick="changeMenstrualMonth(-1)" class="p-1.5 rounded-lg bg-white shadow-sm text-gray-700 active:scale-90 transition-transform"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+        <span class="font-bold text-sm text-gray-800">${year}年${month + 1}月</span>
+        <button onclick="changeMenstrualMonth(1)" class="p-1.5 rounded-lg bg-white shadow-sm text-gray-700 active:scale-90 transition-transform"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+    </div>
+    
+    <!-- 🌟 日历内容区：单独加内边距 -->
+    <div class="p-3">
+    <div class="menstrual-calendar-grid">
                         ${['日','一','二','三','四','五','六'].map(d => `<div class="text-center text-[10px] text-gray-400 py-1">${d}</div>`).join('')}
-                        ${calHtml}
-                    </div>
-                    ${legendHtml}
+                                ${calHtml}
+    </div>
+    ${legendHtml}
+    </div> <!-- 闭合日历内容区 -->
+</div>
+
+        <!-- 🌟 新增：数据洞察与健康关怀模块 -->
+        <div class="space-y-3 mt-3 pb-6">
+            <!-- 1. 周期数据统计 -->
+            <div class="glass-card p-4 rounded-2xl flex justify-around items-center">
+                <div class="text-center">
+                    <p class="text-lg font-bold text-pink-500">${getWeightedAverageCycle()}<span class="text-xs font-normal text-gray-400 ml-0.5">天</span></p>
+                    <p class="text-[10px] text-gray-500 mt-1">平均周期</p>
+                </div>
+                <div class="w-px h-8 bg-gray-100"></div>
+                <div class="text-center">
+                    <p class="text-lg font-bold text-blue-500">${getAverageDuration()}<span class="text-xs font-normal text-gray-400 ml-0.5">天</span></p>
+                    <p class="text-[10px] text-gray-500 mt-1">行经天数</p>
+                </div>
+                <div class="w-px h-8 bg-gray-100"></div>
+                <div class="text-center">
+                    <p class="text-lg font-bold text-green-500">${getCompletedCount()}<span class="text-xs font-normal text-gray-400 ml-0.5">次</span></p>
+                    <p class="text-[10px] text-gray-500 mt-1">有效记录</p>
                 </div>
             </div>
-        `;
+
+            <!-- 2. 健康小贴士 -->
+<div class="glass-card p-4 rounded-2xl flex items-start gap-3 border ${theme.lightBorder} ${theme.lightBg}">
+                <div class="text-xl mt-0.5">
+                    ${status.type === 'menstruating' ? '🍵' : status.type === 'ovulation' ? '💖' : status.type === 'luteal' ? '🧘‍♀️' : status.type === 'follicular' ? '🏃‍♀️' : '💡'}
+                </div>
+                <div>
+                    <p class="text-xs font-bold text-gray-800 mb-1">今日健康贴士</p>
+                    <p class="text-[11px] text-gray-500 leading-relaxed">
+                        ${status.type === 'menstruating' ? '正处于经期，身体较虚弱。建议多喝温水，注意腹部保暖，避免剧烈运动和生冷食物。' : 
+                          status.type === 'ovulation' ? '排卵期分泌物增多，注意个人卫生。如果有备孕计划，这几天是黄金期哦。' : 
+                          status.type === 'luteal' ? '黄体期受激素影响，容易情绪波动或长痘。建议少吃甜食，多做瑜伽等舒缓拉伸。' : 
+                          status.type === 'follicular' ? '大姨妈刚走，雌激素回升，精力最充沛。适合安排高强度的锻炼或攻克难题。' : 
+                          '还没有记录足够的数据，点击日历记录你的周期，我会给你更贴心的建议哦。'}
+                    </p>
+                </div>
+            </div>
+
+            <!-- 3. 最近记录 -->
+            ${appData.menstrual.records.filter(r => r.endDate).length > 0 ? `
+            <div class="glass-card p-4 rounded-2xl">
+                <div class="flex justify-between items-center mb-3">
+                    <p class="text-xs font-bold text-gray-800">最近记录</p>
+                    <span class="text-[10px] text-gray-400">仅展示最近3次</span>
+                </div>
+                <div class="space-y-2">
+                    ${appData.menstrual.records.filter(r => r.endDate).sort((a, b) => parseDate(b.startDate) - parseDate(a.startDate)).slice(0, 3).map(r => {
+                        const start = r.startDate.slice(5).replace('-', '/');
+                        const end = r.endDate.slice(5).replace('-', '/');
+                        const days = Math.round((parseDate(r.endDate) - parseDate(r.startDate)) / (1000 * 60 * 60 * 24)) + 1;
+                        return `
+                        <div class="flex justify-between items-center bg-gray-50 rounded-lg px-3 py-2">
+                            <div class="flex items-center gap-2">
+                                <div class="w-1.5 h-1.5 rounded-full bg-pink-400"></div>
+                                <span class="text-xs text-gray-600">${start} ~ ${end}</span>
+                            </div>
+                            <span class="text-[10px] font-medium text-pink-500">${days} 天</span>
+                        </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+            ` : ''}
+        </div>
+    </div>
+`;
     } catch (e) {
         console.error('经期模块渲染错误:', e);
         return `<div class="text-center text-red-500 p-4">渲染错误：${e.message}<br>请查看控制台</div>`;
@@ -3085,7 +3255,7 @@ function renderMeView() {
                 </div>
             </div>
 
-            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v4.1</p></div>
+            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v4.5</p></div>
         </div>
     `;
     return html;
@@ -3103,7 +3273,7 @@ function showAbout() {
                     <i data-lucide="sparkles" class="w-8 h-8 text-white"></i>
                 </div>
                 <p class="text-lg font-bold text-gray-800">Life Manager</p>
-                <p class="text-xs text-gray-400 mt-1">v4.1</p>
+                <p class="text-xs text-gray-400 mt-1">v4.5</p>
             </div>
             <div class="glass-card rounded-2xl overflow-hidden mt-4" style="padding: 0;">
                 <div class="setting-item" onclick="openGithubRepo()" style="margin-bottom: 0; border-radius: 0;">
