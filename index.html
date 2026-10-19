@@ -74,23 +74,39 @@
         .sync-progress-bar { width: 100%; height: 100%; background: linear-gradient(90deg, #3b82f6, #60a5fa); animation: sync-progress-anim 1.2s ease-in-out infinite; }
         @keyframes sync-progress-anim { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
         .note-card { background: rgba(255, 255, 255, 0.85); border-radius: 14px; padding: 14px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.03); transition: all 0.2s ease; cursor: pointer; }
-        .habit-card { background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.75) 100%); backdrop-filter: blur(1px); border-radius: 32px; padding: 12px 17px; margin-bottom: 16px; border: 1px solid rgba(255,255,255,0.6); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.02); transition: all 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1); display: flex; align-items: center; gap: 6px; cursor: pointer; }
-        .habit-card:active { transform: scale(0.98); box-shadow: 0 5px 12px -3px rgba(0, 0, 0, 0.1); }
-        .habit-card.completed { background: linear-gradient(135deg, rgba(240, 253, 244, 0.9) 0%, rgba(220, 252, 231, 0.8) 100%); border-color: rgba(34, 197, 94, 0.3); }
-        .habit-icon { width: 56px; height: 56px; background: transparent !important; border-radius: 0; display: flex; align-items: center; justify-content: center; font-size: 32px; }
-        .habit-content { flex: 1; }
-        .habit-name { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.3px; color: #1e293b; }
-        .habit-card.completed .habit-name { text-decoration: line-through; background: none; color: #9ca3af; }
-        .habit-badge { font-size: 11px; font-weight: 600; background: #eef2ff; padding: 4px 10px; border-radius: 30px; color: #2563eb; }
-        .habit-card.completed .habit-badge { background: #dcfce7; color: #16a34a; }
-        .habit-subtitle { font-size: 12px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
-        .progress-bar-bg { width: 100%; height: 6px; background: #e2e8f0; border-radius: 10px; overflow: hidden; }
-        .progress-bar-fill { height: 100%; border-radius: 10px; background: linear-gradient(90deg, #3b82f6, #a855f7); transition: width 0.4s ease; }
-        .habit-card.completed .progress-bar-fill { background: linear-gradient(90deg, #22c55e, #16a34a); }
-        .check-btn { width: 52px; height: 52px; border-radius: 30px; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; flex-shrink: 0; cursor: pointer; border: none; }
-        .check-btn:active { transform: scale(0.92); }
-        .check-btn.unchecked { background: #f1f5f9; border: 1.5px solid #cbd5e1; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
-        .check-btn.checked { background: linear-gradient(135deg, #22c55e, #16a34a); box-shadow: 0 4px 12px rgba(34,197,94,0.3); }
+        .habit-card { 
+    background: linear-gradient(135deg, rgba(239, 246, 255, 0.95) 0%, rgba(255, 255, 255, 0.95) 100%); 
+    border-radius: 20px; padding: 12px 14px; margin-bottom: 12px; 
+    border: 1px solid rgba(191, 219, 254, 0.5); /* 淡蓝边框 */
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.04); 
+    transition: all 0.2s ease; display: flex; align-items: center; gap: 12px; cursor: pointer; position: relative; overflow: hidden; 
+}
+.habit-card:active { transform: scale(0.98); }
+
+.habit-card.completed { 
+    background: linear-gradient(135deg, rgba(240, 253, 244, 0.95) 0%, rgba(255, 255, 255, 0.95) 100%); 
+    border-color: rgba(187, 247, 208, 0.6); /* 淡绿边框 */
+    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.04);
+}
+
+/* 图标区域缩小，并加上圆角底色 */
+.habit-icon { width: 46px; height: 46px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0; }
+.habit-content { flex: 1; min-width: 0; }
+
+/* 文字紧凑排版（允许自然换行） */
+.habit-name { font-size: 1.05rem; font-weight: 700; color: #1e293b; line-height: 1.3; word-break: break-all; }
+.habit-card.completed .habit-name { color: #94a3b8; text-decoration: line-through; }
+.habit-subtitle { font-size: 11px; margin-top: 3px; display: flex; align-items: center; gap: 4px; color: #64748b; }
+.habit-subtitle .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 隐藏底部进度条，因为改成了圆环 */
+.progress-bar-bg { display: none; }
+
+/* 轻盈的圆环打勾按钮 */
+.check-btn { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; flex-shrink: 0; cursor: pointer; border: none; }
+.check-btn:active { transform: scale(0.9); }
+.check-btn.unchecked { background: transparent; border: 1.5px solid #cbd5e1; color: #cbd5e1; }
+.check-btn.checked { background: #dcfce7; border: 1.5px solid #22c55e; color: #16a34a; }
 
         .income-card { background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white; padding: 16px 18px; border-radius: 18px; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.2); }
 
@@ -994,7 +1010,7 @@ function renderSyncCard() {
         
 // ==================== 打卡模块 ====================
 function getEncouragement(streak) {
-    if (streak === 0) return '迈出第一步吧';
+    if (streak === 0) return '我们开始吧';
     if (streak === 1) return '今天也很棒';
     if (streak === 2) return '继续加油呀';
     if (streak === 3) return '状态真不错';
@@ -1207,8 +1223,8 @@ function renderFinishView() {
     const today = new Date().toDateString();
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth();
-let html = `
-    <div class="space-y-4 mt-2">
+    let html = `
+        <div class="space-y-4 mt-2">
             ${appData.tasks.length > 0 ? appData.tasks.map(task => {
                 const isCompleted = task.completions.some(c => new Date(c.date).toDateString() === today);
                 const streak = calculateStreak(task);
@@ -1234,29 +1250,46 @@ let html = `
                     encouragementText = '开始你的第一次打卡吧';
                 }
                 const icon = getHabitIcon(task);
-                return `
-                <div class="habit-card ${isCompleted ? 'completed' : ''}" onclick="showTaskStats('${task.id}', true)">
-                    <div class="habit-icon">${icon}</div>
-                    <div class="habit-content">
-                        <div class="flex justify-between items-center mb-0">
-                            <span class="habit-name">${task.name}</span>
-                            <span class="habit-badge">${monthCompletions}/${daysInMonth}</span>
-                        </div>
-                        <div class="mb-0">
-                            <span class="text-sm font-medium py-0.5 pr-2 rounded-full ${streakBadgeClass}">${streakBadgeText}</span>
-                        </div>
-                        <div class="habit-subtitle mb-0">
-                            <span class="text-sm ${streak > 0 ? 'text-green-700' : (daysSinceLast > 0 ? 'text-red-600' : 'text-gray-600')}">${encouragementText}</span>
-                        </div>
-                        <div class="progress-bar-bg mt-2">
-                            <div class="progress-bar-fill" style="width: ${percent}%;"></div>
-                        </div>
-                    </div>
-                    <button onclick="event.stopPropagation(); toggleTaskComplete('${task.id}')" class="check-btn ${isCompleted ? 'checked' : 'unchecked'}">
-                        <i data-lucide="check" class="w-6 h-6 ${isCompleted ? 'text-white' : 'text-gray-500'}"></i>
-                    </button>
-                </div>
-                `;
+                // 🌟 给图标分配柔和的浅色底色
+                const iconBgColors = ['bg-blue-50', 'bg-green-50', 'bg-purple-50', 'bg-orange-50', 'bg-pink-50', 'bg-teal-50'];
+                const bgColor = iconBgColors[task.name.length % iconBgColors.length]; 
+                
+                // 徽章配色
+                const badgeClass = isCompleted ? 'bg-green-100/50 text-green-600' : 'bg-blue-50 text-blue-500';
+                const streakColor = streak > 0 ? 'text-green-500' : (daysSinceLast > 0 ? 'text-red-400' : 'text-gray-400');
+
+return `
+<div class="habit-card ${isCompleted ? 'completed' : ''}" onclick="showTaskStats('${task.id}', true)">
+    <div class="habit-icon ${bgColor}">${icon}</div>
+    
+    <div class="habit-content flex-1 min-w-0 pr-1">
+        <!-- 标题与胶囊进度条同行，左右对齐 -->
+        <div class="flex justify-between items-start gap-2">
+            <span class="habit-name flex-1">${task.name}</span>
+            
+            <!-- 🌟 圆角长方形进度条包裹数字 -->
+            <div class="relative flex items-center justify-center w-[42px] h-[20px] rounded-full overflow-hidden flex-shrink-0 mt-1 bg-gray-100 border border-gray-200/50">
+                <!-- 横向进度填充层 -->
+                <div class="absolute left-0 top-0 bottom-0 transition-all duration-300 ${isCompleted ? 'bg-green-200/60' : 'bg-blue-200/60'}" style="width: ${percent}%;"></div>
+                <!-- 悬浮在最上面的数字 -->
+                <span class="relative z-10 text-[9px] font-bold ${isCompleted ? 'text-green-700' : 'text-blue-600'} leading-none">${monthCompletions}/${daysInMonth}</span>
+            </div>
+        </div>
+        
+        <div class="habit-subtitle">
+            <span class="${streakColor} font-medium flex-shrink-0">${streakBadgeText}</span>
+            <span class="text-gray-300 flex-shrink-0">|</span>
+            <span class="truncate">${encouragementText}</span>
+        </div>
+    </div>
+    
+    <div class="flex items-center flex-shrink-0 ml-1">
+        <button onclick="event.stopPropagation(); toggleTaskComplete('${task.id}')" class="check-btn ${isCompleted ? 'checked' : 'unchecked'}">
+            <i data-lucide="check" class="w-5 h-5 ${isCompleted ? 'text-green-600' : 'text-gray-400'}"></i>
+        </button>
+    </div>
+</div>
+`;
             }).join('') : `
                 <div class="glass-card p-12 rounded-3xl flex flex-col items-center text-center">
                     <div class="bg-gray-100 p-5 rounded-full mb-4">
