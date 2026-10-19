@@ -57,7 +57,7 @@
         .fab-btn:active { transform: scale(0.92); box-shadow: 0 2px 10px rgba(59, 130, 246, 0.3); }
 .toast { 
             position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); 
-            background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(10px); color: white; 
+            background: rgba(0, 0, 0, 0.85); color: white; 
             padding: 10px 24px; border-radius: 12px; font-size: 14px; 
             z-index: 9999; /* 👈 改成9999 */
             opacity: 0; visibility: hidden; transition: all 0.3s ease; pointer-events: none; white-space: nowrap; 
@@ -93,28 +93,8 @@
         .check-btn.checked { background: linear-gradient(135deg, #22c55e, #16a34a); box-shadow: 0 4px 12px rgba(34,197,94,0.3); }
 
         .income-card { background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white; padding: 16px 18px; border-radius: 18px; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.2); }
-/* 全局高级毛玻璃底部抽屉 */
-.action-sheet-overlay { 
-    position: fixed; inset: 0; 
-    background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); 
-    z-index: 2000; display: flex; align-items: flex-end; justify-content: center; 
-    opacity: 0; visibility: hidden; transition: all 0.3s ease; 
-}
-.action-sheet-overlay.active { opacity: 1; visibility: visible; }
-.action-sheet { 
-    background: rgba(255, 255, 255, 0.85); 
-    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); 
-    border-top: 1px solid rgba(255, 255, 255, 0.6);
-    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.1);
-    width: 100%; max-width: 420px; 
-    border-radius: 28px 28px 0 0; 
-    padding: 16px 20px 30px; 
-    transform: translateY(100%); 
-    transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1); 
-}
-.action-sheet-overlay.active .action-sheet { transform: translateY(0); }
-.action-sheet .handle { width: 40px; height: 5px; background: rgba(0,0,0,0.15); border-radius: 3px; margin: 0 auto 16px; }
-        .date-picker-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.35); backdrop-filter: blur(6px); z-index: 3000; display: flex; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: all 0.25s ease; }
+
+        .date-picker-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 3000; display: flex; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: all 0.25s ease; }
         .date-picker-modal.active { opacity: 1; visibility: visible; }
         .date-picker-modal .picker-box { background: white; border-radius: 20px; padding: 24px 20px 20px; width: 90%; max-width: 340px; transform: scale(0.9); transition: transform 0.25s ease; }
         .date-picker-modal.active .picker-box { transform: scale(1); }
@@ -218,8 +198,8 @@ body.keyboard-open .fab-btn {
 
 /* 顶部总览卡片（改成高级蓝） */
 .overview-card { background: rgba(255, 255, 255, 0.9); border-radius: 16px; overflow: hidden; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); }
-.overview-header { background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white; padding: 26px 16px; text-align: center; }
-.overview-body { padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; background: #F9FAFB; }
+.overview-header { background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white; padding: 16px 16px 14px; text-align: center; }
+.overview-body { padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; background: #F9FAFB; }
 
 /* 美化后的日期选择器（伪装成胶囊按钮） */
 .date-picker-btn {
@@ -251,8 +231,6 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 }
 .center-modal-overlay.active .center-modal-content { 
     transform: scale(1) translateY(0); 
-    /* 动画结束后再加模糊，防止手机渲染闪烁变灰 */
-    backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
 }
 /* 极限缩小的图标分类网格（5列，更紧凑） */
 .category-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 8px; }
@@ -266,24 +244,24 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     background: #EFF6FF; border-color: #3B82F6; color: #2563EB;
 }
 .category-item .icon { font-size: 16px; margin-bottom: 2px; }
+
+/* ==================== 日期滚轮专属样式 ==================== */
+.wheel-container { position: relative; height: 180px; display: flex; overflow: hidden; margin-bottom: 20px; }
+.wheel-col { flex: 1; overflow-y: scroll; scroll-snap-type: y mandatory; scrollbar-width: none; -ms-overflow-style: none; position: relative; text-align: center; }
+.wheel-col::-webkit-scrollbar { display: none; }
+.wheel-padding { height: 72px; } /* (180 - 36) / 2 = 72，用于让首尾能对齐中间 */
+.wheel-item { height: 36px; line-height: 36px; scroll-snap-align: center; color: #9CA3AF; font-size: 14px; transition: all 0.2s ease; opacity: 0.5; }
+.wheel-item.active { color: #1F2937; font-weight: 700; font-size: 16px; opacity: 1; transform: scale(1.05); }
+/* 中间的高亮横线 */
+.wheel-highlight { position: absolute; top: 50%; left: 0; right: 0; height: 36px; transform: translateY(-50%); border-top: 1px solid #E5E7EB; border-bottom: 1px solid #E5E7EB; pointer-events: none; z-index: 10; }
+/* 上下边缘的白色渐变遮罩（不用毛玻璃，用渐变实现视觉模糊） */
+.wheel-mask { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 11; background: linear-gradient(to bottom, rgba(255,255,255,1) 0%, rgba(255,255,255,0) 30%, rgba(255,255,255,0) 70%, rgba(255,255,255,1) 100%); }
     </style>
 </head>
 <body>
-    <header class="px-4 pt-2 pb-3" style="padding-top: env(safe-area-inset-top, 0px);">
-        <div class="flex justify-between items-center">
-            <div>
-                <h2 id="page-title" class="text-2xl font-bold text-gray-800">首页</h2>
-                <p id="page-subtitle" class="text-gray-500 text-sm mt-1">今日概览</p>
-            </div>
-<div class="flex items-center gap-2">
-    <button id="settings-gear-btn" onclick="openSettings()" class="w-9 h-9 rounded-full bg-white/70 backdrop-blur-sm border border-white/50 shadow-sm flex items-center justify-center text-gray-600" style="display: none;">
-        <i data-lucide="settings-2" class="w-4 h-4"></i>
-    </button>
-</div>
-        </div>
-    </header>
 
-    <main id="content" class="px-4 pt-2 page-content"></main>
+
+    <main id="content" class="px-4 page-content" style="padding-top: calc(env(safe-area-inset-top, 0px) + 10px);"></main>
 
     <button id="fab-add-btn" class="fab-btn" style="display:none;">
         <i data-lucide="plus" class="w-6 h-6"></i>
@@ -345,15 +323,21 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     </div>
 </div>
 
-    <div id="note-modal" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-[5000] flex items-center justify-center opacity-0 invisible transition-all duration-300" onclick="closeActionSheet()">
-        <div class="glass-card rounded-2xl w-[90%] max-w-[400px] p-5 transform scale-95 transition-all duration-300" onclick="event.stopPropagation()">
-            <div id="note-modal-body"></div>
+<!-- 全新的 iOS 风格滚轮日期选择器 -->
+<div id="custom-date-picker" class="center-modal-overlay" onclick="closeCustomDatePicker(event)">
+    <div class="center-modal-content" onclick="event.stopPropagation()" style="width: 82%; max-width: 300px;">
+        <p class="text-center font-bold text-gray-800 mb-4">选择日期</p>
+        <div class="wheel-container">
+            <div class="wheel-highlight"></div>
+            <div class="wheel-mask"></div>
+            <div id="wheel-year" class="wheel-col"></div>
+            <div id="wheel-month" class="wheel-col"></div>
+            <div id="wheel-day" class="wheel-col"></div>
         </div>
-    </div>
-
-<div id="action-sheet-overlay" class="action-sheet-overlay" onclick="closeActionSheet(event)">
-    <div class="action-sheet" onclick="event.stopPropagation()">
-        <div id="action-sheet-body"></div>
+        <div class="flex gap-2">
+            <button onclick="closeCustomDatePicker()" class="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-medium text-sm">取消</button>
+            <button onclick="confirmCustomDatePicker()" class="flex-1 py-2.5 rounded-xl btn-primary font-medium text-sm">确定</button>
+        </div>
     </div>
 </div>
 
@@ -736,13 +720,7 @@ function hideCustomConfirm() {
     const modal = document.getElementById('custom-confirm');
     modal.classList.remove('active'); // 触发收起动画
 }
-        function openNoteModal(html) {
-            const modal = document.getElementById('note-modal');
-            document.getElementById('note-modal-body').innerHTML = html;
-            modal.classList.remove('invisible', 'opacity-0'); modal.classList.add('opacity-100', 'visible');
-            const content = modal.querySelector('.glass-card'); content.classList.remove('scale-95'); content.classList.add('scale-100');
-            lucide.createIcons();
-        }
+        
 
         function openSettings() { try { history.pushState({ from: 'home' }, '', ''); } catch(e) {} switchTab('me'); }
         function goBackFromSettings() { switchTab('home'); try { if (history.state && history.state.from === 'home') history.back(); } catch(e) {} }
@@ -818,26 +796,31 @@ function hideCustomConfirm() {
             else greeting = '晚上好';
 
             return `
-                <div class="space-y-3 mt-2">
-                    <div class="glass-card p-4 rounded-2xl">
-                        <p class="text-base font-bold text-gray-800">${greeting} 👋</p>
-                        <p class="text-xs text-gray-500 mt-1">${formatDate(today)}</p>
-                    </div>
+                <div class="space-y-3">
+    <div class="glass-card p-4 rounded-2xl flex justify-between items-center" style="background: linear-gradient(135deg, rgba(239, 246, 255, 0.9) 0%, rgba(255, 255, 255, 0.9) 100%);">
+        <div>
+            <p class="text-base font-bold text-gray-800">${greeting} 👋</p>
+            <p class="text-xs text-gray-500 mt-1">${formatDate(today)}</p>
+        </div>
+        <button onclick="openSettings()" class="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 shadow-sm flex items-center justify-center text-gray-600 active:scale-90 transition-transform">
+            <i data-lucide="settings-2" class="w-4 h-4"></i>
+        </button>
+    </div>
                     ${syncHtml}
                     <div class="grid grid-cols-3 gap-2">
-                        <div class="glass-card p-3 rounded-xl text-center">
-                            <p class="text-2xl font-bold text-blue-500">${completedTasks}<span class="text-base font-medium text-gray-400">/${totalTasks}</span></p>
-                            <p class="text-[11px] text-gray-500 mt-1">今日打卡</p>
-                        </div>
-                        <div class="glass-card p-3 rounded-xl text-center">
-                            <p class="text-2xl font-bold text-red-500">¥${Math.round(todayExpense)}</p>
-                            <p class="text-[11px] text-gray-500 mt-1">今日支出</p>
-                        </div>
-                        <div class="glass-card p-3 rounded-xl text-center">
-                            <p class="text-2xl font-bold text-pink-500">${menstrualBigText}</p>
-                            <p class="text-[11px] text-gray-500 mt-1">经期状态</p>
-                        </div>
-                    </div>
+    <div class="glass-card p-3 rounded-xl text-center" style="background: rgba(239, 246, 255, 0.85); border-color: rgba(191, 219, 254, 0.5);">
+        <p class="text-2xl font-bold text-blue-500">${completedTasks}<span class="text-base font-medium text-gray-400">/${totalTasks}</span></p>
+        <p class="text-[11px] text-gray-500 mt-1">今日打卡</p>
+    </div>
+    <div class="glass-card p-3 rounded-xl text-center" style="background: rgba(254, 242, 242, 0.85); border-color: rgba(254, 202, 202, 0.5);">
+        <p class="text-2xl font-bold text-red-500">¥${Math.round(todayExpense)}</p>
+        <p class="text-[11px] text-gray-500 mt-1">今日支出</p>
+    </div>
+    <div class="glass-card p-3 rounded-xl text-center" style="background: rgba(253, 242, 248, 0.85); border-color: rgba(251, 207, 232, 0.5);">
+        <p class="text-2xl font-bold text-pink-500">${menstrualBigText}</p>
+        <p class="text-[11px] text-gray-500 mt-1">经期状态</p>
+    </div>
+</div>
                     ${pendingTasks.length > 0 ? `
                     <div class="glass-card p-4 rounded-2xl">
                         <div class="flex justify-between items-center mb-3">
@@ -2290,10 +2273,76 @@ function changeMenstrualMonth(delta) {
 
 // ==================== 全新记账模块 ====================
 
-function selectCategory(el) {
-    document.querySelectorAll('#expense-category-wrap .category-item').forEach(item => item.classList.remove('active'));
-    el.classList.add('active');
-    _selectedCategory = el.dataset.val;
+function selectCapsule(el, val, type) {
+    if (type === 'category') {
+        _selectedCategory = val;
+        // 把同级别的其他按钮变灰
+        el.parentElement.querySelectorAll('.bg-blue-500').forEach(node => {
+            node.classList.remove('bg-blue-500', 'text-white', 'shadow-sm', 'border-blue-500');
+            node.classList.add('bg-gray-50', 'text-gray-600', 'border-gray-200');
+        });
+        // 把当前点的变蓝
+        el.classList.remove('bg-gray-50', 'text-gray-600', 'border-gray-200');
+        el.classList.add('bg-blue-500', 'text-white', 'shadow-sm', 'border-blue-500');
+    } else if (type === 'pay') {
+        // 支付方式可取消选中
+        const wasActive = _selectedPayMethod === val;
+        _selectedPayMethod = wasActive ? '' : val;
+        
+        el.parentElement.querySelectorAll('.bg-blue-500').forEach(node => {
+            node.classList.remove('bg-blue-500', 'text-white', 'shadow-sm', 'border-blue-500');
+            node.classList.add('bg-gray-50', 'text-gray-600', 'border-gray-200');
+        });
+        
+        if (!wasActive) {
+            el.classList.remove('bg-gray-50', 'text-gray-600', 'border-gray-200');
+            el.classList.add('bg-blue-500', 'text-white', 'shadow-sm', 'border-blue-500');
+        }
+    }
+}
+
+function showMoreOptions(type) {
+    const layer = document.getElementById('more-options-layer');
+    const grid = document.getElementById('more-options-grid');
+    const title = document.getElementById('more-title');
+    
+    let items = [];
+    let selectedVal = '';
+    if (type === 'category') {
+        title.innerText = '全部分类';
+        items = EXPENSE_CATEGORIES.slice(5); // 前5个在常用里了
+        selectedVal = _selectedCategory;
+    } else {
+        title.innerText = '全部支付方式';
+        items = PAY_METHODS.slice(5);
+        selectedVal = _selectedPayMethod;
+    }
+
+    grid.innerHTML = items.map(item => {
+        const val = item.name || item;
+        const icon = item.icon ? `<span class="text-lg mb-1">${item.icon}</span>` : ``;
+        const isActive = selectedVal === val;
+        const activeClass = isActive ? 'bg-blue-50 border-blue-500 text-blue-600' : 'bg-white border-gray-200 text-gray-600';
+        return `
+            <div onclick="selectFromMore('${val}', '${type}')" class="flex flex-col items-center justify-center p-2 rounded-xl border transition-all ${activeClass}">
+                ${icon}
+                <span class="text-[10px] font-medium truncate w-full text-center">${val}</span>
+            </div>
+        `;
+    }).join('');
+    
+    layer.style.display = 'flex';
+    lucide.createIcons();
+}
+
+function selectFromMore(val, type) {
+    if (type === 'category') {
+        _selectedCategory = val;
+    } else if (type === 'pay') {
+        _selectedPayMethod = (_selectedPayMethod === val) ? '' : val;
+    }
+    document.getElementById('more-options-layer').style.display = 'none';
+showAddBillModal(null, true); // 传入 true，只刷新界面
 }
 
 function updateBillDate(val) {
@@ -2313,9 +2362,22 @@ let currentBillWeek = 1;
 let _currentBillDate = ''; 
 let _currentIncomeType = 'expense'; // 默认支出
 let _editingBillId = null; // 用于判断是新增还是修改
-let _selectedCategory = '餐饮'; // 当前选中的支出分类
+let _selectedCategory = '餐饮';
+let _selectedPayMethod = ''; // 🌟 当前选中的支付方式（默认不选）
 
-function openCenterModal(html, isNarrow = false) {
+// 🌟 分类与支付方式的字典库
+const EXPENSE_CATEGORIES = [
+    { name: '餐饮', icon: '🍜' }, 
+    { name: '日用', icon: '🧻' }, // 🌟 新增的日用，放在购物前面
+    { name: '购物', icon: '🛍️' }, { name: '交通', icon: '🚗' }, 
+    { name: '娱乐', icon: '🎬' }, { name: '医疗', icon: '💊' }, { name: '通讯', icon: '📱' }, 
+    { name: '宠物', icon: '🐶' }, { name: '人情', icon: '🧧' }, { name: '学习', icon: '📚' }, 
+    { name: '居家', icon: '🏠' }, { name: '美容', icon: '💅' }, { name: '数码', icon: '💻' }, 
+    { name: '旅行', icon: '✈️' }, { name: '运动', icon: '⚽' }, { name: '其他', icon: '⭕' }
+];
+const PAY_METHODS = ['微信', '支付宝', '花呗', '信用卡', '现金', '抖音月付', '京东白条', '美团月付'];
+
+function openCenterModal(html, isNarrow = false, skipIcons = false) {
     const content = document.querySelector('.center-modal-content');
     if (isNarrow) {
         content.style.width = '65%';
@@ -2324,9 +2386,17 @@ function openCenterModal(html, isNarrow = false) {
         content.style.width = '78%';
         content.style.maxWidth = '280px';
     }
-    document.getElementById('center-modal-body').innerHTML = html;
+    
+    // 1. 先让弹窗容器显示出来，并开始播放弹出动画
     document.getElementById('center-modal-overlay').classList.add('active');
-    lucide.createIcons();
+    
+    // 2. 告诉浏览器：等这一帧动画忙完了，下一帧再把内容塞进去
+    requestAnimationFrame(() => {
+        document.getElementById('center-modal-body').innerHTML = html;
+        if (!skipIcons) {
+            lucide.createIcons();
+        }
+    });
 }
 function closeCenterModal(e) { 
     if(!e || e.target === document.getElementById('center-modal-overlay')) {
@@ -2404,15 +2474,15 @@ function renderBillView() {
                                 else if (r.recordType === 'monthly') { typeName = '月薪'; icon = '💼'; }
                                 else { typeName = '日结'; icon = '🦺'; }
                             } else {
-                                typeName = r.category || '其他';
-                                const expenseIconMap = { '餐饮': '🍜', '购物': '🛍️', '交通': '🚗', '娱乐': '🎬', '医疗': '💊', '人情': '🧧','宠物': '🐶','其他': '⭕' };
-                                icon = expenseIconMap[r.category] || '⭕';
-                            }
+    typeName = r.category || '其他';
+    const catConfig = EXPENSE_CATEGORIES.find(c => c.name === r.category);
+    icon = catConfig ? catConfig.icon : '⭕';
+}
                             
-                            const hasNote = !!(r.note && r.note.trim());
-                            
-// 计算应发金额和扣除明细
-let detailText = '';
+                                const hasNote = !!(r.note && r.note.trim());
+    
+// 计算应发金额和扣除明细，并包含支付方式
+let detailText = r.payMethod || '';
 if (r.isIncome) {
     let originalAmount = r.amount;
     let deducts = [];
@@ -2426,7 +2496,8 @@ if (r.isIncome) {
         if (r.social > 0) { originalAmount += r.social; deducts.push(`社保 ¥${formatAmount(r.social)}`); }
         
         if (deducts.length > 0) {
-            detailText = `应发 ¥${formatAmount(originalAmount)} (扣${deducts.join(' ')})`;
+            const calcStr = `应发 ¥${formatAmount(originalAmount)} (扣${deducts.join(' ')})`;
+            detailText = detailText ? `${detailText} · ${calcStr}` : calcStr;
         }
     }
 }
@@ -2463,8 +2534,22 @@ if (r.isIncome) {
             <div class="overview-card">
                 <div class="overview-header relative">
                     <button onclick="changeBillMonth(-1)" class="absolute left-2 top-1/2 -translate-y-1/2 p-2 text-white/80 active:scale-75 transition-transform"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
-                    <p class="text-sm opacity-90 mb-1">${year}年${month+1}月结余</p>
-                    <p class="text-4xl font-bold">${formatMoney(balance)}</p>
+<p class="text-xs opacity-90 mb-1">${year}年${month+1}月结余</p>
+<div class="flex justify-center mt-1">
+    <div class="relative inline-flex items-center">
+        <!-- 数字部分：绝对居中，不受任何符号干扰 -->
+        <span class="text-4xl font-bold leading-none">${formatAmount(Math.abs(balance)).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}</span>
+        
+        <!-- 左侧符号区 -->
+        <div class="absolute right-full top-0 bottom-0 pr-1 flex items-center">
+            <!-- ￥号：放在最前面，变小，依然偏上 -->
+            <span class="text-sm font-bold opacity-90 mr-1" style="transform: translateY(-9px);">¥</span>
+            
+            <!-- 负号：排在后面，垂直居中 -->
+            ${balance < 0 ? '<span class="text-3xl font-bold leading-none mr-0.5">-</span>' : ''}
+        </div>
+    </div>
+</div>
                     <button onclick="changeBillMonth(1)" class="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-white/80 active:scale-75 transition-transform"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
                 </div>
                 <div class="overview-body">
@@ -2519,55 +2604,189 @@ function switchBillWeek(w) {
     }
 }
 
-function showAddBillModal(dateStr = null) {
+// ==================== 滚轮日期选择器逻辑 ====================
+let _wheelYear = 0, _wheelMonth = 0, _wheelDay = 0;
+
+function openCustomDatePicker() {
+    const parts = _currentBillDate.split('-');
+    _wheelYear = parseInt(parts[0]);
+    _wheelMonth = parseInt(parts[1]);
+    _wheelDay = parseInt(parts[2]);
+    
+    document.getElementById('custom-date-picker').classList.add('active');
+    renderWheels();
+}
+
+function closeCustomDatePicker(e) {
+    if (!e || e.target.id === 'custom-date-picker') {
+        document.getElementById('custom-date-picker').classList.remove('active');
+    }
+}
+
+function renderWheels() {
+    const currentYear = new Date().getFullYear();
+    const years = [];
+    for (let y = currentYear; y >= currentYear - 10; y--) years.push(y); // 最近10年
+    
+    const months = [1,2,3,4,5,6,7,8,9,10,11,12];
+    const daysInMonth = new Date(_wheelYear, _wheelMonth, 0).getDate();
+    const days = Array.from({length: daysInMonth}, (_, i) => i + 1);
+    
+    if (_wheelDay > daysInMonth) _wheelDay = daysInMonth;
+
+    fillWheel('wheel-year', years, _wheelYear, (val) => { _wheelYear = val; renderWheels(); });
+    fillWheel('wheel-month', months, _wheelMonth, (val) => { _wheelMonth = val; renderWheels(); });
+    fillWheel('wheel-day', days, _wheelDay, (val) => { _wheelDay = val; });
+}
+
+function fillWheel(id, items, activeVal, onChange) {
+    const col = document.getElementById(id);
+    
+    // 生成 HTML
+    let html = '<div class="wheel-padding"></div>';
+    items.forEach(item => {
+        const isActive = item === activeVal ? 'active' : '';
+        html += `<div class="wheel-item ${isActive}" data-val="${item}">${item}</div>`;
+    });
+    html += '<div class="wheel-padding"></div>';
+    col.innerHTML = html;
+
+    // 找到选中的元素并滚过去
+    setTimeout(() => {
+        const activeItem = col.querySelector('.active');
+        if (activeItem) {
+            col.scrollTop = activeItem.offsetTop - 72;
+        }
+    }, 10);
+
+    // 监听滚动吸附事件 (使用 requestAnimationFrame 防抖)
+    let scrollTimeout;
+    col.onscroll = () => {
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(() => {
+            const index = Math.round(col.scrollTop / 36);
+            const selectedEl = col.querySelectorAll('.wheel-item')[index];
+            if (selectedEl) {
+                const val = parseInt(selectedEl.dataset.val);
+                // 更新高亮
+                col.querySelectorAll('.wheel-item').forEach(el => el.classList.remove('active'));
+                selectedEl.classList.add('active');
+                // 触发回调
+                onChange(val);
+            }
+        }, 100); // 滚动停止 100ms 后触发
+    };
+}
+
+function confirmCustomDatePicker() {
+    const pad = (n) => String(n).padStart(2, '0');
+    const dateStr = `${_wheelYear}-${pad(_wheelMonth)}-${pad(_wheelDay)}`;
+    
+    // 检查未来日期
+    const today = formatDateLocal(new Date());
+    if (dateStr > today) {
+        showToast('不能选择未来日期');
+        return;
+    }
+    
+    _currentBillDate = dateStr;
+    closeCustomDatePicker();
+    
+    // 更新主界面的文本（不重绘整个弹窗，只是改文字，避免输入框失效）
+    const display = document.getElementById('date-display-text');
+    if (display) display.textContent = dateStr.replace(/-/g, '/');
+}
+
+function showAddBillModal(dateStr = null, isRefreshing = false) {
     const isEditing = !!_editingBillId;
     const record = isEditing ? (_currentIncomeType === 'expense' ? appData.expenses.find(e => e.id === _editingBillId) : appData.incomes.find(i => i.id === _editingBillId)) : null;
     
-    if (!isEditing) {
-        _currentBillDate = dateStr || formatDateLocal(new Date());
-        _currentIncomeType = 'expense';
-        _selectedCategory = '餐饮';
-    }
+if (!isEditing && !isRefreshing) {
+    _currentBillDate = dateStr || formatDateLocal(new Date());
+    _currentIncomeType = 'expense';
+    _selectedCategory = '餐饮';
+    _selectedPayMethod = ''; // 新增时默认为空
+}
 
-// 预设各种输入框的值（防止编辑时丢失）
+// 预设各种输入框的值
 let amountVal = '', hoursVal = '', priceVal = '', insuranceVal = '', taxVal = '', socialVal = '', noteVal = '';
 if (record) {
     noteVal = record.note || '';
     insuranceVal = record.insurance ? formatAmount(record.insurance) : '';
     taxVal = record.tax ? formatAmount(record.tax) : '';
     socialVal = record.social ? formatAmount(record.social) : '';
+    _selectedPayMethod = record.payMethod || '';
     if (_currentIncomeType === 'work') {
         hoursVal = record.hours ? formatAmount(record.hours) : '';
         priceVal = record.pricePerHour ? formatAmount(record.pricePerHour) : '';
     } else {
-        // 反算总金额（因为 record.amount 是扣除后的）
         const total = record.amount + (record.insurance || 0) + (record.tax || 0) + (record.social || 0);
         amountVal = total > 0 ? formatAmount(total) : '';
     }
 }
-const typeTabHtml = `
-    <div class="flex bg-gray-100 p-1 rounded-xl mb-3">
-        <button id="type-btn-expense" onclick="switchRecordType('expense')" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${_currentIncomeType === 'expense' ? 'bg-blue-500 shadow-sm text-white' : 'text-gray-500'}">支出</button>
-        <button id="type-btn-daily" onclick="switchRecordType('daily')" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${_currentIncomeType === 'daily' ? 'bg-blue-500 shadow-sm text-white' : 'text-gray-500'}">日结</button>
-        <button id="type-btn-monthly" onclick="switchRecordType('monthly')" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${_currentIncomeType === 'monthly' ? 'bg-blue-500 shadow-sm text-white' : 'text-gray-500'}">月薪</button>
-        <button id="type-btn-work" onclick="switchRecordType('work')" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${_currentIncomeType === 'work' ? 'bg-blue-500 shadow-sm text-white' : 'text-gray-500'}">工时</button>
-    </div>
-`;
+
+// 🌟 核心：如果是刷新状态（切分类），把当前界面上的输入值抓取下来！
+if (isRefreshing) {
+    const elAmount = document.getElementById('bill-amount');
+    const elHours = document.getElementById('work-hours');
+    const elPrice = document.getElementById('work-price');
+    const elIns = document.getElementById('insurance-amount');
+    const elTax = document.getElementById('tax-amount');
+    const elSocial = document.getElementById('social-amount');
+    const elNote = document.getElementById('bill-note');
+    
+    if (elAmount) amountVal = elAmount.value;
+    if (elHours) hoursVal = elHours.value;
+    if (elPrice) priceVal = elPrice.value;
+    if (elIns) insuranceVal = elIns.value;
+    if (elTax) taxVal = elTax.value;
+    if (elSocial) socialVal = elSocial.value;
+    if (elNote) noteVal = elNote.value;
+}
+
+    const typeTabHtml = `
+        <div class="flex bg-gray-100 p-1 rounded-xl mb-3">
+            <button id="type-btn-expense" onclick="switchRecordType('expense')" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${_currentIncomeType === 'expense' ? 'bg-blue-500 shadow-sm text-white' : 'text-gray-500'}">支出</button>
+            <button id="type-btn-daily" onclick="switchRecordType('daily')" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${_currentIncomeType === 'daily' ? 'bg-blue-500 shadow-sm text-white' : 'text-gray-500'}">日结</button>
+            <button id="type-btn-monthly" onclick="switchRecordType('monthly')" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${_currentIncomeType === 'monthly' ? 'bg-blue-500 shadow-sm text-white' : 'text-gray-500'}">月薪</button>
+            <button id="type-btn-work" onclick="switchRecordType('work')" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${_currentIncomeType === 'work' ? 'bg-blue-500 shadow-sm text-white' : 'text-gray-500'}">工时</button>
+        </div>
+    `;
+
+// 生成横滑分类的 HTML
+const buildCapsuleList = (items, selectedVal, type, showMore = true) => {
+    // 如果 showMore 为 false，就全显示；否则只显示前 5 个
+    const commonItems = showMore ? items.slice(0, 5) : items;
+    let html = commonItems.map(item => {
+            const val = item.name || item;
+            const icon = item.icon ? `${item.icon} ` : '';
+            const isActive = selectedVal === val;
+            const activeClass = isActive ? 'bg-blue-500 text-white shadow-sm border-blue-500' : 'bg-gray-50 text-gray-600 border-gray-200';
+            return `<div onclick="selectCapsule(this, '${val}', '${type}')" class="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all active:scale-95 cursor-pointer ${activeClass}">${icon}${val}</div>`;
+        }).join('');
+        
+// 更多按钮
+if (showMore) {
+    const isMoreActive = items.slice(5).some(i => (i.name || i) === selectedVal);
+    const moreActiveClass = isMoreActive ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-500 border-gray-200';
+    html += `<div onclick="showMoreOptions('${type}')" class="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all active:scale-95 cursor-pointer flex items-center gap-1 ${moreActiveClass}">••• 更多</div>`;
+}
+        
+        return `<div class="flex gap-2 overflow-x-auto pb-1" style="scrollbar-width: none; -webkit-overflow-scrolling: touch;">${html}</div>`;
+    };
 
     const html = `
-        <div class="flex flex-col">
+        <div class="flex flex-col relative">
             <div class="flex flex-col items-center mb-3">
-
-                <label class="date-picker-btn">
-                    <span id="date-display-text" class="text-xs">${_currentBillDate.replace(/-/g, '/')}</span>
-                    <input type="date" id="bill-date-input" value="${_currentBillDate}" max="${formatDateLocal(new Date())}" onchange="updateBillDate(this.value)">
-                </label>
+                <label class="date-picker-btn" onclick="openCustomDatePicker()">
+    <span id="date-display-text" class="text-xs">${_currentBillDate.replace(/-/g, '/')}</span>
+</label>
             </div>
             
             ${typeTabHtml}
 
-            <div class="flex flex-col justify-center min-h-[180px] mb-2">
-                <!-- 正常金额框（支出/日结/月薪） -->
+            <div class="flex flex-col mb-2 min-h-[140px]">
+                <!-- 正常金额框 -->
                 <div id="normal-amount-wrap" style="display: ${_currentIncomeType === 'work' ? 'none' : 'block'};">
                     <input type="number" id="bill-amount" class="finance-input" placeholder="输入金额" value="${amountVal}" style="font-size: 15px; padding: 8px;">
                 </div>
@@ -2578,61 +2797,73 @@ const typeTabHtml = `
                     <input type="number" id="work-price" class="finance-input" placeholder="时薪(元)" value="${priceVal}">
                 </div>
 
-                <!-- 保险扣除框（日结/工时） -->
+                <!-- 保险 / 个税社保 -->
                 <div id="insurance-wrap" style="display: ${_currentIncomeType === 'daily' || _currentIncomeType === 'work' ? 'block' : 'none'};" class="mt-2">
                     <input type="number" id="insurance-amount" class="finance-input" placeholder="扣除保险 (可选)" value="${insuranceVal}" style="border: 1px dashed #FCA5A5; background: #FEF2F2; color: #EF4444;">
                 </div>
-
-                <!-- 🌟 新增：个税与社保（月薪） -->
                 <div id="tax-social-wrap" style="display: ${_currentIncomeType === 'monthly' ? 'flex' : 'none'};" class="flex gap-2 mt-2">
                     <input type="number" id="tax-amount" class="finance-input" placeholder="扣除个税(可选)" value="${taxVal}" style="border: 1px dashed #FCD34D; background: #FFFBEB; color: #D97706;">
                     <input type="number" id="social-amount" class="finance-input" placeholder="扣除社保(可选)" value="${socialVal}" style="border: 1px dashed #FCD34D; background: #FFFBEB; color: #D97706;">
                 </div>
                 
-                <!-- 支出分类网格 -->
+                <!-- 🌟 新的支出分类与支付方式 -->
                 <div id="expense-category-wrap" style="display: ${_currentIncomeType === 'expense' ? 'block' : 'none'};" class="mt-3">
-                    <div class="category-grid">
-                        <div class="category-item ${_selectedCategory === '餐饮' ? 'active' : ''}" data-val="餐饮" onclick="selectCategory(this)"><span class="icon">🍜</span>餐饮</div>
-                        <div class="category-item ${_selectedCategory === '购物' ? 'active' : ''}" data-val="购物" onclick="selectCategory(this)"><span class="icon">🛍️</span>购物</div>
-                        <div class="category-item ${_selectedCategory === '交通' ? 'active' : ''}" data-val="交通" onclick="selectCategory(this)"><span class="icon">🚗</span>交通</div>
-                        <div class="category-item ${_selectedCategory === '娱乐' ? 'active' : ''}" data-val="娱乐" onclick="selectCategory(this)"><span class="icon">🎬</span>娱乐</div>
-                        <div class="category-item ${_selectedCategory === '医疗' ? 'active' : ''}" data-val="医疗" onclick="selectCategory(this)"><span class="icon">💊</span>医疗</div>
-                        <div class="category-item ${_selectedCategory === '宠物' ? 'active' : ''}" data-val="宠物" onclick="selectCategory(this)"><span class="icon">🐶</span>宠物</div>
-                        <div class="category-item ${_selectedCategory === '人情' ? 'active' : ''}" data-val="人情" onclick="selectCategory(this)"><span class="icon">🧧</span>人情</div>
-                        <div class="category-item ${_selectedCategory === '其他' ? 'active' : ''}" data-val="其他" onclick="selectCategory(this)"><span class="icon">⭕</span>其他</div>
-                    </div>
+                    <p class="text-[11px] text-gray-500 mb-1.5">支出分类</p>
+                    ${buildCapsuleList(EXPENSE_CATEGORIES, _selectedCategory, 'category')}
+                    
+                    <p class="text-[11px] text-gray-500 mb-1.5 mt-3">支付方式 <span class="text-gray-400 font-normal">(可选)</span></p>
+                    ${buildCapsuleList(PAY_METHODS, _selectedPayMethod, 'pay')}
                 </div>
 
-                <input type="text" id="bill-note" class="finance-input mt-2" placeholder="添加备注..." value="${noteVal}" style="font-size: 12px; font-weight: normal; text-align: left; padding: 8px;">
+                <!-- 🌟 收入入账账户 -->
+<div id="income-account-wrap" style="display: ${_currentIncomeType !== 'expense' ? 'block' : 'none'};" class="mt-3">
+    <p class="text-[11px] text-gray-500 mb-1.5">入账账户 <span class="text-gray-400 font-normal">(可选)</span></p>
+    ${buildCapsuleList(['微信', '支付宝', '银行卡', '现金'], _selectedPayMethod, 'pay', false)}
+</div>
+
+                <input type="text" id="bill-note" class="finance-input mt-3" placeholder="添加备注..." value="${noteVal}" style="font-size: 12px; font-weight: normal; text-align: left; padding: 8px;">
             </div>
             
             <button onclick="saveBillRecord()" class="w-full py-2.5 rounded-xl font-bold text-white text-sm shadow-md active:scale-95 transition-transform mt-auto" style="background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);">保存</button>
+
+            <!-- 更多选项的覆盖层（浅灰翻页效果） -->
+<div id="more-options-layer" class="absolute inset-0 bg-gray-50 border border-gray-100 z-50 flex-col p-3 transition-all" style="display: none; border-radius: 24px;">
+    <div class="flex justify-between items-center mb-3">
+        <span class="text-[15px] font-bold text-gray-800" id="more-title">全部分类</span>
+        <!-- 加一个浅色返回按钮 -->
+        <button onclick="document.getElementById('more-options-layer').style.display='none'" class="px-2 py-1 bg-gray-100 rounded-lg text-gray-600 flex items-center gap-1 text-xs">
+    ‹ 返回
+</button>
+    </div>
+    <!-- 改成 3 列，每个格子更大，文字不会截断 -->
+    <div class="grid grid-cols-3 gap-2 overflow-y-auto pb-2" id="more-options-grid">
+        <!-- 动态生成 -->
+    </div>
+</div>
         </div>
     `;
-    openCenterModal(html);
-}
+    openCenterModal(html, false, true);
 
+    // 🌟 恢复滚动条：让选中的选项自动居中显示（瞬间归位）
+    if (isRefreshing) {
+        setTimeout(() => {
+            document.querySelectorAll('.overflow-x-auto').forEach(container => {
+                const activeItem = container.querySelector('.bg-blue-500'); // 找到蓝色的选中项
+                if (activeItem) {
+                    // 瞬间计算居中位置，绝不使用 smooth 动画
+                    container.scrollLeft = activeItem.offsetLeft - (container.clientWidth / 2) + (activeItem.clientWidth / 2);
+                }
+            });
+        }, 10); // 延迟 10ms，等 DOM 插入即可
+    }
+}
 function switchRecordType(type) {
     _currentIncomeType = type;
-    ['expense', 'daily', 'monthly', 'work'].forEach(t => {
-        const btn = document.getElementById(`type-btn-${t}`);
-        if (!btn) return;
-        btn.className = 'flex-1 py-1.5 text-xs font-bold rounded-lg transition-all';
-        if (t === type) {
-            btn.classList.add('bg-blue-500', 'shadow-sm', 'text-white');
-        } else {
-            btn.classList.add('text-gray-500');
-        }
-    });
-    
-    document.getElementById('normal-amount-wrap').style.display = type === 'work' ? 'none' : 'block';
-    document.getElementById('work-inputs-wrap').style.display = type === 'work' ? 'block' : 'none';
-    document.getElementById('expense-category-wrap').style.display = type === 'expense' ? 'block' : 'none';
-    
-    // 保险：日结和工时显示
-    document.getElementById('insurance-wrap').style.display = (type === 'daily' || type === 'work') ? 'block' : 'none';
-    // 个税社保：只有月薪显示
-    document.getElementById('tax-social-wrap').style.display = type === 'monthly' ? 'flex' : 'none';
+    // 如果切到收入，清空当前选中的支付方式，防止混淆
+    if (type !== 'expense') {
+        _selectedPayMethod = ''; 
+    }
+    showAddBillModal(null, true); // 传入 true，只刷新界面
 }
 
 function saveBillRecord() {
@@ -2667,19 +2898,18 @@ function saveBillRecord() {
     if (amount <= 0) { showToast('扣除后金额必须大于0'); return; }
 
     const note = document.getElementById('bill-note').value;
-    const category = isExpense ? _selectedCategory : (_currentIncomeType === 'monthly' ? 'salary' : 'other');
+const category = isExpense ? _selectedCategory : (_currentIncomeType === 'monthly' ? 'salary' : 'other');
+const payMethod = _selectedPayMethod || ''; // 🌟 获取支付方式
 
-    // 把保险/税等金额也存起来，方便以后编辑时反算
-    const recordExtras = { insurance, tax, social };
+// 把保险/税等金额以及支付方式存起来
+const recordExtras = { insurance, tax, social, payMethod };
 
 if (_editingBillId) {
-    // 先彻底清除旧数据（防止从支出改成收入时，旧数据残留在原数组）
     appData.expenses = appData.expenses.filter(e => e.id !== _editingBillId);
     appData.incomes = appData.incomes.filter(i => i.id !== _editingBillId);
     
-    // 当作新数据重新插入
     if (isExpense) {
-        appData.expenses.push({ id: _editingBillId, date: _currentBillDate, amount, category, note, updatedAt: Date.now() });
+        appData.expenses.push({ id: _editingBillId, date: _currentBillDate, amount, category, note, updatedAt: Date.now(), ...recordExtras });
     } else {
         const rec = { id: _editingBillId, date: _currentBillDate, amount, category, note, recordType: _currentIncomeType, hours: workHours, pricePerHour: workPrice, updatedAt: Date.now(), ...recordExtras };
         appData.incomes.push(rec);
@@ -2687,7 +2917,7 @@ if (_editingBillId) {
 } else {
     const id = Date.now().toString();
     if (isExpense) {
-        appData.expenses.push({ id, date: _currentBillDate, amount, category, note, updatedAt: Date.now() });
+        appData.expenses.push({ id, date: _currentBillDate, amount, category, note, updatedAt: Date.now(), ...recordExtras });
     } else {
         const rec = { id, date: _currentBillDate, amount, category, note, recordType: _currentIncomeType, hours: workHours, pricePerHour: workPrice, updatedAt: Date.now(), ...recordExtras };
         appData.incomes.push(rec);
@@ -2739,15 +2969,18 @@ if (isIncome) {
         deductText = `扣除 ${deducts.join(' / ')}`;
     }
 }
-    const html = `
-        <div class="flex flex-col">
-            <div class="text-center mb-4">
-                <p class="text-base font-bold text-gray-800 mb-1">${escapeHtml(record.note || (isIncome ? '收入' : '支出'))}</p>
-                <p class="text-2xl font-bold ${isIncome ? 'text-green-500' : 'text-red-500'} mb-1">${isIncome ? '+' : '-'}¥${formatAmount(record.amount)}</p>
-                ${calcText ? `<p class="text-[12px] text-gray-500 mb-0.5">${calcText}</p>` : ''}
-                ${deductText ? `<p class="text-[12px] text-red-400 mb-1">${deductText}</p>` : ''}
-                <p class="text-xs text-gray-400">${record.date}</p>
-            </div>
+const methodText = record.payMethod ? `${isIncome ? '入账账户' : '支付方式'}：${record.payMethod}` : '';
+
+const html = `
+    <div class="flex flex-col">
+        <div class="text-center mb-4">
+            <p class="text-base font-bold text-gray-800 mb-1">${escapeHtml(record.note || (isIncome ? '收入' : '支出'))}</p>
+            <p class="text-2xl font-bold ${isIncome ? 'text-green-500' : 'text-red-500'} mb-1">${isIncome ? '+' : '-'}¥${formatAmount(record.amount)}</p>
+            ${methodText ? `<p class="text-[12px] text-blue-500 font-medium mb-1">${methodText}</p>` : ''}
+            ${calcText ? `<p class="text-[12px] text-gray-500 mb-0.5">${calcText}</p>` : ''}
+            ${deductText ? `<p class="text-[12px] text-red-400 mb-1">${deductText}</p>` : ''}
+            <p class="text-xs text-gray-400">${record.date}</p>
+        </div>
 
             <div class="flex gap-2">
                 <button onclick="closeCenterModal(); editRecord('${id}', ${isIncome})" class="flex-1 py-2.5 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium">修改</button>
@@ -3640,29 +3873,18 @@ function switchTab(tab, forceRender = false) {
     currentTab = tab;
     const content = document.getElementById('content');
     const data = views[tab];
-    const gearBtn = document.getElementById('settings-gear-btn');
-
-if (forceRender) {
+    if (forceRender) {
     if (tab === 'menstrual') menstrualViewMonth = new Date();
 }
-
-    if (gearBtn) gearBtn.style.display = tab === 'home' ? 'flex' : 'none';
-
     if (tab === 'bill') {
-        document.getElementById('page-title').innerText = '记账';
-        document.getElementById('page-subtitle').innerText = '记录每一笔收支';
-        
-        // 🌟 智能定位到当前周
-        const today = new Date();
-        if (currentMonth.getFullYear() === today.getFullYear() && currentMonth.getMonth() === today.getMonth()) {
-            currentBillWeek = Math.min(5, Math.ceil(today.getDate() / 7));
-        } else {
-            currentBillWeek = 1; 
-        }
+    // 🌟 智能定位到当前周
+    const today = new Date();
+    if (currentMonth.getFullYear() === today.getFullYear() && currentMonth.getMonth() === today.getMonth()) {
+        currentBillWeek = Math.min(5, Math.ceil(today.getDate() / 7));
     } else {
-        document.getElementById('page-title').innerText = data.title;
-        document.getElementById('page-subtitle').innerText = data.subtitle;
+        currentBillWeek = 1; 
     }
+}
 
     // 🚨 下面这部分绝对不能放进上面的 else 里！
     // 判断是否重绘
