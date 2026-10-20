@@ -35,10 +35,10 @@
         html { font-size: 15px; background: linear-gradient(135deg, #E8F0F8 0%, #F5F7FA 50%, #EDF2F7 100%); }
         html, body { margin: 0; padding: 0; }
         body { background: transparent; padding-top: env(safe-area-inset-top); font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'STHeiti', 'Segoe UI', sans-serif; color: #2D3748; min-height: 100vh; padding-bottom: 12px; overflow-x: hidden; }
-        .glass { background: var(--glass-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid var(--glass-border); }
+     
         .glass-card { background: rgba(255, 255, 255, 0.92); border: 1px solid rgba(255, 255, 255, 0.6); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04); }
         .glass-nav { background: rgba(255, 255, 255, 0.65); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); border: 1px solid rgba(255, 255, 255, 0.35); box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.06); }
-        .nav-container { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); width: calc(100% - 28px); max-width: 380px; z-index: 100; will-change: transform; }
+        .nav-container { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); width: calc(100% - 28px); max-width: 380px; z-index: 100; }
         .nav-btn { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); padding: 8px 0; cursor: pointer; }
         .nav-btn:active { transform: scale(0.92); }
         .active-tab { background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%); color: white !important; box-shadow: 0 3px 12px rgba(59, 130, 246, 0.35); }
@@ -437,7 +437,7 @@ for (let i = 0; i < combined.length; i += CHUNK) {
 return btoa(binary);
         }
 async function decryptData(encryptedBase64) {
-    // 兼容 Gitee 自动换行导致的解码失败，先剔除所有空格和换行符
+    if (!encryptedBase64) return null; // 🌟 拿到空内容直接返回 null
     const cleanBase64 = encryptedBase64.replace(/\s/g, '');
     const binary = atob(cleanBase64);
     const combined = new Uint8Array(binary.length);
@@ -1075,9 +1075,9 @@ function renderSyncCard() {
             </div>
             ${showConfigForm ? `
             <div class="space-y-2">
-                <input type="text" id="gitee-token" class="input-field text-xs py-2.5" placeholder="私人令牌 (Token)" value="${appData.settings.giteeToken}" oninput="autoSaveGiteeConfig()">
-                <input type="text" id="gitee-repo" class="input-field text-xs py-2.5" placeholder="仓库路径 (如: username/repo)" value="${appData.settings.giteeRepo}" oninput="autoSaveGiteeConfig()">
-                <input type="text" id="gitee-filename" class="input-field text-xs py-2.5" placeholder="文件名(.json)" value="${appData.settings.giteeFilename}" oninput="autoSaveGiteeConfig()">
+                <input type="text" id="gitee-token" class="input-field text-xs py-2.5" placeholder="私人令牌 (Token)" value="${appData.settings.giteeToken}">
+<input type="text" id="gitee-repo" class="input-field text-xs py-2.5" placeholder="仓库路径 (如: username/repo)" value="${appData.settings.giteeRepo}">
+<input type="text" id="gitee-filename" class="input-field text-xs py-2.5" placeholder="文件名(.json)" value="${appData.settings.giteeFilename}">
                 <input type="text" id="sync-menstrual-from" class="input-field text-xs py-2.5" placeholder="经期数据来源（可选）" value="${appData.settings.syncMenstrualFrom || ''}" onchange="handleSyncMenstrualFromChange(this.value)">
                 <div class="flex gap-2 justify-center">
                     <button onclick="smartSync(true, false)" class="flex-1 btn-primary py-2.5 rounded-lg text-xs font-semibold">一键同步</button>
@@ -3558,7 +3558,7 @@ function renderMeView() {
                 </div>
             </div>
 
-            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v4.6.2</p></div>
+            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v4.6.3</p></div>
         </div>
     `;
     return html;
@@ -3576,7 +3576,7 @@ function showAbout() {
                     <i data-lucide="sparkles" class="w-8 h-8 text-white"></i>
                 </div>
                 <p class="text-lg font-bold text-gray-800">Life Manager</p>
-                <p class="text-xs text-gray-400 mt-1">v4.6.2</p>
+                <p class="text-xs text-gray-400 mt-1">v4.6.3</p>
             </div>
             <div class="glass-card rounded-2xl overflow-hidden mt-4" style="padding: 0;">
                 <div class="setting-item" onclick="openGithubRepo()" style="margin-bottom: 0; border-radius: 0;">
@@ -3804,219 +3804,253 @@ function countTotalRecords(data) {
 }
 
 async function smartSync(showResult = true, isAuto = false) {
-    if (_syncInProgress) { 
-        // 🌟 如果正在同步，不丢弃，而是打个标记排队，静默等待
-        _pendingSync = true;
-        return; 
-    }
-    const { giteeToken, giteeRepo, giteeFilename, syncMenstrualFrom } = appData.settings;
-    if (!giteeToken || !giteeRepo) { if (showResult) showToast('请先配置 Gitee 仓库信息'); return; }
+    if (_syncInProgress) { _pendingSync = true; return; }
 
-    const inputEl = document.getElementById('sync-menstrual-from');
-    if (inputEl) {
-        const inputVal = normalizeFilename(inputEl.value);
-        if (inputVal !== (appData.settings.syncMenstrualFrom || '')) {
-            await handleSyncMenstrualFromChange(inputVal);
+    // 🌟 拦截：点击一键同步时，检查配置是否改变
+    if (showResult && currentTab === 'home') {
+        const inputToken = document.getElementById('gitee-token')?.value.trim();
+        const inputRepo = document.getElementById('gitee-repo')?.value.trim();
+        const inputFilename = document.getElementById('gitee-filename')?.value.trim();
+
+        if (inputToken !== undefined) {
+            const result = await safeSwitchAccount(inputToken, inputRepo, inputFilename);
+            if (result === 'switched') {
+                showToast('已切换新账号，正在上传本地数据...');
+                return smartSync(true, isAuto);
+            } else if (result === 'aborted') {
+                return;
+            }
         }
     }
 
-_syncInProgress = true;
-showSyncProgress(true);
-// 显示顶部的提示条
-const globalIndicator = document.getElementById('global-sync-indicator');
-if (globalIndicator) {
-    // 🌟 核心：如果有还没执行的变绿/隐藏倒计时，立刻干掉它！
-    if (_syncIndicatorTimer) {
-        clearTimeout(_syncIndicatorTimer);
-        _syncIndicatorTimer = null;
+    const { giteeToken, giteeRepo, giteeFilename, syncMenstrualFrom } = appData.settings;
+    if (!giteeToken || !giteeRepo) { if (showResult) showToast('请先配置 Gitee 仓库信息'); return; }
+
+    _syncInProgress = true;
+    showSyncProgress(true);
+    let syncSuccess = false;
+
+    const globalIndicator = document.getElementById('global-sync-indicator');
+    if (globalIndicator) {
+        if (_syncIndicatorTimer) { clearTimeout(_syncIndicatorTimer); _syncIndicatorTimer = null; }
+        globalIndicator.style.display = 'flex';
+        globalIndicator.style.background = 'rgba(59, 130, 246, 0.95)';
+        document.getElementById('sync-indicator-text').innerText = '正在同步数据，请勿退出...';
+        lucide.createIcons();
     }
-    globalIndicator.style.display = 'flex';
-    globalIndicator.style.background = 'rgba(59, 130, 246, 0.95)'; // 强行变回蓝色
-    document.getElementById('sync-indicator-text').innerText = '正在同步数据，请勿退出...';
-    lucide.createIcons();
-}
+
     try {
         let remoteData = null;
         let fileSha = null;
         let fileExists = false;
         try {
-            const getRes = await fetch(`https://gitee.com/api/v5/repos/${giteeRepo}/contents/${giteeFilename}?access_token=${giteeToken}`);
+            // 🌟 核心修复：临时计算带后缀的文件名，不改输入框，只用于请求
+            let fetchFilename = giteeFilename;
+            if (fetchFilename && !fetchFilename.includes('.')) fetchFilename += '.json';
+
+            const getRes = await fetch(`https://gitee.com/api/v5/repos/${giteeRepo}/contents/${encodeURIComponent(fetchFilename)}?access_token=${giteeToken}`);
             if (getRes.ok) {
                 const fileInfo = await getRes.json();
-                fileExists = true;
-                fileSha = fileInfo.sha;
-                try { remoteData = await decryptData(fileInfo.content); }
-                catch (decryptErr) {
-                    console.warn('解密失败:', decryptErr);
-                    if (showResult) showToast('❌ 云端文件损坏，请手动处理');
-                    _syncInProgress = false; showSyncProgress(false); return;
-                }
-            } else if (getRes.status === 404) { fileExists = false; remoteData = null; }
-            else { const err = await getRes.json(); throw new Error(`获取云端文件失败: ${err.message}`); }
+                if (fileInfo && fileInfo.sha && fileInfo.content) {
+                    fileExists = true;
+                    fileSha = fileInfo.sha;
+                    try { remoteData = await decryptData(fileInfo.content); } 
+                    catch (decryptErr) { remoteData = null; }
+                } else { fileExists = false; remoteData = null; }
+            } else if (getRes.status === 404) { 
+                fileExists = false; remoteData = null; 
+            } else { 
+                const err = await getRes.json(); 
+                throw new Error(`获取云端文件失败: ${err.message}`); 
+            }
         } catch (e) {
             if (e.message.includes('损坏')) throw e;
             console.warn('获取云端数据异常:', e);
         }
 
+        let mergedData;
+        let uploadData;
+        const _strip = d => JSON.stringify({
+            tasks: d.tasks, incomes: d.incomes, expenses: d.expenses, notes: d.notes, menstrual: d.menstrual
+        });
 
-let mergedData;
-let uploadData;
-const _strip = d => JSON.stringify({
-    tasks: d.tasks,
-    incomes: d.incomes,
-    expenses: d.expenses,
-    notes: d.notes,
-    menstrual: d.menstrual
-});
-if (fileExists && remoteData) {
-    const deletedIdSet = new Set();
-    if (lastSyncData) {
-        try {
-            const previousData = JSON.parse(lastSyncData);
-            const compareArrays = (prev, curr) => {
-                const prevIds = new Set(prev.map(item => item.id).filter(id => id));
-                const currIds = new Set(curr.map(item => item.id).filter(id => id));
-                prevIds.forEach(id => { if (!currIds.has(id)) deletedIdSet.add(id); });
-            };
-            compareArrays(previousData.tasks || [], appData.tasks || []);
-            compareArrays(previousData.incomes || [], appData.incomes || []);
-            compareArrays(previousData.expenses || [], appData.expenses || []);
-            compareArrays(previousData.notes || [], appData.notes || []);
-            if (!syncMenstrualFrom) {
-                compareArrays(previousData.menstrual?.records || [], appData.menstrual?.records || []);
-                compareArrays(previousData.menstrual?.loveDates || [], appData.menstrual?.loveDates || []);
+        if (fileExists && remoteData) {
+            const deletedIdSet = new Set();
+            if (lastSyncData) {
+                try {
+                    const previousData = JSON.parse(lastSyncData);
+                    const compareArrays = (prev, curr) => {
+                        const prevIds = new Set(prev.map(item => item.id).filter(id => id));
+                        const currIds = new Set(curr.map(item => item.id).filter(id => id));
+                        prevIds.forEach(id => { if (!currIds.has(id)) deletedIdSet.add(id); });
+                    };
+                    compareArrays(previousData.tasks || [], appData.tasks || []);
+                    compareArrays(previousData.incomes || [], appData.incomes || []);
+                    compareArrays(previousData.expenses || [], appData.expenses || []);
+                    compareArrays(previousData.notes || [], appData.notes || []);
+                    if (!syncMenstrualFrom) {
+                        compareArrays(previousData.menstrual?.records || [], appData.menstrual?.records || []);
+                        compareArrays(previousData.menstrual?.loveDates || [], appData.menstrual?.loveDates || []);
+                    }
+                } catch(e) {}
             }
-        } catch(e) {}
-    }
-// 新增：在 merge 之前，把云端原始数据快照下来，后面判断用
-const remoteStripBeforeMerge = _strip(remoteData);
-const result = mergeAppData(appData, remoteData, deletedIdSet);
-mergedData = result.merged;
+            const remoteStripBeforeMerge = _strip(remoteData);
+            const result = mergeAppData(appData, remoteData, deletedIdSet);
+            mergedData = result.merged;
 
-    // 构建要上传的内容（如果只读经期模式，经期部分保留云端的）
-    if (syncMenstrualFrom) {
-        uploadData = { ...mergedData, menstrual: remoteData.menstrual || { records: [], loveDates: [] } };
-    } else {
-        uploadData = mergedData;
-    }
+            if (syncMenstrualFrom) {
+                uploadData = { ...mergedData, menstrual: remoteData.menstrual || { records: [], loveDates: [] } };
+            } else {
+                uploadData = mergedData;
+            }
 
-    // 关键判断：要上传的内容 与 云端现有内容 是否相同
-if (_strip(uploadData) === remoteStripBeforeMerge) {
-    // 🌟 如果这期间有新操作，不要把旧数据覆盖上来
-    if (!_pendingSync) {
-        const localMenstrual = mergedData.menstrual;
-        appData = mergedData;
-        appData.menstrual = localMenstrual;
-        // 👇 核心修复：只有没排队时，才更新比对基准
-        lastSyncData = JSON.stringify(appData);
-        saveLastSyncData();
-    }
-    appData.settings.lastSyncTime = Date.now();
-    saveData(true);
-_syncConfigEditing = false;
-_lastSyncSuccess = true;
-if (currentTab === 'home') switchTab('home');
-if (showResult) {
-    showToast('云端已是最新');
-}
-setTimeout(() => {
-    _lastSyncSuccess = null;
-    const c = document.getElementById('sync-card');
-    if (c) c.style.boxShadow = '';
-}, 1800);
-_syncInProgress = false; showSyncProgress(false);
-if (syncMenstrualFrom) await fetchRemoteMenstrual(false);
-return;
-    }
-} else {
-    mergedData = appData;
-    uploadData = appData;
-    if (showResult && !fileExists) showToast('云端无数据，创建初始备份');
-}
+            if (_strip(uploadData) === remoteStripBeforeMerge) {
+                if (!_pendingSync) {
+                    const localMenstrual = mergedData.menstrual;
+                    appData = mergedData;
+                    appData.menstrual = localMenstrual;
+                    lastSyncData = JSON.stringify(appData);
+                    saveLastSyncData();
+                }
+                appData.settings.lastSyncTime = Date.now();
+                saveData(true);
+                _syncConfigEditing = false;
+                _lastSyncSuccess = true;
+                syncSuccess = true;
+                if (currentTab === 'home') switchTab('home');
+                if (showResult) showToast('云端已是最新');
+                setTimeout(() => { _lastSyncSuccess = null; const c = document.getElementById('sync-card'); if (c) c.style.boxShadow = ''; }, 1800);
+                _syncInProgress = false; showSyncProgress(false);
+                if (syncMenstrualFrom) await fetchRemoteMenstrual(false);
+                return;
+            }
+        } else {
+            mergedData = appData;
+            uploadData = appData;
+            if (showResult && !fileExists) showToast('云端无数据，创建初始备份');
+        }
+
         const content = await encryptData(uploadData);
         const message = `智能合并同步 - ${new Date().toLocaleString()}`;
-        const url = `https://gitee.com/api/v5/repos/${giteeRepo}/contents/${giteeFilename}`;
+        
+        // 🌟 核心修复：上传时也临时补全后缀
+        let uploadFilename = giteeFilename;
+        if (uploadFilename && !uploadFilename.includes('.')) uploadFilename += '.json';
+        const url = `https://gitee.com/api/v5/repos/${giteeRepo}/contents/${encodeURIComponent(uploadFilename)}`;
+        
         const method = fileExists ? 'PUT' : 'POST';
         const body = { access_token: giteeToken, content, message };
         if (fileSha) body.sha = fileSha;
 
         const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-if (response.ok) {
-    // 🌟 如果这期间有新操作，保留新操作的数据，不被旧云数据覆盖
-    if (!_pendingSync) {
-        const localMenstrual = mergedData.menstrual;
-        appData = mergedData;
-        appData.menstrual = localMenstrual;
-        // 👇 核心修复：只有没排队时，才更新比对基准
-        lastSyncData = JSON.stringify(appData);
-        saveLastSyncData();
-    }
-    appData.settings.lastSyncTime = Date.now();
-    appData.settings.lastSyncType = 'merge';_syncConfigEditing = false;
-    appData.settings.cloudConfigValid = true;
-    saveData(true);
-if (syncMenstrualFrom) await fetchRemoteMenstrual(false);
-_lastSyncSuccess = true;
-if (currentTab === 'home') switchTab('home');
-if (showResult) {
-    logOp('同步成功', `${countTotalRecords(appData)} 条`);
-    showToast('同步成功，数据已合并');
-}
-setTimeout(() => {
-    _lastSyncSuccess = null;
-    const c = document.getElementById('sync-card');
-    if (c) c.style.boxShadow = '';
-}, 1800);
-                    }else {
+        
+        if (response.ok) {
+            if (!_pendingSync) {
+                const localMenstrual = mergedData.menstrual;
+                appData = mergedData;
+                appData.menstrual = localMenstrual;
+                lastSyncData = JSON.stringify(appData);
+                saveLastSyncData();
+            }
+            appData.settings.lastSyncTime = Date.now();
+            appData.settings.lastSyncType = 'merge';
+            _syncConfigEditing = false;
+            appData.settings.cloudConfigValid = true;
+            saveData(true);
+            if (syncMenstrualFrom) await fetchRemoteMenstrual(false);
+            _lastSyncSuccess = true;
+            syncSuccess = true;
+            if (currentTab === 'home') switchTab('home');
+            if (showResult) { logOp('同步成功', `${countTotalRecords(appData)} 条`); showToast('同步成功，数据已合并'); }
+            setTimeout(() => { _lastSyncSuccess = null; const c = document.getElementById('sync-card'); if (c) c.style.boxShadow = ''; }, 1800);
+        } else {
             const err = await response.json();
             throw new Error(err.message || '上传失败');
         }
-} catch (e) {
-    console.error('同步失败:', e);
-    if (showResult) {
-        logOp('同步失败', e.message);
-        showToast(`❌ 同步失败: ${e.message}`);
-        const syncCard = document.getElementById('sync-card');
-        if (syncCard) syncCard.style.boxShadow = '0 0 0 2px rgba(239,68,68,0.6)';
-        setTimeout(() => {
-            const c = document.getElementById('sync-card');
-            if (c) c.style.boxShadow = '';
-        }, 3000);
-    }
-} finally {
+    } catch (e) {
+        console.error('同步失败:', e);
+        syncSuccess = false;
+        if (showResult) {
+            logOp('同步失败', e.message);
+            showToast(`❌ 同步失败: ${e.message}`);
+            const syncCard = document.getElementById('sync-card');
+            if (syncCard) syncCard.style.boxShadow = '0 0 0 2px rgba(239,68,68,0.6)';
+            setTimeout(() => { const c = document.getElementById('sync-card'); if (c) c.style.boxShadow = ''; }, 3000);
+        }
+    } finally {
         _syncInProgress = false;
         showSyncProgress(false);
         if (_syncTimer) { clearTimeout(_syncTimer); _syncTimer = null; }
         
         const globalIndicator = document.getElementById('global-sync-indicator');
-
-// 🌟 关键修复：只要还有排队的任务，或者还有即将触发的定时器，坚决不能变绿！
-if (_pendingSync || _syncTimer) {
-    _pendingSync = false;
-    if (globalIndicator) {
-        globalIndicator.style.background = 'rgba(59, 130, 246, 0.95)'; // 强行变蓝
-        document.getElementById('sync-indicator-text').innerText = '正在同步新操作...';
-    }
-    // 如果定时器还在，直接提前掐断并接力！
-    if (_syncTimer) { clearTimeout(_syncTimer); _syncTimer = null; }
-    setTimeout(() => { 
-        smartSync(false, true); 
-    }, 100); 
-} else {
-    // 彻底干净了，才变绿并隐藏
-    if (globalIndicator) {
-        document.getElementById('sync-indicator-text').innerText = '同步完成';
-        globalIndicator.style.background = 'rgba(34, 197, 94, 0.95)';
-        // 🌟 存下这个定时器，如果这1.5秒内又有新操作，它会被无情击杀
-        _syncIndicatorTimer = setTimeout(() => {
-            globalIndicator.style.display = 'none';
-            globalIndicator.style.background = 'rgba(59, 130, 246, 0.95)';
-            _syncIndicatorTimer = null;
-        }, 1500);
+        if (_pendingSync || _syncTimer) {
+            _pendingSync = false;
+            if (globalIndicator) { globalIndicator.style.background = 'rgba(59, 130, 246, 0.95)'; document.getElementById('sync-indicator-text').innerText = '正在同步新操作...'; }
+            if (_syncTimer) { clearTimeout(_syncTimer); _syncTimer = null; }
+            setTimeout(() => { smartSync(false, true); }, 100); 
+        } else {
+            if (globalIndicator) {
+                if (syncSuccess) {
+                    document.getElementById('sync-indicator-text').innerText = '同步完成';
+                    globalIndicator.style.background = 'rgba(34, 197, 94, 0.95)';
+                    _syncIndicatorTimer = setTimeout(() => { globalIndicator.style.display = 'none'; globalIndicator.style.background = 'rgba(59, 130, 246, 0.95)'; _syncIndicatorTimer = null; }, 1500);
+                } else {
+                    document.getElementById('sync-indicator-text').innerText = '同步失败';
+                    globalIndicator.style.background = 'rgba(239, 68, 68, 0.95)';
+                    _syncIndicatorTimer = setTimeout(() => { globalIndicator.style.display = 'none'; globalIndicator.style.background = 'rgba(59, 130, 246, 0.95)'; _syncIndicatorTimer = null; }, 2500);
+                }
+            }
+        }
     }
 }
+
+async function safeSwitchAccount(newToken, newRepo, newFilename) {
+    const oldToken = appData.settings.giteeToken || '';
+    const oldRepo = appData.settings.giteeRepo || '';
+    const oldFilename = appData.settings.giteeFilename || '';
+
+    if (newToken === oldToken && newRepo === oldRepo && newFilename === oldFilename) return 'same';
+    if (!newToken || !newRepo || !newFilename) {
+        showToast('配置不完整，请填完后再试'); return 'aborted';
     }
-} // 👈 补上这个 smartSync 的闭合大括号
+    if (_accountSwitching) return 'aborted';
+    _accountSwitching = true;
+
+    showToast('正在验证新账号...');
+    try {
+        const testRes = await fetch(`https://gitee.com/api/v5/repos/${newRepo}?access_token=${newToken}`);
+        if (!testRes.ok) throw new Error('Token无权访问或仓库不存在');
+    } catch (e) {
+        _accountSwitching = false;
+        showToast('❌ 验证失败：请检查Token权限或仓库名');
+        return 'aborted';
+    }
+
+    if (oldToken && oldRepo) {
+        showToast('正在备份旧账号，请稍候...');
+        try {
+            appData.settings.autoSync = true;
+            // 这里传入 false, true，触发静默同步，把数据先传回旧号
+            await smartSync(false, true);
+        } catch (e) {
+            console.warn('旧账号备份失败:', e);
+        }
+    }
+
+    appData.settings.giteeToken = newToken;
+    appData.settings.giteeRepo = newRepo;
+    appData.settings.giteeFilename = newFilename;
+    appData.settings.lastSyncTime = null;
+    appData.settings.lastSyncType = null;
+    
+    const accountKey = newFilename || '_default';
+    lastSyncData = JSON.stringify(appData);
+    localStorage.setItem('life_manager_last_sync_data_' + accountKey, lastSyncData);
+    
+    saveData(true);
+    _accountSwitching = false;
+    return 'switched';
+}
 
 function toggleAutoSync() {
     appData.settings.autoSync = !appData.settings.autoSync;
@@ -4027,75 +4061,7 @@ function toggleAutoSync() {
 }
 
 async function autoSaveGiteeConfig() {
-    const token = document.getElementById('gitee-token')?.value.trim() || '';
-    const repo = document.getElementById('gitee-repo')?.value.trim() || '';
-    const filename = document.getElementById('gitee-filename')?.value.trim() || '';
-    const oldFilename = appData.settings.giteeFilename || '';
-
-    if (oldFilename && filename && oldFilename !== filename) {
-        if (_accountSwitching) return;
-        _accountSwitching = true;
-if (_syncTimer) { clearTimeout(_syncTimer); _syncTimer = null; }
-
-        let backupOk = true;
-        let backupErr = '';
-        if (appData.settings.giteeToken && appData.settings.giteeRepo) {
-            try {
-                await smartSync(false, true);
-                await new Promise(r => setTimeout(r, 500));
-            } catch (e) {
-                backupOk = false;
-                backupErr = e.message || '未知错误';
-            }
-        }
-        if (!backupOk) {
-            _accountSwitching = false;
-            const ok = await showCustomConfirm(`⚠️ 检测到账号切换：\n「${oldFilename}」→「${filename}」\n\n尝试备份数据到旧账号失败：${backupErr}\n\n继续切换将清空本地数据，是否仍要继续？`);
-            if (!ok) {
-                const fnEl = document.getElementById('gitee-filename');
-                if (fnEl) fnEl.value = oldFilename;
-                return;
-            }
-            _accountSwitching = true;
-        }
-
-        appData.tasks = [];
-        appData.incomes = [];
-        appData.expenses = [];
-        appData.notes = [];
-        appData.menstrual = { records: [], loveDates: [] };
-        appData.settings.syncMenstrualFrom = '';
-        appData.settings.cloudConfigValid = false;
-        appData.settings.lastSyncTime = null;
-        appData.settings.lastSyncType = null;
-        taskStatsMonth = new Date();
-        currentMonth = new Date();
-        menstrualViewMonth = new Date();
-        appData.settings.giteeToken = token;
-        appData.settings.giteeRepo = repo;
-        appData.settings.giteeFilename = filename;
-        localStorage.removeItem(LOCAL_MENSTRUAL_BACKUP_KEY);
-        const accountKey = filename || '_default';
-        const savedSync = localStorage.getItem('life_manager_last_sync_data_' + accountKey);
-        lastSyncData = savedSync || JSON.stringify(appData);
-        saveData(true);
-        logOp('切换账号', `${oldFilename} → ${filename}`);
-        _accountSwitching = false;
-        switchTab('home');
-        showToast('已切换账号，正在同步新账号数据...');
-        if (token && repo) setTimeout(() => { smartSync(false, true); }, 800);
-        return;
-    }
-
-    appData.settings.giteeToken = token;
-    appData.settings.giteeRepo = repo;
-    appData.settings.giteeFilename = filename;
-    if (token && repo && !appData.settings.autoSync) {
-        appData.settings.autoSync = true;
-        const toggleEl = document.querySelector('.toggle');
-        if (toggleEl) toggleEl.classList.add('active');
-    }
-    saveData(true);
+    // 🌟 废弃原逻辑，改由 smartSync 触发
 }
 
 function showSyncProgress(show) {
@@ -4315,20 +4281,30 @@ function oneClickFill() {
     openModal(html);
 }
 
-function doOneClickFill() {
+async function doOneClickFill() {
     const raw = document.getElementById('fill-config-data').value.trim();
     if (!raw) { showToast('请粘贴配置数据'); return; }
     try {
         const config = JSON.parse(raw);
-        if (config.giteeToken !== undefined) appData.settings.giteeToken = config.giteeToken;
-        if (config.giteeRepo !== undefined) appData.settings.giteeRepo = config.giteeRepo;
-        if (config.giteeFilename !== undefined) appData.settings.giteeFilename = config.giteeFilename;
-        if (appData.settings.giteeToken && appData.settings.giteeRepo && !appData.settings.autoSync) appData.settings.autoSync = true;
-        saveData(true);
-        logOp('一键填充配置');
-        switchTab('home', true);
-        showToast('填充成功，自动同步默认开启');
-        closeModal();
+        if (config.giteeToken && config.giteeRepo) {
+            closeModal(); 
+            
+            // 🌟 核心修复：调用安全切号函数
+            const result = await safeSwitchAccount(config.giteeToken, config.giteeRepo, config.giteeFilename || 'life.json');
+            
+            if (result === 'switched') {
+                appData.settings.autoSync = true;
+                saveData(true);
+                switchTab('home', true);
+                showToast('配置已更新，正在上传数据...');
+                setTimeout(() => { smartSync(true, false); }, 300);
+            } else if (result === 'same') {
+                switchTab('home', true);
+                showToast('配置未改变');
+            }
+        } else {
+            showToast('配置数据不完整');
+        }
     } catch (e) { showToast('JSON格式错误'); }
 }
 
