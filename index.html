@@ -208,7 +208,7 @@ body.keyboard-open .fab-btn {
 
 /* 流水卡片（改成高级蓝） */
 .day-card { background: rgba(255, 255, 255, 0.9); border-radius: 12px; overflow: hidden; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); }
-.day-card-header { background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%); color: white; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; }
+.day-card-header { background: #F8FAFC; color: #64748B; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; }
 .day-card-body { padding: 0 12px; }
 .record-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px dashed rgba(0,0,0,0.1); cursor: pointer; transition: opacity 0.2s; }
 .record-row:last-child { border-bottom: none; }
@@ -1445,9 +1445,13 @@ function renderNoteView() {
     const filteredNotes = appData.notes.filter(n => n.type === noteType);
     let html = `
         <div class="space-y-3 mt-2">
-<div class="glass-card p-1.5 rounded-xl flex">
-    <button onclick="setNoteType('text')" class="flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${noteType === 'text' ? 'bg-blue-500 shadow-sm text-white' : 'text-gray-500'}">文字笔记</button>
-    <button onclick="setNoteType('password')" class="flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${noteType === 'password' ? 'bg-blue-500 shadow-sm text-white' : 'text-gray-500'}">密码记录</button>
+<div class="glass-card p-1 flex gap-1 rounded-2xl">
+    <button onclick="setNoteType('text')" class="flex-1 py-2 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1 ${noteType === 'text' ? 'bg-gradient-to-b from-blue-500 to-blue-600 shadow-sm text-white' : 'text-gray-500'}">
+        <i data-lucide="pen-line" class="w-3.5 h-3.5"></i>文字笔记
+    </button>
+    <button onclick="setNoteType('password')" class="flex-1 py-2 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1 ${noteType === 'password' ? 'bg-gradient-to-b from-blue-500 to-blue-600 shadow-sm text-white' : 'text-gray-500'}">
+        <i data-lucide="key-round" class="w-3.5 h-3.5"></i>密码记录
+    </button>
 </div>
             <div class="space-y-2">
                 ${filteredNotes.length > 0 ? filteredNotes.map(note => {
@@ -1527,30 +1531,32 @@ function showNoteDetail(noteId) {
     if (isPassword && !notePasswordsMap.has(noteId)) notePasswordsMap.set(noteId, note.password || '');
     let contentHtml = '';
     if (isPassword) {
-        const account = note.account || '';
-        contentHtml = `
-            <div class="space-y-2">
-                ${account ? `
-                <div class="glass-card p-3 rounded-xl">
-                    <p class="text-xs text-gray-500 mb-1">账号</p>
-                    <div class="flex justify-between items-center">
-                        <span class="font-mono text-sm break-all">${escapeHtml(account)}</span>
-                        <button onclick="copyToClipboard('${escapeHtml(account)}')" class="pwd-action-btn"><i data-lucide="copy" class="w-3.5 h-3.5"></i> 复制</button>
-                    </div>
-                </div>` : ''}
-                <div class="glass-card p-3 rounded-xl">
-                    <p class="text-xs text-gray-500 mb-1">密码</p>
-                    <div class="flex items-start gap-2">
-                        <span id="pwd-display-${note.id}" class="font-mono text-sm tracking-wider flex-1 break-all whitespace-normal min-w-0" style="word-break: break-all;">••••••</span>
-                        <div class="flex gap-1 flex-shrink-0">
-                            <button onclick="togglePasswordDisplaySafe('${note.id}')" class="pwd-action-btn"><i data-lucide="eye" class="w-3.5 h-3.5"></i> 显示</button>
-                            <button onclick="copyPassword('${note.id}')" class="pwd-action-btn"><i data-lucide="copy" class="w-3.5 h-3.5"></i> 复制</button>
-                        </div>
+    const account = note.account || '';
+    const actionBtnClass = "flex items-center gap-0.5 px-2 py-1 rounded-lg bg-gray-50 text-gray-500 text-[10px] font-medium active:scale-95 transition-transform flex-shrink-0 whitespace-nowrap";
+    const primaryBtnClass = "flex items-center gap-0.5 px-2 py-1 rounded-lg bg-blue-50 text-blue-600 text-[10px] font-semibold active:scale-95 transition-transform flex-shrink-0 whitespace-nowrap";
+    contentHtml = `
+        <div class="space-y-2">
+            ${account ? `
+            <div class="glass-card p-3 rounded-xl">
+                <p class="text-xs text-gray-500 mb-1">账号</p>
+                <div class="flex justify-between items-center gap-2">
+                    <span class="font-mono text-sm break-all flex-1 min-w-0">${escapeHtml(account)}</span>
+                    <button onclick="copyToClipboard('${escapeHtml(account)}')" class="${actionBtnClass}"><i data-lucide="copy" class="w-3 h-3"></i>复制</button>
+                </div>
+            </div>` : ''}
+            <div class="glass-card p-3 rounded-xl">
+                <p class="text-xs text-gray-500 mb-1">密码</p>
+                <div class="flex items-start gap-2">
+                    <span id="pwd-display-${note.id}" class="font-mono text-sm tracking-wider flex-1 break-all whitespace-normal min-w-0" style="word-break: break-all;">••••••</span>
+                    <div class="flex gap-1 flex-shrink-0">
+                        <button onclick="togglePasswordDisplaySafe('${note.id}')" class="${actionBtnClass}"><i data-lucide="eye" class="w-3 h-3"></i>显示</button>
+                        <button onclick="copyPassword('${note.id}')" class="${primaryBtnClass}"><i data-lucide="copy" class="w-3 h-3"></i>复制</button>
                     </div>
                 </div>
             </div>
-        `;
-    } else {
+        </div>
+    `;
+} else {
         contentHtml = `<div class="glass-card p-3 rounded-xl max-h-60 overflow-y-auto"><p class="text-gray-700 text-sm whitespace-pre-wrap break-words">${escapeHtml(note.content || '')}</p></div>`;
     }
 const html = `
@@ -2475,32 +2481,50 @@ function changeMenstrualMonth(delta) {
 }
 
 // ==================== 全新记账模块 ====================
+function renderSubCategories() {
+    const wrap = document.getElementById('sub-category-wrap');
+    const list = document.getElementById('sub-category-list');
+    if (!wrap || !list) return;
+
+    const subs = SUBCATEGORY_MAP[_selectedCategory];
+    if (!subs || subs.length === 0) {
+        wrap.style.display = 'none';
+        return;
+    }
+    
+    wrap.style.display = 'block';
+    // 🌟 样式变浅：未选中是透明灰字，选中是极浅的淡蓝底
+    list.innerHTML = subs.map(sub => `
+        <div onclick="selectSubCategory(this, '${sub}')" 
+             class="flex-shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-medium border transition-all active:scale-95 cursor-pointer ${_selectedSubCategory === sub ? 'bg-blue-50 text-blue-500 border-blue-200' : 'bg-transparent text-gray-400 border-gray-200'}">
+             ${sub}
+        </div>
+    `).join('');
+}
 
 function selectCapsule(el, val, type) {
     if (type === 'category') {
         _selectedCategory = val;
-        // 把同级别的其他按钮变灰
-        el.parentElement.querySelectorAll('.bg-blue-500').forEach(node => {
-            node.classList.remove('bg-blue-500', 'text-white', 'shadow-sm', 'border-blue-500');
-            node.classList.add('bg-gray-50', 'text-gray-600', 'border-gray-200');
-        });
-        // 把当前点的变蓝
-        el.classList.remove('bg-gray-50', 'text-gray-600', 'border-gray-200');
-        el.classList.add('bg-blue-500', 'text-white', 'shadow-sm', 'border-blue-500');
+        _selectedSubCategory = ''; // 切大类清空子类
+        showAddBillModal(null, true); // 传入 true，触发静默刷新
     } else if (type === 'pay') {
-        // 支付方式可取消选中
-        const wasActive = _selectedPayMethod === val;
-        _selectedPayMethod = wasActive ? '' : val;
-        
-        el.parentElement.querySelectorAll('.bg-blue-500').forEach(node => {
-            node.classList.remove('bg-blue-500', 'text-white', 'shadow-sm', 'border-blue-500');
-            node.classList.add('bg-gray-50', 'text-gray-600', 'border-gray-200');
-        });
-        
-        if (!wasActive) {
-            el.classList.remove('bg-gray-50', 'text-gray-600', 'border-gray-200');
-            el.classList.add('bg-blue-500', 'text-white', 'shadow-sm', 'border-blue-500');
-        }
+        _selectedPayMethod = (_selectedPayMethod === val) ? '' : val;
+        showAddBillModal(null, true); // 传入 true，触发静默刷新
+    }
+}
+
+function selectSubCategory(el, val) {
+    const wasActive = _selectedSubCategory === val;
+    _selectedSubCategory = wasActive ? '' : val; // 可以取消选中
+    
+    el.parentElement.querySelectorAll('div').forEach(node => {
+        node.classList.remove('bg-blue-100', 'text-blue-600', 'border-blue-200');
+        node.classList.add('bg-gray-50', 'text-gray-500', 'border-gray-200');
+    });
+    
+    if (!wasActive) {
+        el.classList.remove('bg-gray-50', 'text-gray-500', 'border-gray-200');
+        el.classList.add('bg-blue-100', 'text-blue-600', 'border-blue-200');
     }
 }
 
@@ -2510,26 +2534,46 @@ function showMoreOptions(type) {
     const title = document.getElementById('more-title');
     
     let items = [];
-    let selectedVal = '';
+let selectedVal = '';
+
+// 🌟 统一动态控制高度：内容少，统一自适应贴底
+if (type === 'category') {
+    title.innerText = '全部分类';
+    items = EXPENSE_CATEGORIES.slice(5); 
+    selectedVal = _selectedCategory;
+} else {
+    title.innerText = '全部支付方式';
+    items = PAY_METHODS.slice(5);
+    selectedVal = _selectedPayMethod;
+}
+
+// 无论分类还是支付方式，都使用自适应高度，贴着底部
+layer.style.top = 'auto'; 
+layer.style.bottom = '0';
+layer.style.height = 'auto';
+grid.style.maxHeight = 'none';
+
+    // 按用户的点击频次自动排序 (仅对分类有效)
     if (type === 'category') {
-        title.innerText = '全部分类';
-        items = EXPENSE_CATEGORIES.slice(5); // 前5个在常用里了
-        selectedVal = _selectedCategory;
-    } else {
-        title.innerText = '全部支付方式';
-        items = PAY_METHODS.slice(5);
-        selectedVal = _selectedPayMethod;
+        if (!appData.settings.categoryStats) appData.settings.categoryStats = {};
+        const stats = appData.settings.categoryStats;
+        items.sort((a, b) => {
+            const countA = stats[a.name] || 0;
+            const countB = stats[b.name] || 0;
+            return countB - countA; 
+        });
     }
 
+    // 渲染列表
     grid.innerHTML = items.map(item => {
         const val = item.name || item;
-        const icon = item.icon ? `<span class="text-lg mb-1">${item.icon}</span>` : ``;
+        const icon = item.icon ? `<span class="text-base mb-0.5">${item.icon}</span>` : ``;
         const isActive = selectedVal === val;
         const activeClass = isActive ? 'bg-blue-50 border-blue-500 text-blue-600' : 'bg-white border-gray-200 text-gray-600';
         return `
-            <div onclick="selectFromMore('${val}', '${type}')" class="flex flex-col items-center justify-center p-2 rounded-xl border transition-all ${activeClass}">
+            <div onclick="selectFromMore('${val}', '${type}')" class="flex flex-col items-center justify-center py-1.5 px-1 rounded-lg border transition-all ${activeClass} active:scale-95">
                 ${icon}
-                <span class="text-[10px] font-medium truncate w-full text-center">${val}</span>
+                <span class="text-[10px] font-medium truncate w-full text-center scale-90">${val}</span>
             </div>
         `;
     }).join('');
@@ -2541,11 +2585,18 @@ function showMoreOptions(type) {
 function selectFromMore(val, type) {
     if (type === 'category') {
         _selectedCategory = val;
+        _selectedSubCategory = ''; // 🌟 核心修复：清空残留的子类
+        
+        // 记录频次
+        if (!appData.settings.categoryStats) appData.settings.categoryStats = {};
+        appData.settings.categoryStats[val] = (appData.settings.categoryStats[val] || 0) + 1;
+        saveData(); 
     } else if (type === 'pay') {
         _selectedPayMethod = (_selectedPayMethod === val) ? '' : val;
     }
+    
     document.getElementById('more-options-layer').style.display = 'none';
-showAddBillModal(null, true); // 传入 true，只刷新界面
+    showAddBillModal(null, true); // 🌟 重新渲染，让更多按钮恢复原样
 }
 
 function updateBillDate(val) {
@@ -2560,7 +2611,7 @@ function updateBillDate(val) {
     const display = document.getElementById('date-display-text');
     if (display) display.textContent = val.replace(/-/g, '/');
 }
-
+let _filterCategory = null; // 🌟 当前筛选的分类（null 表示未筛选）
 let currentBillWeek = 1; 
 let _currentBillDate = ''; 
 let _currentIncomeType = 'expense'; // 默认支出
@@ -2570,17 +2621,32 @@ let _selectedPayMethod = ''; // 🌟 当前选中的支付方式（默认不选�
 
 // 🌟 分类与支付方式的字典库
 const EXPENSE_CATEGORIES = [
-    { name: '餐饮', icon: '🍜' }, 
-    { name: '日用', icon: '🧻' }, // 🌟 新增的日用，放在购物前面
-    { name: '购物', icon: '🛍️' }, { name: '交通', icon: '🚗' }, 
-    { name: '娱乐', icon: '🎬' }, { name: '医疗', icon: '💊' }, { name: '通讯', icon: '📱' }, 
-    { name: '宠物', icon: '🐶' }, { name: '人情', icon: '🧧' }, { name: '学习', icon: '📚' }, 
-    { name: '居家', icon: '🏠' }, { name: '美容', icon: '💅' }, { name: '数码', icon: '💻' }, 
-    { name: '旅行', icon: '✈️' }, { name: '运动', icon: '⚽' }, { name: '其他', icon: '⭕' }
+    { name: '餐饮', icon: '🍜' }, { name: '日用', icon: '🧻' }, { name: '购物', icon: '🛍️' }, 
+    { name: '交通', icon: '🚗' }, { name: '居住', icon: '🏠' }, { name: '娱乐', icon: '🎬' }, 
+    { name: '医疗', icon: '💊' }, { name: '人情', icon: '🧧' }, { name: '学习', icon: '📚' }, 
+    { name: '通讯', icon: '📱' }, { name: '宠物', icon: '🐶' }, { name: '烟酒', icon: '🚬' },
+    { name: '理财', icon: '📈' }, { name: '其他', icon: '⭕' }
 ];
 const PAY_METHODS = ['微信', '支付宝', '花呗', '信用卡', '现金', '抖音月付', '京东白条', '美团月付'];
 
-function openCenterModal(html, isNarrow = false, skipIcons = false) {
+const SUBCATEGORY_MAP = {
+    '餐饮': ['早餐', '午餐', '晚餐', '外卖', '零食', '买菜', '夜宵'],
+    '日用': ['纸巾', '洗护', '清洁', '杂物'],
+    '购物': ['服饰', '数码', '美妆', '家具', '网购'],
+    '交通': ['打车', '公交地铁', '加油', '停车', '过路费'],
+    '居住': ['房租', '水电', '燃气', '物业', '维修'],
+    '娱乐': ['电影', '游戏', '旅游', 'KTV', '会员'],
+    '医疗': ['门诊', '买药', '体检', '牙科'],
+    '人情': ['红包', '请客', '送礼'],
+    '学习': ['买书', '网课', '文具', '考试'],
+    '通讯': ['话费', '宽带', '流量'],
+    '宠物': ['猫粮', '狗粮', '疫苗', '洗澡'],
+    '烟酒': ['香烟', '白酒', '啤酒', '红酒'],
+    '理财': ['基金', '股票', '保险']
+};
+let _selectedSubCategory = ''; // 🌟 记录选中的子标签
+
+function openCenterModal(html, isNarrow = false, skipIcons = false, onRendered = null) {
     const content = document.querySelector('.center-modal-content');
     if (isNarrow) {
         content.style.width = '65%';
@@ -2590,14 +2656,16 @@ function openCenterModal(html, isNarrow = false, skipIcons = false) {
         content.style.maxWidth = '280px';
     }
     
-    // 1. 先让弹窗容器显示出来，并开始播放弹出动画
     document.getElementById('center-modal-overlay').classList.add('active');
     
-    // 2. 告诉浏览器：等这一帧动画忙完了，下一帧再把内容塞进去
     requestAnimationFrame(() => {
         document.getElementById('center-modal-body').innerHTML = html;
         if (!skipIcons) {
             lucide.createIcons();
+        }
+        // 🌟 渲染完成后，如果有回调函数，就执行它
+        if (onRendered) {
+            onRendered();
         }
     });
 }
@@ -2624,20 +2692,30 @@ function renderBillView() {
     const endDay = currentBillWeek === 5 ? daysInMonth : currentBillWeek * 7;
     
     const recordsInWeek = {};
-    appData.incomes.filter(i => i.date.startsWith(monthStr)).forEach(i => {
-        const d = parseInt(i.date.split('-')[2]);
-        if (d >= startDay && d <= endDay) {
-            if (!recordsInWeek[i.date]) recordsInWeek[i.date] = { in: [], out: [] };
-            recordsInWeek[i.date].in.push(i);
-        }
-    });
-    appData.expenses.filter(e => e.date.startsWith(monthStr)).forEach(e => {
-        const d = parseInt(e.date.split('-')[2]);
-        if (d >= startDay && d <= endDay) {
-            if (!recordsInWeek[e.date]) recordsInWeek[e.date] = { in: [], out: [] };
-            recordsInWeek[e.date].out.push(e);
-        }
-    });
+
+// 🌟 核心：如果有筛选，就不看周，直接扫描全月；否则只看当前周
+appData.incomes.filter(i => i.date.startsWith(monthStr)).forEach(i => {
+    const d = parseInt(i.date.split('-')[2]);
+    const inRange = _filterCategory ? true : (d >= startDay && d <= endDay);
+    // 筛选判断
+    const isMatch = _filterCategory ? (i.category === _filterCategory) : true;
+    
+    if (inRange && isMatch) {
+        if (!recordsInWeek[i.date]) recordsInWeek[i.date] = { in: [], out: [] };
+        recordsInWeek[i.date].in.push(i);
+    }
+});
+
+appData.expenses.filter(e => e.date.startsWith(monthStr)).forEach(e => {
+    const d = parseInt(e.date.split('-')[2]);
+    const inRange = _filterCategory ? true : (d >= startDay && d <= endDay);
+    const isMatch = _filterCategory ? (e.category === _filterCategory) : true;
+    
+    if (inRange && isMatch) {
+        if (!recordsInWeek[e.date]) recordsInWeek[e.date] = { in: [], out: [] };
+        recordsInWeek[e.date].out.push(e);
+    }
+});
 
     const sortedDates = Object.keys(recordsInWeek).sort((a,b) => b.localeCompare(a)); 
 
@@ -2658,14 +2736,15 @@ function renderBillView() {
     return timeB - timeA;
 });
             
-            return `
-                <div class="day-card">
-                    <div class="day-card-header">
-                        <span class="font-semibold text-xs">${dateObj.getMonth()+1}月${dateObj.getDate()}日 ${weekStr}</span>
-                        <div class="text-[10px] opacity-90">
-    ${dayIn > 0 ? `<span class="text-green-200">收 ${formatAmount(dayIn)}</span>` : ''}
-    ${dayIn > 0 && dayOut > 0 ? ' / ' : ''}
-    ${dayOut > 0 ? `<span class="text-red-200">支 ${formatAmount(dayOut)}</span>` : ''}
+const isToday = dateStr === formatDateLocal(new Date());   // 👈 新增这一行
+return `
+    <div class="day-card">
+        <div class="day-card-header" style="background: #F8FAFC; color: #64748B; border-bottom: 1px solid rgba(0,0,0,0.03);">
+            <span class="font-bold text-[11px] ${isToday ? 'text-blue-500' : ''}">${dateObj.getMonth()+1}月${dateObj.getDate()}日 ${weekStr}</span>
+                        <div class="text-[10px]">
+    ${dayIn > 0 ? `<span class="text-green-500 font-bold">收 ${formatAmount(dayIn)}</span>` : ''}
+    ${dayIn > 0 && dayOut > 0 ? ' <span class="text-gray-300">/</span> ' : ''}
+    ${dayOut > 0 ? `<span class="text-red-500 font-bold">支 ${formatAmount(dayOut)}</span>` : ''}
 </div>
                     </div>
                     <div class="day-card-body">
@@ -2705,10 +2784,10 @@ if (r.isIncome) {
     }
 }
 
-                            return `
-                            <div class="record-row" onclick="showRecordActions('${r.id}', ${r.isIncome})">
-                                <div class="flex items-center gap-3 flex-1 min-w-0">
-                                    <span class="text-[24px] leading-none flex-shrink-0">${icon}</span>
+          return `
+<div class="record-row" onclick="showRecordActions('${r.id}', ${r.isIncome})">
+    <div class="flex items-center gap-3 flex-1 min-w-0">
+        <span class="text-[24px] leading-none flex-shrink-0">${icon}</span>
                                     ${hasNote ? `
                                     <div class="min-w-0">
                                         <p class="text-[13px] text-black font-medium truncate">${typeName}</p>
@@ -2736,45 +2815,68 @@ if (r.isIncome) {
         <div class="space-y-4 mt-2 pb-6">
             <div class="overview-card">
                 <div class="overview-header relative">
-                    <button onclick="changeBillMonth(-1)" class="absolute left-2 top-1/2 -translate-y-1/2 p-2 text-white/80 active:scale-75 transition-transform"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
-<p class="text-xs opacity-90 mb-1">${year}年${month+1}月结余</p>
+    <!-- 🌟 背景光晕装饰 -->
+    <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
+    <div class="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full blur-xl -ml-8 -mb-8 pointer-events-none"></div>
+
+    <button onclick="changeBillMonth(-1)" class="absolute left-2 top-1/2 -translate-y-1/2 p-2 text-white/80 active:scale-75 transition-transform z-10"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+
+    <p class="text-xs opacity-90 mb-1 mt-1">${year}年${month+1}月结余</p>
 <div class="flex justify-center mt-1">
     <div class="relative inline-flex items-center">
-        <!-- 数字部分：绝对居中，不受任何符号干扰 -->
         <span class="text-4xl font-bold leading-none">${formatAmount(Math.abs(balance)).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}</span>
-        
-        <!-- 左侧符号区 -->
         <div class="absolute right-full top-0 bottom-0 pr-1 flex items-center">
-            <!-- ￥号：放在最前面，变小，依然偏上 -->
             <span class="text-sm font-bold opacity-90 mr-1" style="transform: translateY(-9px);">¥</span>
-            
-            <!-- 负号：排在后面，垂直居中 -->
             ${balance < 0 ? '<span class="text-3xl font-bold leading-none mr-0.5">-</span>' : ''}
         </div>
     </div>
 </div>
-                    <button onclick="changeBillMonth(1)" class="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-white/80 active:scale-75 transition-transform"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
+                    <button onclick="changeBillMonth(1)" class="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-white/80 active:scale-75 transition-transform z-10"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
                 </div>
-                <div class="overview-body">
-                    <div class="flex-1 border-r border-gray-200 text-center">
-                        <p class="text-[12px] text-gray-500 mb-0.5">总收入</p>
-                        <p class="text-sm font-bold text-gray-800">+¥${formatAmount(totalIn)}</p>
-                    </div>
-                    <div class="flex-1 text-center">
-                        <p class="text-[12px] text-gray-500 mb-0.5">总支出</p>
-                        <p class="text-sm font-bold text-red-500">-¥${formatAmount(totalOut)}</p>
-                    </div>
-                </div>
-            </div>
+                        <div class="overview-body pb-3 pt-3">
+        <div class="flex-1 border-r border-gray-100 text-center">
+            <p class="text-[11px] text-gray-400 mb-1">总收入</p>
+            <p class="text-[13px] font-bold text-gray-700">+¥${formatAmount(totalIn)}</p>
+        </div>
+        <div class="flex-1 text-center">
+            <p class="text-[11px] text-gray-400 mb-1">总支出</p>
+            <p class="text-[13px] font-bold text-red-500">-¥${formatAmount(totalOut)}</p>
+        </div>
+    </div>
+    
+    <!-- 🌟 修改：把统计按钮做成胶囊卡片的感觉 -->
+    <div class="px-4 pb-3 bg-[#F9FAFB]">
+        <div onclick="showCategoryStatsModal()" class="bg-blue-50/80 rounded-xl py-2 text-center cursor-pointer active:scale-95 transition-all shadow-sm border border-blue-100/50">
+            <span class="text-xs font-bold text-blue-600 flex items-center justify-center gap-1.5">
+                <i data-lucide="pie-chart" class="w-3.5 h-3.5"></i> 本月分类统计
+            </span>
+        </div>
+    </div>
+</div>
+           
+             <!-- 🌟 筛选状态提示栏 -->
+${_filterCategory ? `
+<div class="flex justify-between items-center bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 animate-fade-in" style="margin-top: -8px; margin-bottom: -8px;">
+    <div class="flex items-center gap-2 text-blue-600 text-xs font-medium">
+        <i data-lucide="filter" class="w-3.5 h-3.5"></i>
+        <span>正在查看全月「${_filterCategory}」</span>
+    </div>
+    <button onclick="clearBillFilter()" class="text-gray-400 hover:text-red-500 p-1 bg-white rounded-md shadow-sm">
+        <i data-lucide="x" class="w-3.5 h-3.5"></i>
+    </button>
+</div>
+` : ''}
 
-            <div class="flex bg-white/60 p-1 rounded-xl shadow-sm border border-white/50">
-                ${[1,2,3,4,5].map(w => {
-                    if (w === 5 && daysInMonth <= 28) return ''; 
-                    const sDay = (w-1)*7 + 1;
-                    const eDay = w === 5 ? daysInMonth : w*7;
-                    return `<button onclick="switchBillWeek(${w})" class="flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${currentBillWeek === w ? 'bg-blue-500 text-white shadow' : 'text-gray-500'}">${sDay}-${eDay}</button>`;
-                }).join('')}
-            </div>
+${!_filterCategory ? `
+<div class="flex bg-gray-200/60 p-0.5 rounded-xl" style="margin-top: -8px; margin-bottom: -8px;">
+    ${[1,2,3,4,5].map(w => {
+        if (w === 5 && daysInMonth <= 28) return ''; 
+        const sDay = (w-1)*7 + 1;
+        const eDay = w === 5 ? daysInMonth : w*7;
+        return `<button onclick="switchBillWeek(${w})" class="flex-1 py-1 text-[11px] rounded-lg transition-all ${currentBillWeek === w ? 'bg-white text-gray-800 font-bold shadow-sm' : 'text-gray-400 font-medium'}">${sDay}-${eDay}</button>`;
+    }).join('')}
+</div>
+` : ''}
 
             <div class="bill-list-container space-y-3">
                 ${listHtml}
@@ -2783,15 +2885,94 @@ if (r.isIncome) {
     `;
 }
 
+// ==================== 分类筛选与统计 ====================
+async function showCategoryStatsModal() {
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth();
+    const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+
+    // 计算本月每个分类的总和
+    const categorySums = {};
+    appData.expenses.filter(e => e.date.startsWith(monthStr)).forEach(e => {
+        categorySums[e.category] = (categorySums[e.category] || 0) + e.amount;
+    });
+
+    // 转换成数组并降序排列
+    const statsArray = Object.keys(categorySums).map(cat => ({
+        name: cat,
+        amount: categorySums[cat],
+        icon: EXPENSE_CATEGORIES.find(c => c.name === cat)?.icon || '⭕'
+    })).sort((a, b) => b.amount - a.amount);
+
+    if (statsArray.length === 0) {
+        showToast('本月暂无支出记录');
+        return;
+    }
+
+    const totalAmount = statsArray.reduce((sum, item) => sum + item.amount, 0);
+
+    // 生成列表 HTML
+    const listHtml = statsArray.map(item => {
+        const percent = ((item.amount / totalAmount) * 100).toFixed(1);
+        return `
+            <div onclick="applyBillFilter('${item.name}')" class="flex items-center justify-between p-3 bg-gray-50 rounded-xl mb-2 active:scale-95 transition-transform cursor-pointer">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center text-lg">${item.icon}</div>
+                    <div>
+                        <p class="text-sm font-bold text-gray-800">${item.name}</p>
+                        <p class="text-[10px] text-gray-400">占比 ${percent}%</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <p class="text-sm font-bold text-gray-800">¥${formatAmount(item.amount)}</p>
+                    <p class="text-[10px] text-blue-500 font-medium">点击查看账单 ❯</p>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    const html = `
+        <div class="flex flex-col max-h-[70vh]">
+            <div class="flex justify-between items-center mb-3">
+                <div>
+                    <h3 class="text-[15px] font-bold text-gray-800">本月分类统计</h3>
+                    <p class="text-[10px] text-gray-400 mt-0.5">总支出 ¥${formatAmount(totalAmount)}</p>
+                </div>
+                <button onclick="closeCenterModal()" class="p-1.5 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            
+            <div class="overflow-y-auto pr-1 pb-2" style="scrollbar-width: none;">
+                ${listHtml}
+            </div>
+        </div>
+    `;
+    
+    openCenterModal(html);
+}
+
+function applyBillFilter(category) {
+    _filterCategory = category;
+    closeCenterModal();
+    // 记录一下当前选中的筛选，并刷新页面
+    switchTab('bill', true);
+    showToast(`已筛选「${category}」`);
+}
+
+function clearBillFilter() {
+    _filterCategory = null;
+    switchTab('bill', true);
+    showToast('已清除筛选');
+}
+
 function changeBillMonth(delta) {
     const now = new Date();
     const targetMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + delta, 1);
-    // 如果目标月份大于当前自然月，拦截
     if (targetMonth.getFullYear() > now.getFullYear() || 
        (targetMonth.getFullYear() === now.getFullYear() && targetMonth.getMonth() > now.getMonth())) {
         showToast('暂不支持查看未来的账单哦');
         return;
     }
+    _filterCategory = null; // 🌟 切换月份时，清空筛选状态
     currentMonth = targetMonth;
     switchTab('bill', true);
 }
@@ -2948,13 +3129,13 @@ if (isRefreshing) {
 }
 
     const typeTabHtml = `
-        <div class="flex bg-gray-100 p-1 rounded-xl mb-3">
-            <button id="type-btn-expense" onclick="switchRecordType('expense')" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${_currentIncomeType === 'expense' ? 'bg-blue-500 shadow-sm text-white' : 'text-gray-500'}">支出</button>
-            <button id="type-btn-daily" onclick="switchRecordType('daily')" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${_currentIncomeType === 'daily' ? 'bg-blue-500 shadow-sm text-white' : 'text-gray-500'}">日结</button>
-            <button id="type-btn-monthly" onclick="switchRecordType('monthly')" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${_currentIncomeType === 'monthly' ? 'bg-blue-500 shadow-sm text-white' : 'text-gray-500'}">月薪</button>
-            <button id="type-btn-work" onclick="switchRecordType('work')" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${_currentIncomeType === 'work' ? 'bg-blue-500 shadow-sm text-white' : 'text-gray-500'}">工时</button>
-        </div>
-    `;
+    <div class="flex bg-gray-100/70 p-0.5 rounded-xl mb-3">
+        <button id="type-btn-expense" onclick="switchRecordType('expense')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${_currentIncomeType === 'expense' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-400 font-medium'}">支出</button>
+        <button id="type-btn-daily" onclick="switchRecordType('daily')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${_currentIncomeType === 'daily' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-400 font-medium'}">日结</button>
+        <button id="type-btn-monthly" onclick="switchRecordType('monthly')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${_currentIncomeType === 'monthly' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-400 font-medium'}">月薪</button>
+        <button id="type-btn-work" onclick="switchRecordType('work')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${_currentIncomeType === 'work' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-400 font-medium'}">工时</button>
+    </div>
+`;
 
 // 生成横滑分类的 HTML
 const buildCapsuleList = (items, selectedVal, type, showMore = true) => {
@@ -2964,15 +3145,24 @@ const buildCapsuleList = (items, selectedVal, type, showMore = true) => {
             const val = item.name || item;
             const icon = item.icon ? `${item.icon} ` : '';
             const isActive = selectedVal === val;
-            const activeClass = isActive ? 'bg-blue-500 text-white shadow-sm border-blue-500' : 'bg-gray-50 text-gray-600 border-gray-200';
-            return `<div onclick="selectCapsule(this, '${val}', '${type}')" class="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all active:scale-95 cursor-pointer ${activeClass}">${icon}${val}</div>`;
+            const activeClass = isActive ? 'bg-blue-500 text-white shadow-sm border-blue-500 font-bold' : 'bg-white text-gray-500 border-gray-200 font-medium';
+return `<div onclick="selectCapsule(this, '${val}', '${type}')" class="flex-shrink-0 px-3 py-1.5 rounded-full text-xs border transition-all active:scale-95 cursor-pointer ${activeClass}">${icon}${val}</div>`;
         }).join('');
         
 // 更多按钮
 if (showMore) {
     const isMoreActive = items.slice(5).some(i => (i.name || i) === selectedVal);
-    const moreActiveClass = isMoreActive ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-500 border-gray-200';
-    html += `<div onclick="showMoreOptions('${type}')" class="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all active:scale-95 cursor-pointer flex items-center gap-1 ${moreActiveClass}">••• 更多</div>`;
+    const moreActiveClass = isMoreActive ? 'bg-blue-500 text-white border-blue-500 font-bold' : 'bg-white text-gray-500 border-gray-200 font-medium';
+    
+    // 🌟 核心：如果选中项不在前 5 个里，就把文字直接变成选中的项，而不是显示“更多”
+    let btnText = '••• 更多';
+    if (isMoreActive) {
+        const currentItem = items.find(i => (i.name || i) === selectedVal);
+        // 如果选中的是带 icon 的分类，就把 icon 也带上
+        btnText = currentItem.icon ? `${currentItem.icon} ${selectedVal}` : selectedVal; 
+    }
+    
+    html += `<div onclick="showMoreOptions('${type}')" class="flex-shrink-0 px-3 py-1.5 rounded-full text-xs border transition-all active:scale-95 cursor-pointer flex items-center gap-1 ${moreActiveClass}">${btnText}</div>`;
 }
         
         return `<div class="flex gap-2 overflow-x-auto pb-1" style="scrollbar-width: none; -webkit-overflow-scrolling: touch;">${html}</div>`;
@@ -2980,43 +3170,51 @@ if (showMore) {
 
     const html = `
         <div class="flex flex-col relative">
-            <div class="flex flex-col items-center mb-3">
-                <label class="date-picker-btn" onclick="openCustomDatePicker()">
-    <span id="date-display-text" class="text-xs">${_currentBillDate.replace(/-/g, '/')}</span>
-</label>
-            </div>
+<div class="flex justify-center mb-2">
+    <label class="flex items-center gap-1 cursor-pointer text-gray-400 hover:text-gray-600 transition-colors" onclick="openCustomDatePicker()">
+        <span id="date-display-text" class="text-xs font-medium tracking-wide">${_currentBillDate.replace(/-/g, '/')}</span>
+    </label>
+</div>
             
             ${typeTabHtml}
 
-            <div class="flex flex-col mb-2 min-h-[140px]">
+            <div class="flex flex-col mb-1 min-h-[110px]">
                 <!-- 正常金额框 -->
-                <div id="normal-amount-wrap" style="display: ${_currentIncomeType === 'work' ? 'none' : 'block'};">
-                    <input type="number" id="bill-amount" class="finance-input" placeholder="输入金额" value="${amountVal}" style="font-size: 15px; padding: 8px;">
-                </div>
-                
-                <!-- 工时专属框 -->
-                <div id="work-inputs-wrap" style="display: ${_currentIncomeType === 'work' ? 'block' : 'none'};" class="space-y-2">
-                    <input type="number" id="work-hours" class="finance-input" placeholder="时长(小时)" step="0.5" value="${hoursVal}">
-                    <input type="number" id="work-price" class="finance-input" placeholder="时薪(元)" value="${priceVal}">
-                </div>
+<div id="normal-amount-wrap" style="display: ${_currentIncomeType === 'work' ? 'none' : 'block'};">
+    <input type="tel" id="bill-amount" class="finance-input" placeholder="输入金额" value="${amountVal}" style="font-size: 15px; padding: 8px;">
+</div>
 
-                <!-- 保险 / 个税社保 -->
-                <div id="insurance-wrap" style="display: ${_currentIncomeType === 'daily' || _currentIncomeType === 'work' ? 'block' : 'none'};" class="mt-2">
-                    <input type="number" id="insurance-amount" class="finance-input" placeholder="扣除保险 (可选)" value="${insuranceVal}" style="border: 1px dashed #FCA5A5; background: #FEF2F2; color: #EF4444;">
-                </div>
-                <div id="tax-social-wrap" style="display: ${_currentIncomeType === 'monthly' ? 'flex' : 'none'};" class="flex gap-2 mt-2">
-                    <input type="number" id="tax-amount" class="finance-input" placeholder="扣除个税(可选)" value="${taxVal}" style="border: 1px dashed #FCD34D; background: #FFFBEB; color: #D97706;">
-                    <input type="number" id="social-amount" class="finance-input" placeholder="扣除社保(可选)" value="${socialVal}" style="border: 1px dashed #FCD34D; background: #FFFBEB; color: #D97706;">
-                </div>
+<!-- 工时专属框 -->
+<div id="work-inputs-wrap" style="display: ${_currentIncomeType === 'work' ? 'block' : 'none'};" class="space-y-2">
+    <input type="tel" id="work-hours" class="finance-input" placeholder="时长(小时)" value="${hoursVal}">
+    <input type="tel" id="work-price" class="finance-input" placeholder="时薪(元)" value="${priceVal}">
+</div>
+
+<!-- 保险 / 个税社保 -->
+<div id="insurance-wrap" style="display: ${_currentIncomeType === 'daily' || _currentIncomeType === 'work' ? 'block' : 'none'};" class="mt-2">
+    <input type="tel" id="insurance-amount" class="finance-input" placeholder="扣除保险 (可选)" value="${insuranceVal}" style="border: 1px dashed #FCA5A5; background: #FEF2F2; color: #EF4444;">
+</div>
+<div id="tax-social-wrap" style="display: ${_currentIncomeType === 'monthly' ? 'flex' : 'none'};" class="flex gap-2 mt-2">
+    <input type="tel" id="tax-amount" class="finance-input" placeholder="扣除个税(可选)" value="${taxVal}" style="border: 1px dashed #FCD34D; background: #FFFBEB; color: #D97706;">
+    <input type="tel" id="social-amount" class="finance-input" placeholder="扣除社保(可选)" value="${socialVal}" style="border: 1px dashed #FCD34D; background: #FFFBEB; color: #D97706;">
+</div>
                 
-                <!-- 🌟 新的支出分类与支付方式 -->
-                <div id="expense-category-wrap" style="display: ${_currentIncomeType === 'expense' ? 'block' : 'none'};" class="mt-3">
-                    <p class="text-[11px] text-gray-500 mb-1.5">支出分类</p>
-                    ${buildCapsuleList(EXPENSE_CATEGORIES, _selectedCategory, 'category')}
-                    
-                    <p class="text-[11px] text-gray-500 mb-1.5 mt-3">支付方式 <span class="text-gray-400 font-normal">(可选)</span></p>
-                    ${buildCapsuleList(PAY_METHODS, _selectedPayMethod, 'pay')}
-                </div>
+                                <!-- 🌟 新的支出分类与支付方式 -->
+                <div id="expense-category-wrap" style="display: ${_currentIncomeType === 'expense' ? 'block' : 'none'};" class="mt-2">
+    <p class="text-[11px] text-gray-500 mb-1">支出分类</p>
+    ${buildCapsuleList(EXPENSE_CATEGORIES, _selectedCategory, 'category')}
+    
+    <!-- 🌟 细分标签区（动态显示） -->
+    <div id="sub-category-wrap" style="display: ${SUBCATEGORY_MAP[_selectedCategory] ? 'block' : 'none'};">
+        <p class="text-[11px] text-gray-500 mb-1 mt-1.5">细分标签 <span class="text-gray-400 font-normal">(可选)</span></p>
+        <div id="sub-category-list" class="flex gap-2 overflow-x-auto pb-1" style="scrollbar-width: none; -webkit-overflow-scrolling: touch;">
+            <!-- JS 会动态填入 -->
+        </div>
+    </div>
+
+    <p class="text-[11px] text-gray-500 mb-1 mt-2">支付方式 <span class="text-gray-400 font-normal">(可选)</span></p>
+    ${buildCapsuleList(PAY_METHODS, _selectedPayMethod, 'pay')}
+</div>
 
                 <!-- 🌟 收入入账账户 -->
 <div id="income-account-wrap" style="display: ${_currentIncomeType !== 'expense' ? 'block' : 'none'};" class="mt-3">
@@ -3024,13 +3222,13 @@ if (showMore) {
     ${buildCapsuleList(['微信', '支付宝', '银行卡', '现金'], _selectedPayMethod, 'pay', false)}
 </div>
 
-                <input type="text" id="bill-note" class="finance-input mt-3" placeholder="添加备注..." value="${noteVal}" style="font-size: 12px; font-weight: normal; text-align: left; padding: 8px;">
+                <input type="text" id="bill-note" class="finance-input mt-2" placeholder="添加备注..." value="${noteVal}" style="font-size: 12px; font-weight: normal; text-align: left; padding: 6px 8px;" onfocus="if(this.value===''){this.value=' ';this.value='';}">
             </div>
             
             <button onclick="saveBillRecord()" class="w-full py-2.5 rounded-xl font-bold text-white text-sm shadow-md active:scale-95 transition-transform mt-auto" style="background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);">保存</button>
 
             <!-- 更多选项的覆盖层（浅灰翻页效果） -->
-<div id="more-options-layer" class="absolute inset-0 bg-gray-50 border border-gray-100 z-50 flex-col p-3 transition-all" style="display: none; border-radius: 24px;">
+<div id="more-options-layer" class="absolute left-0 right-0 bottom-0 top-0 bg-gray-50 border border-gray-100 z-50 flex flex-col p-3 transition-all" style="display: none; border-radius: 24px;">
     <div class="flex justify-between items-center mb-3">
         <span class="text-[15px] font-bold text-gray-800" id="more-title">全部分类</span>
         <!-- 加一个浅色返回按钮 -->
@@ -3038,27 +3236,27 @@ if (showMore) {
     ‹ 返回
 </button>
     </div>
-    <!-- 改成 3 列，每个格子更大，文字不会截断 -->
-    <div class="grid grid-cols-3 gap-2 overflow-y-auto pb-2" id="more-options-grid">
-        <!-- 动态生成 -->
-    </div>
+    <!-- 🌟 改成 4 列小方块，限制高度 -->
+<div class="grid grid-cols-4 gap-1.5 overflow-y-auto pb-2 pr-1" id="more-options-grid" style="max-height: 260px; scrollbar-width: none;">
+    <!-- 动态生成 -->
+</div>
 </div>
         </div>
     `;
-    openCenterModal(html, false, true);
+        openCenterModal(html, false, true, () => {
+        // 🌟 此时 DOM 已经就绪，完美渲染子分类
+        renderSubCategories();
 
-    // 🌟 恢复滚动条：让选中的选项自动居中显示（瞬间归位）
-    if (isRefreshing) {
-        setTimeout(() => {
+        // 🌟 恢复滚动条：让选中的选项自动居中显示（瞬间归位）
+        if (isRefreshing) {
             document.querySelectorAll('.overflow-x-auto').forEach(container => {
-                const activeItem = container.querySelector('.bg-blue-500'); // 找到蓝色的选中项
+                const activeItem = container.querySelector('.bg-blue-500'); 
                 if (activeItem) {
-                    // 瞬间计算居中位置，绝不使用 smooth 动画
                     container.scrollLeft = activeItem.offsetLeft - (container.clientWidth / 2) + (activeItem.clientWidth / 2);
                 }
             });
-        }, 10); // 延迟 10ms，等 DOM 插入即可
-    }
+        }
+    });
 }
 function switchRecordType(type) {
     _currentIncomeType = type;
@@ -3100,7 +3298,10 @@ function saveBillRecord() {
 
     if (amount <= 0) { showToast('扣除后金额必须大于0'); return; }
 
-    const note = document.getElementById('bill-note').value;
+let note = document.getElementById('bill-note').value;
+if (isExpense && _selectedSubCategory) {
+    note = note ? `${_selectedSubCategory} · ${note}` : _selectedSubCategory;
+}
 const category = isExpense ? _selectedCategory : (_currentIncomeType === 'monthly' ? 'salary' : 'other');
 const payMethod = _selectedPayMethod || ''; // 🌟 获取支付方式
 
@@ -3255,7 +3456,7 @@ function renderMeView() {
                 </div>
             </div>
 
-            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v4.5.1</p></div>
+            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v4.6</p></div>
         </div>
     `;
     return html;
@@ -3273,7 +3474,7 @@ function showAbout() {
                     <i data-lucide="sparkles" class="w-8 h-8 text-white"></i>
                 </div>
                 <p class="text-lg font-bold text-gray-800">Life Manager</p>
-                <p class="text-xs text-gray-400 mt-1">v4.5.1</p>
+                <p class="text-xs text-gray-400 mt-1">v4.6</p>
             </div>
             <div class="glass-card rounded-2xl overflow-hidden mt-4" style="padding: 0;">
                 <div class="setting-item" onclick="openGithubRepo()" style="margin-bottom: 0; border-radius: 0;">
