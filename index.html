@@ -373,6 +373,20 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 
     <script>
         // ==================== 数据管理 ====================
+        // 🌟 新增：带超时的 fetch，防止网络卡死
+async function fetchWithTimeout(resource, options = {}) {
+    const { timeout = 8000 } = options;
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    try {
+        const response = await fetch(resource, { ...options, signal: controller.signal });
+        clearTimeout(id);
+        return response;
+    } catch (error) {
+        clearTimeout(id);
+        throw error;
+    }
+}
         const STORAGE_KEY = 'life_manager_data_v1';
         const SYNC_KEY = 'life_manager_last_sync';
         const LOCAL_MENSTRUAL_BACKUP_KEY = 'life_manager_local_menstrual_backup';
@@ -570,25 +584,35 @@ async function fetchRemoteMenstrual(showResult = false) {
 
     _isFetchingMenstrual = true; // 🌟 上锁
     try {
-        const getRes = await fetch(`https://gitee.com/api/v5/repos/${giteeRepo}/contents/${syncMenstrualFrom}?access_token=${giteeToken}`);
+        // 🌟 核心修复：去掉自动加后缀，填什么用什么
+        const getRes = await fetchWithTimeout(`https://gitee.com/api/v5/repos/${giteeRepo}/contents/${encodeURIComponent(syncMenstrualFrom)}?access_token=${giteeToken}`, { timeout: 8000 });
         if (getRes.ok) {
             const fileInfo = await getRes.json();
             let remoteData;
-            try { remoteData = await decryptData(fileInfo.content); } catch (err) { console.warn('对方文件解密失败:', err); if (showResult) showToast('无法读取 ' + syncMenstrualFrom + ' 的数据'); return; }
+            try { remoteData = await decryptData(fileInfo.content); } catch (err) { 
+                console.warn('对方文件解密失败:', err); 
+                if (showResult) showToast('无法读取 ' + syncMenstrualFrom + ' 的数据'); return; 
+            }
             if (remoteData && remoteData.menstrual) {
+                // 🌟 备份自己的数据
+                backupLocalMenstrualIfNeeded();
+                // 🌟 替换成对方的真实数据，供 UI 展示
                 appData.menstrual.records = (remoteData.menstrual.records || []).map(sanitizeMenstrualRecord).filter(Boolean);
                 appData.menstrual.loveDates = (remoteData.menstrual.loveDates || []).map(sanitizeLoveDate).filter(Boolean);
                 saveData(true);
                 if (currentTab === 'menstrual') refreshMenstrualView();
-                if (showResult) showToast('已更新对方经期数据');
-            } else { if (showResult) showToast('对方暂无经期数据'); }
-        } else if (getRes.status === 404) { if (showResult) showToast('未找到文件 ' + syncMenstrualFrom); }
-        else { const err = await getRes.json(); console.warn('拉取对方经期失败:', err); if (showResult) showToast('拉取失败：' + (err.message || '未知错误')); }
+                if (showResult) showToast('已更新共享经期数据');
+            } else { if (showResult) showToast('该文件内无经期数据'); }
+        } else if (getRes.status === 404) { 
+            if (showResult) showToast('未找到文件 ' + syncMenstrualFrom); 
+        } else { 
+            if (showResult) showToast('拉取失败，请检查Token权限'); 
+        }
     } catch (e) { 
         console.warn('拉取对方经期异常:', e); 
-        if (showResult) showToast('拉取失败：' + e.message); 
+        if (showResult) showToast('网络异常或请求超时'); 
     } finally {
-        _isFetchingMenstrual = false; // 🌟 无论成功还是失败，最后都解锁
+        _isFetchingMenstrual = false; // 🌟 解锁
     }
 }
 
@@ -3587,7 +3611,7 @@ function renderMeView() {
                 </div>
             </div>
 
-            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v4.6.4</p></div>
+            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v4.6.5</p></div>
         </div>
     `;
     return html;
@@ -3605,7 +3629,7 @@ function showAbout() {
                     <i data-lucide="sparkles" class="w-8 h-8 text-white"></i>
                 </div>
                 <p class="text-lg font-bold text-gray-800">Life Manager</p>
-                <p class="text-xs text-gray-400 mt-1">v4.6.4</p>
+                <p class="text-xs text-gray-400 mt-1">v4.6.5</p>
             </div>
             <div class="glass-card rounded-2xl overflow-hidden mt-4" style="padding: 0;">
                 <div class="setting-item" onclick="openGithubRepo()" style="margin-bottom: 0; border-radius: 0;">
@@ -3873,11 +3897,9 @@ async function smartSync(showResult = true, isAuto = false) {
         let fileSha = null;
         let fileExists = false;
         try {
-            // 🌟 核心修复：临时计算带后缀的文件名，不改输入框，只用于请求
-            let fetchFilename = giteeFilename;
-            if (fetchFilename && !fetchFilename.includes('.')) fetchFilename += '.json';
-
-            const getRes = await fetch(`https://gitee.com/api/v5/repos/${giteeRepo}/contents/${encodeURIComponent(fetchFilename)}?access_token=${giteeToken}`);
+            // 🌟 核心修复：去掉自动加后缀，填什么用什么
+            const fetchFilename = giteeFilename;
+            const getRes = await fetchWithTimeout(`https://gitee.com/api/v5/repos/${giteeRepo}/contents/${encodeURIComponent(fetchFilename)}?access_token=${giteeToken}`, { timeout: 8000 });
             if (getRes.ok) {
                 const fileInfo = await getRes.json();
                 if (fileInfo && fileInfo.sha && fileInfo.content) {
@@ -3903,6 +3925,18 @@ async function smartSync(showResult = true, isAuto = false) {
             tasks: d.tasks, incomes: d.incomes, expenses: d.expenses, notes: d.notes, menstrual: d.menstrual
         });
 
+        // 🌟 核心修复：同步准备阶段，剥离显示用的共享经期，拿出真实的本地经期数据
+        let syncLocalData = JSON.parse(JSON.stringify(appData));
+        if (syncMenstrualFrom) {
+            const backup = localStorage.getItem(LOCAL_MENSTRUAL_BACKUP_KEY);
+            if (backup) {
+                try {
+                    const bData = JSON.parse(backup);
+                    syncLocalData.menstrual = { records: bData.records || [], loveDates: bData.loveDates || [] };
+                } catch(e) {}
+            }
+        }
+
         if (fileExists && remoteData) {
             const deletedIdSet = new Set();
             if (lastSyncData) {
@@ -3913,31 +3947,27 @@ async function smartSync(showResult = true, isAuto = false) {
                         const currIds = new Set(curr.map(item => item.id).filter(id => id));
                         prevIds.forEach(id => { if (!currIds.has(id)) deletedIdSet.add(id); });
                     };
-                    compareArrays(previousData.tasks || [], appData.tasks || []);
-                    compareArrays(previousData.incomes || [], appData.incomes || []);
-                    compareArrays(previousData.expenses || [], appData.expenses || []);
-                    compareArrays(previousData.notes || [], appData.notes || []);
+                    compareArrays(previousData.tasks || [], syncLocalData.tasks || []);
+                    compareArrays(previousData.incomes || [], syncLocalData.incomes || []);
+                    compareArrays(previousData.expenses || [], syncLocalData.expenses || []);
+                    compareArrays(previousData.notes || [], syncLocalData.notes || []);
                     if (!syncMenstrualFrom) {
-                        compareArrays(previousData.menstrual?.records || [], appData.menstrual?.records || []);
-                        compareArrays(previousData.menstrual?.loveDates || [], appData.menstrual?.loveDates || []);
+                        compareArrays(previousData.menstrual?.records || [], syncLocalData.menstrual?.records || []);
+                        compareArrays(previousData.menstrual?.loveDates || [], syncLocalData.menstrual?.loveDates || []);
                     }
                 } catch(e) {}
             }
             const remoteStripBeforeMerge = _strip(remoteData);
-            const result = mergeAppData(appData, remoteData, deletedIdSet);
+            // 🌟 合并时使用纯净的数据
+            const result = mergeAppData(syncLocalData, remoteData, deletedIdSet);
             mergedData = result.merged;
-
-            if (syncMenstrualFrom) {
-                uploadData = { ...mergedData, menstrual: remoteData.menstrual || { records: [], loveDates: [] } };
-            } else {
-                uploadData = mergedData;
-            }
+            uploadData = mergedData;
 
             if (_strip(uploadData) === remoteStripBeforeMerge) {
                 if (!_pendingSync) {
-                    const localMenstrual = mergedData.menstrual;
+                    const currentDisplayMenstrual = appData.menstrual; 
                     appData = mergedData;
-                    appData.menstrual = localMenstrual;
+                    if (syncMenstrualFrom) appData.menstrual = currentDisplayMenstrual; // 恢复UI展示的对方数据
                     lastSyncData = JSON.stringify(appData);
                     saveLastSyncData();
                 }
@@ -3954,30 +3984,29 @@ async function smartSync(showResult = true, isAuto = false) {
                 return;
             }
         } else {
-            mergedData = appData;
-            uploadData = appData;
+            mergedData = syncLocalData;
+            uploadData = syncLocalData;
             if (showResult && !fileExists) showToast('云端无数据，创建初始备份');
         }
 
         const content = await encryptData(uploadData);
         const message = `智能合并同步 - ${new Date().toLocaleString()}`;
         
-        // 🌟 核心修复：上传时也临时补全后缀
-        let uploadFilename = giteeFilename;
-        if (uploadFilename && !uploadFilename.includes('.')) uploadFilename += '.json';
+        // 🌟 核心修复：上传时去掉加后缀逻辑
+        const uploadFilename = giteeFilename;
         const url = `https://gitee.com/api/v5/repos/${giteeRepo}/contents/${encodeURIComponent(uploadFilename)}`;
         
         const method = fileExists ? 'PUT' : 'POST';
         const body = { access_token: giteeToken, content, message };
         if (fileSha) body.sha = fileSha;
 
-        const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const response = await fetchWithTimeout(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), timeout: 10000 });
         
         if (response.ok) {
             if (!_pendingSync) {
-                const localMenstrual = mergedData.menstrual;
+                const currentDisplayMenstrual = appData.menstrual;
                 appData = mergedData;
-                appData.menstrual = localMenstrual;
+                if (syncMenstrualFrom) appData.menstrual = currentDisplayMenstrual; // 恢复UI展示的对方数据
                 lastSyncData = JSON.stringify(appData);
                 saveLastSyncData();
             }
@@ -4047,7 +4076,7 @@ async function safeSwitchAccount(newToken, newRepo, newFilename) {
 
     showToast('正在验证新账号...');
     try {
-        const testRes = await fetch(`https://gitee.com/api/v5/repos/${newRepo}?access_token=${newToken}`);
+        const testRes = await fetchWithTimeout(`https://gitee.com/api/v5/repos/${newRepo}?access_token=${newToken}`, { timeout: 5000 });
         if (!testRes.ok) throw new Error('Token无权访问或仓库不存在');
     } catch (e) {
         _accountSwitching = false;
@@ -4055,17 +4084,60 @@ async function safeSwitchAccount(newToken, newRepo, newFilename) {
         return 'aborted';
     }
 
+    // 🌟 核心：只要旧账号有配置，必须先完美备份，一旦失败立刻中断！
     if (oldToken && oldRepo) {
         showToast('正在备份旧账号，请稍候...');
         try {
             appData.settings.autoSync = true;
-            // 这里传入 false, true，触发静默同步，把数据先传回旧号
-            await smartSync(false, true);
+            
+            // 1. 准备纯净的本地数据
+            let syncLocalData = JSON.parse(JSON.stringify(appData));
+            if (appData.settings.syncMenstrualFrom) {
+                const backup = localStorage.getItem(LOCAL_MENSTRUAL_BACKUP_KEY);
+                if (backup) {
+                    try {
+                        const bData = JSON.parse(backup);
+                        syncLocalData.menstrual = { records: bData.records || [], loveDates: bData.loveDates || [] };
+                    } catch(e) {}
+                }
+            }
+            
+            const content = await encryptData(syncLocalData);
+            const url = `https://gitee.com/api/v5/repos/${oldRepo}/contents/${encodeURIComponent(oldFilename)}`;
+            
+            // 2. 获取旧文件的 SHA (如果旧文件不存在，404 是正常的)
+            let body = { access_token: oldToken, content, message: `自动备份 - ${new Date().toLocaleString()}` };
+            const getRes = await fetchWithTimeout(`https://gitee.com/api/v5/repos/${oldRepo}/contents/${encodeURIComponent(oldFilename)}?access_token=${oldToken}`, { timeout: 5000 });
+            
+            if (getRes.ok) {
+                const fileInfo = await getRes.json();
+                if (fileInfo && fileInfo.sha) body.sha = fileInfo.sha;
+            } else if (getRes.status !== 404) {
+                throw new Error('获取旧文件信息失败'); // 断网或旧Token失效
+            }
+            
+            // 3. 执行备份上传
+            const putRes = await fetchWithTimeout(url, { 
+                method: 'PUT', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify(body),
+                timeout: 8000
+            });
+
+            if (!putRes.ok) {
+                throw new Error('备份上传失败');
+            }
+            
         } catch (e) {
             console.warn('旧账号备份失败:', e);
+            _accountSwitching = false;
+            // 🌟 备份失败：中断操作，保留旧配置，提示用户
+            showToast('❌ 旧账号备份失败。若需强行切号，请先前往“设置”清除所有数据');
+            return 'aborted'; 
         }
     }
 
+    // 备份完美成功（或旧号本来就没配置），才开始替换新账号配置
     appData.settings.giteeToken = newToken;
     appData.settings.giteeRepo = newRepo;
     appData.settings.giteeFilename = newFilename;
