@@ -36,13 +36,13 @@
         html, body { margin: 0; padding: 0; }
         body { background: transparent; padding-top: env(safe-area-inset-top); font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'STHeiti', 'Segoe UI', sans-serif; color: #2D3748; min-height: 100vh; padding-bottom: 12px; overflow-x: hidden; }
      
-        .glass-card { background: rgba(255, 255, 255, 0.92); border: 1px solid rgba(255, 255, 255, 0.6); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04); }
-        .glass-nav { background: rgba(255, 255, 255, 0.65); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); border: 1px solid rgba(255, 255, 255, 0.35); box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.06); }
+        .glass-card { background: rgba(255, 255, 255, 0.92); border: 1px solid rgba(255, 255, 255, 0.6); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04); transform: translate3d(0, 0, 0); }
+        .glass-nav { background: rgba(255, 255, 255, 0.65); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); border: 1px solid rgba(255, 255, 255, 0.35); box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.06); }
         .nav-container { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); width: calc(100% - 28px); max-width: 380px; z-index: 100; }
         .nav-btn { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); padding: 8px 0; cursor: pointer; }
         .nav-btn:active { transform: scale(0.92); }
         .active-tab { background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%); color: white !important; box-shadow: 0 3px 12px rgba(59, 130, 246, 0.35); }
-        .page-content { animation: fadeIn 0.35s ease-out; }
+        .page-content { animation: fadeIn 0.35s ease-out; transform: translate3d(0, 0, 0); will-change: transform; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .fullscreen-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); z-index: 1000; display: flex; align-items: flex-end; justify-content: center; opacity: 0; visibility: hidden; transition: all 0.3s ease; }
         .fullscreen-modal.active { opacity: 1; visibility: visible; }
@@ -2713,7 +2713,8 @@ function updateBillDate(val) {
     const display = document.getElementById('date-display-text');
     if (display) display.textContent = val.replace(/-/g, '/');
 }
-let _filterCategory = null; // 🌟 当前筛选的分类（null 表示未筛选）
+let _filterCategory = null; // 当前筛选的分类（null 表示未筛选）
+let _filterPayMethod = null; // 🌟 新增：当前筛选的支付方式
 let currentBillWeek = 1; 
 let _currentBillDate = ''; 
 let _currentIncomeType = 'expense'; // 默认支出
@@ -2795,14 +2796,14 @@ function renderBillView() {
     
     const recordsInWeek = {};
 
-// 🌟 核心：如果有筛选，就不看周，直接扫描全月；否则只看当前周
+// 🌟 核心：如果有筛选，就不看周，直接扫描全月
 appData.incomes.filter(i => i.date.startsWith(monthStr)).forEach(i => {
     const d = parseInt(i.date.split('-')[2]);
-    const inRange = _filterCategory ? true : (d >= startDay && d <= endDay);
-    // 筛选判断
-    const isMatch = _filterCategory ? (i.category === _filterCategory) : true;
+    const inRange = (_filterCategory || _filterPayMethod) ? true : (d >= startDay && d <= endDay);
+    const isMatchCat = _filterCategory ? (i.category === _filterCategory) : true;
+    const isMatchPay = _filterPayMethod ? (i.payMethod === _filterPayMethod) : true;
     
-    if (inRange && isMatch) {
+    if (inRange && isMatchCat && isMatchPay) {
         if (!recordsInWeek[i.date]) recordsInWeek[i.date] = { in: [], out: [] };
         recordsInWeek[i.date].in.push(i);
     }
@@ -2810,10 +2811,11 @@ appData.incomes.filter(i => i.date.startsWith(monthStr)).forEach(i => {
 
 appData.expenses.filter(e => e.date.startsWith(monthStr)).forEach(e => {
     const d = parseInt(e.date.split('-')[2]);
-    const inRange = _filterCategory ? true : (d >= startDay && d <= endDay);
-    const isMatch = _filterCategory ? (e.category === _filterCategory) : true;
+    const inRange = (_filterCategory || _filterPayMethod) ? true : (d >= startDay && d <= endDay);
+    const isMatchCat = _filterCategory ? (e.category === _filterCategory) : true;
+    const isMatchPay = _filterPayMethod ? (e.payMethod === _filterPayMethod) : true;
     
-    if (inRange && isMatch) {
+    if (inRange && isMatchCat && isMatchPay) {
         if (!recordsInWeek[e.date]) recordsInWeek[e.date] = { in: [], out: [] };
         recordsInWeek[e.date].out.push(e);
     }
@@ -2946,22 +2948,27 @@ if (r.isIncome) {
         </div>
     </div>
     
-    <!-- 🌟 修改：把统计按钮做成胶囊卡片的感觉 -->
-    <div class="px-4 pb-3 bg-[#F9FAFB]">
-        <div onclick="showCategoryStatsModal()" class="bg-blue-50/80 rounded-xl py-2 text-center cursor-pointer active:scale-95 transition-all shadow-sm border border-blue-100/50">
+    <!-- 🌟 修改：把统计按钮做成两个并排的胶囊卡片 -->
+    <div class="px-4 pb-3 bg-[#F9FAFB] flex gap-2">
+        <div onclick="showStatsModal('category')" class="flex-1 bg-blue-50/80 rounded-xl py-2 text-center cursor-pointer active:scale-95 transition-all shadow-sm border border-blue-100/50">
             <span class="text-xs font-bold text-blue-600 flex items-center justify-center gap-1.5">
-                <i data-lucide="pie-chart" class="w-3.5 h-3.5"></i> 本月分类统计
+                <i data-lucide="pie-chart" class="w-3.5 h-3.5"></i> 分类统计
+            </span>
+        </div>
+        <div onclick="showStatsModal('payMethod')" class="flex-1 bg-orange-50/80 rounded-xl py-2 text-center cursor-pointer active:scale-95 transition-all shadow-sm border border-orange-100/50">
+            <span class="text-xs font-bold text-orange-600 flex items-center justify-center gap-1.5">
+                <i data-lucide="credit-card" class="w-3.5 h-3.5"></i> 支付统计
             </span>
         </div>
     </div>
 </div>
            
-             <!-- 🌟 筛选状态提示栏 -->
-${_filterCategory ? `
+<!-- 🌟 筛选状态提示栏 -->
+${(_filterCategory || _filterPayMethod) ? `
 <div class="flex justify-between items-center bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 animate-fade-in" style="margin-top: -8px; margin-bottom: -8px;">
     <div class="flex items-center gap-2 text-blue-600 text-xs font-medium">
         <i data-lucide="filter" class="w-3.5 h-3.5"></i>
-        <span>正在查看全月「${_filterCategory}」</span>
+        <span>正在查看全月「${_filterCategory ? _filterCategory : _filterPayMethod}」</span>
     </div>
     <button onclick="clearBillFilter()" class="text-gray-400 hover:text-red-500 p-1 bg-white rounded-md shadow-sm">
         <i data-lucide="x" class="w-3.5 h-3.5"></i>
@@ -2969,7 +2976,7 @@ ${_filterCategory ? `
 </div>
 ` : ''}
 
-${!_filterCategory ? `
+${!(_filterCategory || _filterPayMethod) ? `
 <div class="flex bg-gray-200/60 p-0.5 rounded-xl" style="margin-top: -8px; margin-bottom: -8px;">
     ${[1,2,3,4,5].map(w => {
         if (w === 5 && daysInMonth <= 28) return ''; 
@@ -2987,24 +2994,38 @@ ${!_filterCategory ? `
     `;
 }
 
-// ==================== 分类筛选与统计 ====================
-async function showCategoryStatsModal() {
+// ==================== 分类与支付方式统计 ====================
+async function showStatsModal(type = 'category') {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
     const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
 
-    // 计算本月每个分类的总和
-    const categorySums = {};
+    const statsMap = {};
     appData.expenses.filter(e => e.date.startsWith(monthStr)).forEach(e => {
-        categorySums[e.category] = (categorySums[e.category] || 0) + e.amount;
+        let key = '';
+        if (type === 'category') {
+            key = e.category || '其他';
+        } else {
+            key = e.payMethod || '未记录方式';
+        }
+        statsMap[key] = (statsMap[key] || 0) + e.amount;
     });
 
     // 转换成数组并降序排列
-    const statsArray = Object.keys(categorySums).map(cat => ({
-        name: cat,
-        amount: categorySums[cat],
-        icon: EXPENSE_CATEGORIES.find(c => c.name === cat)?.icon || '⭕'
-    })).sort((a, b) => b.amount - a.amount);
+    let statsArray = Object.keys(statsMap).map(key => {
+        let icon = '⭕';
+        if (type === 'category') {
+            icon = EXPENSE_CATEGORIES.find(c => c.name === key)?.icon || '⭕';
+        } else {
+            if (key === '微信') icon = '💬';
+            else if (key === '支付宝') icon = '💙';
+            else if (key === '花呗') icon = '🌸';
+            else if (key === '信用卡') icon = '💳';
+            else if (key === '现金') icon = '💵';
+            else if (key === '未记录方式') icon = '❓';
+        }
+        return { name: key, amount: statsMap[key], icon };
+    }).sort((a, b) => b.amount - a.amount);
 
     if (statsArray.length === 0) {
         showToast('本月暂无支出记录');
@@ -3012,12 +3033,12 @@ async function showCategoryStatsModal() {
     }
 
     const totalAmount = statsArray.reduce((sum, item) => sum + item.amount, 0);
+    const title = type === 'category' ? '本月分类统计' : '本月支付方式';
 
-    // 生成列表 HTML
     const listHtml = statsArray.map(item => {
         const percent = ((item.amount / totalAmount) * 100).toFixed(1);
         return `
-            <div onclick="applyBillFilter('${item.name}')" class="flex items-center justify-between p-3 bg-gray-50 rounded-xl mb-2 active:scale-95 transition-transform cursor-pointer">
+            <div onclick="applyBillFilter('${item.name}', '${type}')" class="flex items-center justify-between p-3 bg-gray-50 rounded-xl mb-2 active:scale-95 transition-transform cursor-pointer">
                 <div class="flex items-center gap-3">
                     <div class="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center text-lg">${item.icon}</div>
                     <div>
@@ -3037,7 +3058,7 @@ async function showCategoryStatsModal() {
         <div class="flex flex-col max-h-[70vh]">
             <div class="flex justify-between items-center mb-3">
                 <div>
-                    <h3 class="text-[15px] font-bold text-gray-800">本月分类统计</h3>
+                    <h3 class="text-[15px] font-bold text-gray-800">${title}</h3>
                     <p class="text-[10px] text-gray-400 mt-0.5">总支出 ¥${formatAmount(totalAmount)}</p>
                 </div>
                 <button onclick="closeCenterModal()" class="p-1.5 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
@@ -3052,16 +3073,22 @@ async function showCategoryStatsModal() {
     openCenterModal(html);
 }
 
-function applyBillFilter(category) {
-    _filterCategory = category;
+function applyBillFilter(target, type) {
+    if (type === 'category') {
+        _filterCategory = target;
+        _filterPayMethod = null;
+    } else {
+        _filterPayMethod = target;
+        _filterCategory = null;
+    }
     closeCenterModal();
-    // 记录一下当前选中的筛选，并刷新页面
     switchTab('bill', true);
-    showToast(`已筛选「${category}」`);
+    showToast(`已筛选「${target}」`);
 }
 
 function clearBillFilter() {
     _filterCategory = null;
+    _filterPayMethod = null;
     switchTab('bill', true);
     showToast('已清除筛选');
 }
@@ -3074,10 +3101,12 @@ function changeBillMonth(delta) {
         showToast('暂不支持查看未来的账单哦');
         return;
     }
-    _filterCategory = null; // 🌟 切换月份时，清空筛选状态
+    _filterCategory = null; // 切换月份时，清空分类筛选
+    _filterPayMethod = null; // 清空支付方式筛选
     currentMonth = targetMonth;
     switchTab('bill', true);
 }
+
 
 function switchBillWeek(w) {
     if (currentBillWeek === w) return;
@@ -3558,7 +3587,7 @@ function renderMeView() {
                 </div>
             </div>
 
-            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v4.6.3</p></div>
+            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v4.6.4</p></div>
         </div>
     `;
     return html;
@@ -3576,7 +3605,7 @@ function showAbout() {
                     <i data-lucide="sparkles" class="w-8 h-8 text-white"></i>
                 </div>
                 <p class="text-lg font-bold text-gray-800">Life Manager</p>
-                <p class="text-xs text-gray-400 mt-1">v4.6.3</p>
+                <p class="text-xs text-gray-400 mt-1">v4.6.4</p>
             </div>
             <div class="glass-card rounded-2xl overflow-hidden mt-4" style="padding: 0;">
                 <div class="setting-item" onclick="openGithubRepo()" style="margin-bottom: 0; border-radius: 0;">

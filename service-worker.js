@@ -1,4 +1,4 @@
-const CACHE_NAME = 'life-manager-v4.6.3';
+const CACHE_NAME = 'life-manager-v4.6.4';
 // 如果有本地化的 lucide.js、css 等，可以加在这里
 const ASSETS_TO_CACHE = [
   './',
