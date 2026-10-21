@@ -570,10 +570,20 @@ function normalizeFilename(name) {
             localStorage.setItem(LOCAL_MENSTRUAL_BACKUP_KEY, JSON.stringify({ records, loveDates }));
         }
         function restoreLocalMenstrual() {
-            const backup = localStorage.getItem(LOCAL_MENSTRUAL_BACKUP_KEY);
-            if (backup) { try { const data = JSON.parse(backup); appData.menstrual.records = data.records || []; appData.menstrual.loveDates = data.loveDates || []; return true; } catch (e) { return false; } }
-            return false;
-        }
+    const backup = localStorage.getItem(LOCAL_MENSTRUAL_BACKUP_KEY);
+    if (backup) { 
+        try { 
+            const data = JSON.parse(backup); 
+            appData.menstrual.records = data.records || []; 
+            appData.menstrual.loveDates = data.loveDates || []; 
+            return true; 
+        } catch (e) { return false; } 
+    }
+    // 🌟 核心修复：如果保险箱是空的，说明自己原本就没数据，强行清空当前的展示数据
+    appData.menstrual.records = [];
+    appData.menstrual.loveDates = [];
+    return false;
+}
 
 let _isFetchingMenstrual = false; // 🌟 新增：防连点锁
 
@@ -2546,12 +2556,13 @@ else if (isSafe) classes += ' safe';             // 兜底绿色
                 <div>
                     <p class="text-xs font-bold text-gray-800 mb-1">今日健康贴士</p>
                     <p class="text-[11px] text-gray-500 leading-relaxed">
-                        ${status.type === 'menstruating' ? '正处于经期，身体较虚弱。建议多喝温水，注意腹部保暖，避免剧烈运动和生冷食物。' : 
-                          status.type === 'ovulation' ? '排卵期分泌物增多，注意个人卫生。如果有备孕计划，这几天是黄金期哦。' : 
-                          status.type === 'luteal' ? '黄体期受激素影响，容易情绪波动或长痘。建议少吃甜食，多做瑜伽等舒缓拉伸。' : 
-                          status.type === 'follicular' ? '大姨妈刚走，雌激素回升，精力最充沛。适合安排高强度的锻炼或攻克难题。' : 
-                          '还没有记录足够的数据，点击日历记录你的周期，我会给你更贴心的建议哦。'}
-                    </p>
+    ${status.type === 'menstruating' ? '正处于经期，身体较虚弱。建议多喝温水，注意腹部保暖，避免剧烈运动和生冷食物。' : 
+      status.type === 'ovulation' ? '排卵期分泌物增多，注意个人卫生。如果有备孕计划，这几天是黄金期哦。' : 
+      status.type === 'luteal' ? '黄体期受激素影响，容易情绪波动或长痘。建议少吃甜食，多做瑜伽等舒缓拉伸。' : 
+      status.type === 'follicular' ? '大姨妈刚走，雌激素回升，精力最充沛。适合安排高强度的锻炼或攻克难题。' : 
+      status.type === 'safe' ? '目前处于安全期。但安全期并非绝对安全，请注意个人防护。' : // 🌟 新增安全期判断
+      '还没有记录足够的数据，点击日历记录你的周期，我会给你更贴心的建议哦。'}
+</p>
                 </div>
             </div>
 
@@ -3601,17 +3612,26 @@ function renderMeView() {
             </div>
 
             <div class="pt-2">
-                <div class="text-center text-[10px] text-gray-400 mb-2">危险操作</div>
-                <div class="setting-item" style="border: 1px solid rgba(239,68,68,0.3);" onclick="clearAllData()">
-                    <div class="flex items-center gap-2.5">
-                        <i data-lucide="alert-triangle" class="w-4 h-4 text-red-500"></i>
-                        <span class="text-sm font-medium text-red-500">清除所有数据</span>
-                    </div>
-                    <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-red-400"></i>
-                </div>
-            </div>
+    <div class="text-center text-[10px] text-gray-400 mb-2">危险操作</div>
+    <!-- 🌟 新增：选择性清除 -->
+    <div class="setting-item" style="border: 1px solid rgba(239,68,68,0.2); margin-bottom: 8px;" onclick="showSelectiveClearModal()">
+        <div class="flex items-center gap-2.5">
+            <i data-lucide="eraser" class="w-4 h-4 text-orange-500"></i>
+            <span class="text-sm font-medium text-orange-500">选择性清除数据</span>
+        </div>
+        <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-orange-400"></i>
+    </div>
+    <!-- 原来的全部清除 -->
+    <div class="setting-item" style="border: 1px solid rgba(239,68,68,0.4);" onclick="clearAllData()">
+        <div class="flex items-center gap-2.5">
+            <i data-lucide="alert-triangle" class="w-4 h-4 text-red-500"></i>
+            <span class="text-sm font-medium text-red-500">清除所有数据</span>
+        </div>
+        <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-red-400"></i>
+    </div>
+</div>
 
-            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v4.6.5</p></div>
+            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v4.6.6</p></div>
         </div>
     `;
     return html;
@@ -3629,7 +3649,7 @@ function showAbout() {
                     <i data-lucide="sparkles" class="w-8 h-8 text-white"></i>
                 </div>
                 <p class="text-lg font-bold text-gray-800">Life Manager</p>
-                <p class="text-xs text-gray-400 mt-1">v4.6.5</p>
+                <p class="text-xs text-gray-400 mt-1">v4.6.6</p>
             </div>
             <div class="glass-card rounded-2xl overflow-hidden mt-4" style="padding: 0;">
                 <div class="setting-item" onclick="openGithubRepo()" style="margin-bottom: 0; border-radius: 0;">
@@ -3864,6 +3884,22 @@ async function smartSync(showResult = true, isAuto = false) {
         const inputToken = document.getElementById('gitee-token')?.value.trim();
         const inputRepo = document.getElementById('gitee-repo')?.value.trim();
         const inputFilename = document.getElementById('gitee-filename')?.value.trim();
+
+        // 🌟 修复：强制读取最新经期配置，防止事件触发时间差
+        const inputMenstrualFrom = document.getElementById('sync-menstrual-from')?.value;
+        if (inputMenstrualFrom !== undefined) {
+            const trimmed = normalizeFilename(inputMenstrualFrom);
+            if (trimmed !== appData.settings.syncMenstrualFrom) {
+                if (trimmed) {
+                    if (!appData.settings.syncMenstrualFrom) backupLocalMenstrualIfNeeded();
+                    appData.settings.syncMenstrualFrom = trimmed;
+                } else {
+                    appData.settings.syncMenstrualFrom = '';
+                    restoreLocalMenstrual();
+                }
+                saveData(true);
+            }
+        }
 
         if (inputToken !== undefined) {
             const result = await safeSwitchAccount(inputToken, inputRepo, inputFilename);
@@ -4409,6 +4445,119 @@ async function doOneClickFill() {
     } catch (e) { showToast('JSON格式错误'); }
 }
 
+// ==================== 选择性清除数据 ====================
+function showSelectiveClearModal() {
+    const taskCount = appData.tasks.length;
+    const billCount = appData.incomes.length + appData.expenses.length;
+    const noteCount = appData.notes.length;
+    const menstrualCount = appData.menstrual.records.length + appData.menstrual.loveDates.length;
+
+    const html = `
+        <div class="p-5">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-base font-bold text-gray-800">选择性清除</h3>
+                <button onclick="closeModal()" class="p-2 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            <p class="text-xs text-gray-500 mb-4">勾选需要清空的模块，清空后云端数据也会同步删除：</p>
+            
+            <div class="space-y-2 mb-5">
+                <label class="flex items-center justify-between p-3 bg-gray-50 rounded-xl cursor-pointer">
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="clear-tasks" class="w-4 h-4">
+                        <span class="text-sm font-medium text-gray-700">打卡习惯</span>
+                    </div>
+                    <span class="text-xs text-gray-400">${taskCount} 项</span>
+                </label>
+                
+                <label class="flex items-center justify-between p-3 bg-gray-50 rounded-xl cursor-pointer">
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="clear-bills" class="w-4 h-4">
+                        <span class="text-sm font-medium text-gray-700">记账记录</span>
+                    </div>
+                    <span class="text-xs text-gray-400">${billCount} 条</span>
+                </label>
+
+                <label class="flex items-center justify-between p-3 bg-gray-50 rounded-xl cursor-pointer">
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="clear-notes" class="w-4 h-4">
+                        <span class="text-sm font-medium text-gray-700">记事与密码</span>
+                    </div>
+                    <span class="text-xs text-gray-400">${noteCount} 条</span>
+                </label>
+
+                <label class="flex items-center justify-between p-3 bg-gray-50 rounded-xl cursor-pointer">
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="clear-menstrual" class="w-4 h-4">
+                        <span class="text-sm font-medium text-gray-700">经期数据</span>
+                    </div>
+                    <span class="text-xs text-gray-400">${menstrualCount} 条</span>
+                </label>
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="closeModal()" class="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 font-medium text-sm">取消</button>
+                <button onclick="executeSelectiveClear()" class="flex-1 py-3 rounded-xl bg-red-500 text-white font-medium text-sm">确认清空</button>
+            </div>
+        </div>
+    `;
+    openModal(html);
+}
+
+async function executeSelectiveClear() {
+    const clearTasks = document.getElementById('clear-tasks')?.checked;
+    const clearBills = document.getElementById('clear-bills')?.checked;
+    const clearNotes = document.getElementById('clear-notes')?.checked;
+    const clearMenstrual = document.getElementById('clear-menstrual')?.checked;
+
+    if (!clearTasks && !clearBills && !clearNotes && !clearMenstrual) {
+        showToast('请至少勾选一个模块');
+        return;
+    }
+
+    const confirmed = await showCustomConfirm('确定要清空选中的模块吗？\n云端数据也将同步删除，且不可恢复！');
+    if (!confirmed) return;
+
+    let details = [];
+
+    if (clearTasks) {
+        const count = appData.tasks.length;
+        appData.tasks = [];
+        details.push(`打卡 ${count} 项`);
+    }
+    if (clearBills) {
+        const count = appData.incomes.length + appData.expenses.length;
+        appData.incomes = [];
+        appData.expenses = [];
+        details.push(`记账 ${count} 条`);
+    }
+    if (clearNotes) {
+        const count = appData.notes.length;
+        appData.notes = [];
+        details.push(`记事 ${count} 条`);
+    }
+    if (clearMenstrual) {
+        const count = appData.menstrual.records.length + appData.menstrual.loveDates.length;
+        appData.menstrual = { records: [], loveDates: [] };
+        
+        // 🌟 关键：清空经期时，必须解除只读模式，并清理保险箱
+        appData.settings.syncMenstrualFrom = '';
+        localStorage.removeItem(LOCAL_MENSTRUAL_BACKUP_KEY);
+        
+        details.push(`经期 ${count} 条`);
+    }
+
+    // 数据变动后，立刻保存并触发自动同步
+    // saveData 内部会自动判断删除的数据并通知云端
+    saveData();
+    logOp('选择性清除', details.join(' / '));
+    
+    showToast('清空成功，云端正在同步');
+    closeModal();
+    
+    // 强制刷新当前所在的页面（如果在设置页，刷新设置页的统计数据）
+    switchTab(currentTab, true);
+}
+
 async function clearAllData() {
     const taskCount = appData.tasks.length;
     const incomeCount = appData.incomes.length;
@@ -4649,9 +4798,31 @@ setTimeout(() => { getEncryptionKey().catch(() => {}); }, 500);
 // 注册 PWA Service Worker
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('service-worker.js')
-            .then(reg => console.log('PWA 已注册!'))
-            .catch(err => console.log('PWA 注册失败!', err));
+        navigator.serviceWorker.register('service-worker.js').then(reg => {
+            console.log('PWA 已注册!');
+            
+            // 🌟 核心：监听 SW 更新
+            reg.addEventListener('updatefound', () => {
+                const newWorker = reg.installing;
+                newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                        // 发现新版本！直接强制刷新当前页面
+                        showToast('发现新版本，正在更新...');
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    }
+                });
+            });
+        }).catch(err => console.log('PWA 注册失败!', err));
+
+        // 🌟 核心：每次打开 App 时，主动去检查一次更新
+        let refreshing;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (refreshing) return;
+            refreshing = true;
+            window.location.reload();
+        });
     });
 }
     </script>
