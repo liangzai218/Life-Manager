@@ -563,12 +563,12 @@ function normalizeFilename(name) {
         }
 
         function backupLocalMenstrualIfNeeded() {
-            if (localStorage.getItem(LOCAL_MENSTRUAL_BACKUP_KEY)) return;
-            const records = appData.menstrual.records || [];
-            const loveDates = appData.menstrual.loveDates || [];
-            if (records.length === 0 && loveDates.length === 0) return;
-            localStorage.setItem(LOCAL_MENSTRUAL_BACKUP_KEY, JSON.stringify({ records, loveDates }));
-        }
+    if (localStorage.getItem(LOCAL_MENSTRUAL_BACKUP_KEY)) return;
+    const records = appData.menstrual.records || [];
+    const loveDates = appData.menstrual.loveDates || [];
+    // 🌟 核心修复：删掉了 return，哪怕自己是空数据，也要存一个空备份，否则上传时无法剥离假数据
+    localStorage.setItem(LOCAL_MENSTRUAL_BACKUP_KEY, JSON.stringify({ records, loveDates }));
+}
         function restoreLocalMenstrual() {
     const backup = localStorage.getItem(LOCAL_MENSTRUAL_BACKUP_KEY);
     if (backup) { 
@@ -3631,7 +3631,7 @@ function renderMeView() {
     </div>
 </div>
 
-            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v4.6.6</p></div>
+            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v4.6.7</p></div>
         </div>
     `;
     return html;
@@ -3649,7 +3649,7 @@ function showAbout() {
                     <i data-lucide="sparkles" class="w-8 h-8 text-white"></i>
                 </div>
                 <p class="text-lg font-bold text-gray-800">Life Manager</p>
-                <p class="text-xs text-gray-400 mt-1">v4.6.6</p>
+                <p class="text-xs text-gray-400 mt-1">v4.6.7</p>
             </div>
             <div class="glass-card rounded-2xl overflow-hidden mt-4" style="padding: 0;">
                 <div class="setting-item" onclick="openGithubRepo()" style="margin-bottom: 0; border-radius: 0;">
@@ -3961,17 +3961,20 @@ async function smartSync(showResult = true, isAuto = false) {
             tasks: d.tasks, incomes: d.incomes, expenses: d.expenses, notes: d.notes, menstrual: d.menstrual
         });
 
-        // 🌟 核心修复：同步准备阶段，剥离显示用的共享经期，拿出真实的本地经期数据
-        let syncLocalData = JSON.parse(JSON.stringify(appData));
-        if (syncMenstrualFrom) {
-            const backup = localStorage.getItem(LOCAL_MENSTRUAL_BACKUP_KEY);
-            if (backup) {
-                try {
-                    const bData = JSON.parse(backup);
-                    syncLocalData.menstrual = { records: bData.records || [], loveDates: bData.loveDates || [] };
-                } catch(e) {}
-            }
-        }
+// 🌟 核心修复：同步准备阶段，剥离显示用的共享经期，拿出真实的本地经期数据
+let syncLocalData = JSON.parse(JSON.stringify(appData));
+if (syncMenstrualFrom) {
+    const backup = localStorage.getItem(LOCAL_MENSTRUAL_BACKUP_KEY);
+    if (backup) {
+        try {
+            const bData = JSON.parse(backup);
+            syncLocalData.menstrual = { records: bData.records || [], loveDates: bData.loveDates || [] };
+        } catch(e) {}
+    } else {
+        // 🌟 兜底：没有备份说明自己是空的，强行清空防止污染
+        syncLocalData.menstrual = { records: [], loveDates: [] };
+    }
+}
 
         if (fileExists && remoteData) {
             const deletedIdSet = new Set();
@@ -4126,17 +4129,20 @@ async function safeSwitchAccount(newToken, newRepo, newFilename) {
         try {
             appData.settings.autoSync = true;
             
-            // 1. 准备纯净的本地数据
-            let syncLocalData = JSON.parse(JSON.stringify(appData));
-            if (appData.settings.syncMenstrualFrom) {
-                const backup = localStorage.getItem(LOCAL_MENSTRUAL_BACKUP_KEY);
-                if (backup) {
-                    try {
-                        const bData = JSON.parse(backup);
-                        syncLocalData.menstrual = { records: bData.records || [], loveDates: bData.loveDates || [] };
-                    } catch(e) {}
-                }
-            }
+   // 1. 准备纯净的本地数据
+let syncLocalData = JSON.parse(JSON.stringify(appData));
+if (appData.settings.syncMenstrualFrom) {
+    const backup = localStorage.getItem(LOCAL_MENSTRUAL_BACKUP_KEY);
+    if (backup) {
+        try {
+            const bData = JSON.parse(backup);
+            syncLocalData.menstrual = { records: bData.records || [], loveDates: bData.loveDates || [] };
+        } catch(e) {}
+    } else {
+        // 🌟 兜底：没有备份说明自己是空的，强行清空防止污染
+        syncLocalData.menstrual = { records: [], loveDates: [] };
+    }
+}
             
             const content = await encryptData(syncLocalData);
             const url = `https://gitee.com/api/v5/repos/${oldRepo}/contents/${encodeURIComponent(oldFilename)}`;
