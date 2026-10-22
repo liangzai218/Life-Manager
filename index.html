@@ -3631,7 +3631,7 @@ function renderMeView() {
     </div>
 </div>
 
-            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v4.6.7</p></div>
+            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v4.6.7.5</p></div>
         </div>
     `;
     return html;
@@ -3649,7 +3649,7 @@ function showAbout() {
                     <i data-lucide="sparkles" class="w-8 h-8 text-white"></i>
                 </div>
                 <p class="text-lg font-bold text-gray-800">Life Manager</p>
-                <p class="text-xs text-gray-400 mt-1">v4.6.7</p>
+                <p class="text-xs text-gray-400 mt-1">v4.6.7.5</p>
             </div>
             <div class="glass-card rounded-2xl overflow-hidden mt-4" style="padding: 0;">
                 <div class="setting-item" onclick="openGithubRepo()" style="margin-bottom: 0; border-radius: 0;">
@@ -4807,27 +4807,26 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
         navigator.serviceWorker.register('service-worker.js').then(reg => {
             console.log('PWA 已注册!');
             
-            // 🌟 核心：监听 SW 更新
+            // 🌟 1. 监听发现新版本
             reg.addEventListener('updatefound', () => {
                 const newWorker = reg.installing;
                 newWorker.addEventListener('statechange', () => {
+                    // 如果新版本安装完毕，且当前有旧的 SW 在运行
                     if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                        // 发现新版本！直接强制刷新当前页面
-                        showToast('发现新版本，正在更新...');
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 1000);
+                        showToast('发现新版本，正在应用...');
+                        // 🌟 通知新的 SW 立刻跳过等待，强制接管
+                        newWorker.postMessage({ action: 'skipWaiting' });
                     }
                 });
             });
         }).catch(err => console.log('PWA 注册失败!', err));
 
-        // 🌟 核心：每次打开 App 时，主动去检查一次更新
+        // 🌟 2. 监听控制权变更（当新 SW 接管页面时，强制刷新）
         let refreshing;
         navigator.serviceWorker.addEventListener('controllerchange', () => {
             if (refreshing) return;
             refreshing = true;
-            window.location.reload();
+            window.location.reload(); // 这一步刷新，拿到的绝对是新版本
         });
     });
 }

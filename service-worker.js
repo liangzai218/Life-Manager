@@ -1,4 +1,13 @@
-const CACHE_NAME = 'life-manager-v4.6.7';
+// 强制让新的 Service Worker 跳过等待，立刻激活
+self.addEventListener('install', (event) => {
+    self.skipWaiting();
+});
+
+// 让新的 Service Worker 立刻接管当前页面
+self.addEventListener('activate', (event) => {
+    event.waitUntil(clients.claim());
+});
+const CACHE_NAME = 'life-manager-v4.6.7.5';
 // 如果有本地化的 lucide.js、css 等，可以加在这里
 const ASSETS_TO_CACHE = [
   './',
