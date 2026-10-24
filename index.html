@@ -166,7 +166,9 @@
         .predict-card .main-text { font-size: 15px; font-weight: 600; }
         .predict-card .sub-text { font-size: 11px; color: #9CA3AF; }
         .predict-card .badge { font-size: 12px; font-weight: 600; padding: 2px 12px; border-radius: 30px; background: #DBEAFE; color: #2563EB; }
-        ::-webkit-scrollbar { display: none; }
+        /* 彻底隐藏滚动条（兼容 iOS, Android, 微信等 WebView） */
+::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
+html, body { scrollbar-width: none !important; -ms-overflow-style: none !important; }
         body, .glass-card, .nav-btn, .btn-primary, .fab-btn, .setting-item, .note-card, .record-item { -webkit-touch-callout: none; user-select: none; }
         input, textarea { -webkit-touch-callout: default; user-select: text; }
 
@@ -261,7 +263,8 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 /* ==================== 日期滚轮专属样式 ==================== */
 .wheel-container { position: relative; height: 180px; display: flex; overflow: hidden; margin-bottom: 20px; }
 .wheel-col { flex: 1; overflow-y: scroll; scroll-snap-type: y mandatory; scrollbar-width: none; -ms-overflow-style: none; position: relative; text-align: center; }
-.wheel-col::-webkit-scrollbar { display: none; }
+.wheel-col::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
+html, body { scrollbar-width: none !important; -ms-overflow-style: none !important; }
 .wheel-padding { height: 72px; } /* (180 - 36) / 2 = 72，用于让首尾能对齐中间 */
 .wheel-item { height: 36px; line-height: 36px; scroll-snap-align: center; color: #9CA3AF; font-size: 14px; transition: all 0.2s ease; opacity: 0.5; }
 .wheel-item.active { color: #1F2937; font-weight: 700; font-size: 16px; opacity: 1; transform: scale(1.05); }
