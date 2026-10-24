@@ -34,11 +34,11 @@
         * { -webkit-tap-highlight-color: transparent; touch-action: manipulation; box-sizing: border-box; }
         html { font-size: 15px; background: linear-gradient(135deg, #E8F0F8 0%, #F5F7FA 50%, #EDF2F7 100%); }
         html, body { margin: 0; padding: 0; }
-        body { background: transparent; padding-top: env(safe-area-inset-top); font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'STHeiti', 'Segoe UI', sans-serif; color: #2D3748; min-height: 100vh; padding-bottom: 12px; overflow-x: hidden; }
+        body { background: transparent; font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'STHeiti', 'Segoe UI', sans-serif; color: #2D3748; min-height: 100vh; padding-bottom: 12px; overflow-x: hidden; }
      
         .glass-card { background: rgba(255, 255, 255, 0.92); border: 1px solid rgba(255, 255, 255, 0.6); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04); transform: translate3d(0, 0, 0); }
         .glass-nav { background: rgba(255, 255, 255, 0.65); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); border: 1px solid rgba(255, 255, 255, 0.35); box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.06); }
-        .nav-container { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); width: calc(100% - 28px); max-width: 380px; z-index: 100; }
+        .nav-container { position: fixed; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); width: calc(100% - 28px); max-width: 380px; z-index: 100; }
         .nav-btn { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); padding: 8px 0; cursor: pointer; }
         .nav-btn:active { transform: scale(0.92); }
         .active-tab { background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%); color: white !important; box-shadow: 0 3px 12px rgba(59, 130, 246, 0.35); }
@@ -53,7 +53,7 @@
         .btn-primary { background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%); color: white; box-shadow: 0 3px 12px rgba(59, 130, 246, 0.25); border: none; cursor: pointer; }
         .btn-primary:active { transform: scale(0.97); box-shadow: 0 2px 6px rgba(59, 130, 246, 0.2); }
         .btn-secondary { background: rgba(243, 244, 246, 0.9); color: #4B5563; }
-        .fab-btn { position: fixed; right: 20px; bottom: 90px; width: 52px; height: 52px; background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%); color: white; border-radius: 50%; box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4); display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; z-index: 50; cursor: pointer; border: none; }
+        .fab-btn { position: fixed; right: 20px; bottom: calc(90px + env(safe-area-inset-bottom, 0px)); width: 52px; height: 52px; background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%); color: white; border-radius: 50%; box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4); display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; z-index: 50; cursor: pointer; border: none; }
         .fab-btn:active { transform: scale(0.92); box-shadow: 0 2px 10px rgba(59, 130, 246, 0.3); }
 .toast { 
             position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); 
@@ -274,7 +274,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 <body>
 
 
-    <main id="content" class="px-4 page-content" style="padding-top: calc(env(safe-area-inset-top, 0px) + 10px);"></main>
+    <main id="content" class="px-4 page-content" style="padding-top: calc(env(safe-area-inset-top, 0px) + 16px);"></main>
 
     <button id="fab-add-btn" class="fab-btn" style="display:none;">
         <i data-lucide="plus" class="w-6 h-6"></i>
@@ -407,6 +407,9 @@ let _syncInProgress = false;
 let _pendingSync = false; // 🌟 排队标记
 let _syncTimer = null;
 let _syncIndicatorTimer = null; // 🌟 控制顶部提示条变绿/隐藏的定时器
+let _swRegistration = null;
+let _waitingWorker = null;
+let _isUpdatePromptActive = false;
 let _accountSwitching = false;
 let _lastSyncSuccess = null;
 let _syncConfigEditing = false;
@@ -630,8 +633,9 @@ async function fetchRemoteMenstrual(showResult = false) {
                     loveDates: (remoteData.menstrual.loveDates || []).map(sanitizeLoveDate).filter(Boolean)
                 };
                 saveData(true);
-                if (currentTab === 'menstrual') refreshMenstrualView();
-                if (showResult) showToast('已更新共享经期数据');
+if (currentTab === 'menstrual') refreshMenstrualView();
+else if (currentTab === 'home') switchTab('home', true);
+if (showResult) showToast('已更新共享经期数据');
             } else { if (showResult) showToast('该文件内无经期数据'); }
         } else if (getRes.status === 404) {
             if (showResult) showToast('未找到文件 ' + syncMenstrualFrom);
@@ -657,11 +661,12 @@ async function fetchRemoteMenstrual(showResult = false) {
         showToast('正在拉取 ' + trimmed + ' 的数据...');
         await fetchRemoteMenstrual(true);
     } else {
-        saveData(true);
-        logOp('取消经期来源');
-        if (currentTab === 'menstrual') refreshMenstrualView();
-        showToast('已恢复自己的经期数据');
-    }
+    saveData(true);
+    logOp('取消经期来源');
+    if (currentTab === 'menstrual') refreshMenstrualView();
+    else if (currentTab === 'home') switchTab('home', true);
+    showToast('已恢复自己的经期数据');
+}
     switchTab('home');
 }
 
@@ -2423,14 +2428,14 @@ function onMenstrualDayClick(dateStr) {
     const active = getActivePeriod();
     
     let record = null;
-    if (isMenstrual) {
-        record = appData.menstrual.records.find(r => {
-            const s = parseDate(r.startDate);
-            const e = r.endDate ? parseDate(r.endDate) : new Date();
-            const d = parseDate(dateStr);
-            return d >= s && d <= e;
-        });
-    }
+if (isMenstrual) {
+    record = getActiveMenstrual().records.find(r => {
+        const s = parseDate(r.startDate);
+        const e = r.endDate ? parseDate(r.endDate) : new Date();
+        const d = parseDate(dateStr);
+        return d >= s && d <= e;
+    });
+}
 
     // 2. 精准匹配文案
     let statusText = '当天无记录';
@@ -3877,7 +3882,7 @@ function renderMeView() {
     </div>
 </div>
 
-            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v5.0</p></div>
+            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager</p></div>
         </div>
     `;
     return html;
@@ -3891,20 +3896,17 @@ function showAbout() {
                 <button onclick="closeModal()" class="p-2 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
             </div>
             <div class="text-center py-4">
-                <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center mx-auto mb-3 shadow-lg">
-                    <i data-lucide="sparkles" class="w-8 h-8 text-white"></i>
-                </div>
+                <img src="app-icon.png" class="w-16 h-16 rounded-2xl mx-auto mb-3 shadow-lg object-cover" alt="App Icon">
                 <p class="text-lg font-bold text-gray-800">Life Manager</p>
-                <p class="text-xs text-gray-400 mt-1">v5.0</p>
             </div>
             <div class="glass-card rounded-2xl overflow-hidden mt-4" style="padding: 0;">
-                <div class="setting-item" onclick="openGithubRepo()" style="margin-bottom: 0; border-radius: 0;">
-                    <div class="flex items-center gap-2.5">
-                        <i data-lucide="git-branch" class="w-4 h-4 text-blue-500"></i>
-                        <span class="text-sm font-medium">版本更新</span>
-                    </div>
-                    <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-gray-400"></i>
-                </div>
+                <div class="setting-item" onclick="checkForUpdatesManual()" style="margin-bottom: 0; border-radius: 0;">
+    <div class="flex items-center gap-2.5">
+        <i data-lucide="refresh-cw" class="w-4 h-4 text-blue-500"></i>
+        <span class="text-sm font-medium">检查更新</span>
+    </div>
+    <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-gray-400"></i>
+</div>
                 <div class="setting-item" onclick="showVersionLog()" style="margin-bottom: 0; border-radius: 0; border-top: 1px solid rgba(0,0,0,0.05);">
                     <div class="flex items-center gap-2.5">
                         <i data-lucide="file-text" class="w-4 h-4 text-green-500"></i>
@@ -3934,13 +3936,6 @@ function showAbout() {
     openModal(html);
 }
 
-function openGithubRepo() {
-    window.open('https://github.com/liangzai218/Life-Manager', '_blank');
-}
-
-function showVersionLog() {
-    showToast('版本日志功能开发中');
-}
 
 function showContact() {
     const html = `
@@ -4247,7 +4242,7 @@ let syncLocalData = JSON.parse(JSON.stringify(appData));
                 _syncConfigEditing = false;
                 _lastSyncSuccess = true;
                 syncSuccess = true;
-                if (currentTab === 'home') switchTab('home');
+                switchTab(currentTab, true);
                 if (showResult) showToast('云端已是最新');
                 setTimeout(() => { _lastSyncSuccess = null; const c = document.getElementById('sync-card'); if (c) c.style.boxShadow = ''; }, 1800);
                 _syncInProgress = false; showSyncProgress(false);
@@ -4287,7 +4282,7 @@ let syncLocalData = JSON.parse(JSON.stringify(appData));
             if (syncMenstrualFrom) await fetchRemoteMenstrual(false);
             _lastSyncSuccess = true;
             syncSuccess = true;
-            if (currentTab === 'home') switchTab('home');
+            switchTab(currentTab, true);
             if (showResult) { logOp('同步成功', `${countTotalRecords(appData)} 条`); showToast('同步成功，数据已合并'); }
             setTimeout(() => { _lastSyncSuccess = null; const c = document.getElementById('sync-card'); if (c) c.style.boxShadow = ''; }, 1800);
         } else {
@@ -5084,6 +5079,18 @@ window.addEventListener('popstate', () => {
 loadData();
 switchTab('home');
 
+// L0 层防御：向系统申请持久化存储（防止 iOS 7天不活跃清理）
+async function requestPersistentStorage() {
+    if (navigator.storage && navigator.storage.persist) {
+        const isPersisted = await navigator.storage.persisted();
+        if (!isPersisted) {
+            const granted = await navigator.storage.persist();
+            console.log('持久化存储申请:', granted ? '已授予' : '未授予');
+        }
+    }
+}
+requestPersistentStorage();
+
 // 键盘弹出处理（通过可视区域高度精准判断，彻底解决“单独收起键盘”不恢复的问题）
 let _keyboardHideTimer = null;
 function showKeyboardUI() {
@@ -5184,31 +5191,143 @@ window.addEventListener('scroll', () => {
 setTimeout(() => { getEncryptionKey().catch(() => {}); }, 500);
 
 // 注册 PWA Service Worker
+// ==================== L5 交互层：PWA 更新与版本日志 ====================
+
+// 拉取并展示版本日志（复用已有的弹窗组件 openModal）
+async function showVersionLog() {
+    try {
+        const res = await fetch('./version.json?t=' + Date.now());
+        if (res.ok) {
+            const data = await res.json();
+    const logsHtml = data.map(item => `
+        <div class="mb-4">
+            <h4 class="text-sm font-bold text-gray-800 mb-2">v${item.version}</h4>
+            ${item.logs.map(l => `<p class="text-sm text-gray-600 mb-1.5 pl-2 border-l-2 border-blue-400">${escapeHtml(l)}</p>`).join('')}
+        </div>
+    `).join('');
+            const html = `
+                <div class="p-5">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-base font-bold">版本日志 (v${data.version})</h3>
+                        <button onclick="closeModal()" class="p-2 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
+                    </div>
+                    <div class="space-y-1 max-h-[60vh] overflow-y-auto">
+                        ${logsHtml || '<p class="text-xs text-gray-400">暂无更新日志</p>'}
+                    </div>
+                    <button onclick="closeModal()" class="btn-primary w-full py-3 rounded-xl text-sm font-semibold mt-6">知道了</button>
+                </div>
+            `;
+            openModal(html);
+        } else {
+            showToast('获取日志失败');
+        }
+    } catch(e) {
+        showToast('网络异常，获取日志失败');
+    }
+}
+
+// 更新弹窗（复用已有的 showChoiceConfirm 组件）
+async function showUpdatePrompt(worker) {
+    if (_isUpdatePromptActive) return; // 弹窗锁：防止刚进App时多次触发
+    _isUpdatePromptActive = true;
+    _waitingWorker = worker;
+
+    let versionStr = '新版本';
+    let logsStr = '发现应用更新，建议立即重启以获取最新体验。';
+    try {
+        const res = await fetch('./version.json?t=' + Date.now());
+        if (res.ok) {
+            const data = await res.json();
+    const latest = data[0]; // 取最新版本
+    versionStr = 'v' + latest.version;
+    if (latest.logs && latest.logs.length > 0) {
+        logsStr = latest.logs.map(l => '· ' + l).join('\n');
+    }
+        }
+    } catch(e) { console.warn('获取版本信息失败', e); }
+
+    const choice = await showChoiceConfirm(
+        '发现新版本 ' + versionStr,
+        logsStr,
+        [
+            { label: '立即更新', value: 'update', primary: true },
+            { label: '稍后更新', value: 'cancel' }
+        ]
+    );
+
+    if (choice === 'update') {
+        if (_waitingWorker) {
+            _waitingWorker.postMessage({ action: 'skipWaiting' });
+        } else {
+            window.location.reload();
+        }
+    } else {
+        _isUpdatePromptActive = false; // 用户选稍后，释放锁
+    }
+}
+
+// 手动检查更新（供设置页调用）
+async function checkForUpdatesManual() {
+    if (!_swRegistration) {
+        showToast('当前环境不支持检查更新');
+        return;
+    }
+    
+    // 1. 优先检查等待队列（防止重复下载打架）
+    if (_swRegistration.waiting) {
+        if (_isUpdatePromptActive) {
+            showToast('更新弹窗已在屏幕上');
+        } else {
+            showUpdatePrompt(_swRegistration.waiting);
+        }
+        return;
+    }
+
+    // 2. 队列为空，去网络拉取
+    showToast('正在检查更新...');
+    try {
+        await _swRegistration.update();
+        setTimeout(() => {
+            if (_swRegistration.waiting) {
+                showUpdatePrompt(_swRegistration.waiting);
+            } else if (!_isUpdatePromptActive) {
+                showToast('当前已是最新版本');
+            }
+        }, 1500);
+    } catch (e) {
+        showToast('网络异常，检查更新失败');
+    }
+}
+
+// 注册 PWA Service Worker
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('service-worker.js').then(reg => {
+            _swRegistration = reg;
             console.log('PWA 已注册!');
             
-            // 🌟 1. 监听发现新版本
+            // 监听后台自动下载完毕
             reg.addEventListener('updatefound', () => {
                 const newWorker = reg.installing;
                 newWorker.addEventListener('statechange', () => {
-                    // 如果新版本安装完毕，且当前有旧的 SW 在运行
                     if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                        showToast('发现新版本，正在应用...');
-                        // 🌟 通知新的 SW 立刻跳过等待，强制接管
-                        newWorker.postMessage({ action: 'skipWaiting' });
+                        showUpdatePrompt(newWorker);
                     }
                 });
             });
+
+            // 如果用户上次点了稍后，但文件还在等待，延迟2秒弹出提醒
+            if (reg.waiting) {
+                setTimeout(() => showUpdatePrompt(reg.waiting), 2000);
+            }
         }).catch(err => console.log('PWA 注册失败!', err));
 
-        // 🌟 2. 监听控制权变更（当新 SW 接管页面时，强制刷新）
+        // 监听控制权接管，平滑刷新
         let refreshing;
         navigator.serviceWorker.addEventListener('controllerchange', () => {
             if (refreshing) return;
             refreshing = true;
-            window.location.reload(); // 这一步刷新，拿到的绝对是新版本
+            window.location.reload();
         });
     });
 }
