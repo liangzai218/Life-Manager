@@ -156,11 +156,11 @@
         .menstrual-calendar-day.other-month { display: none; }
         .menstrual-calendar-day.menstrual { background: #EC4899; color: white; }
         .menstrual-calendar-day.predicted-menstrual { background: #FBCFE8; color: #6B7280; }
-        .menstrual-calendar-day.ovulation { color: #A78BFA; background: #F9FAFB; }
+                .menstrual-calendar-day.ovulation { color: #8B5CF6; background: #F9FAFB; font-weight: bold; }
         .menstrual-calendar-day.safe { color: #34D399; background: #F9FAFB; }
-     .menstrual-calendar-day.safe { color: #34D399; background: #F9FAFB; }
 .menstrual-calendar-day.follicular { color: #60A5FA; background: #F9FAFB; } /* 卵泡期-浅蓝 */
-.menstrual-calendar-day.luteal { color: #A78BFA; background: #F9FAFB; } /* 黄体期-浅紫 */
+.menstrual-calendar-day.luteal { color: #D97706; background: #F9FAFB; } /* 黄体期-琥珀黄 */
+.ovulation-icon { font-size: 10px; line-height: 1; margin-top: -2px; }
            .menstrual-calendar-day .love-icon { position: absolute; bottom: 2px; right: 4px; font-size: 12px; line-height: 1; }
         .predict-card { padding: 12px 16px; border-radius: 14px; }
         .predict-card .main-text { font-size: 15px; font-weight: 600; }
@@ -170,15 +170,9 @@
         body, .glass-card, .nav-btn, .btn-primary, .fab-btn, .setting-item, .note-card, .record-item { -webkit-touch-callout: none; user-select: none; }
         input, textarea { -webkit-touch-callout: default; user-select: text; }
 
-body.keyboard-open .nav-container {
-    transform: translate(-50%, 200%) !important;
-    opacity: 0;
-    pointer-events: none;
-}
+body.keyboard-open .nav-container,
 body.keyboard-open .fab-btn {
-    transform: translateY(200%) !important;
-    opacity: 0;
-    pointer-events: none;
+    display: none !important;
 }        
 
 
@@ -372,7 +366,12 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     </div>
 
     <script>
-        // ==================== 数据管理 ====================
+    // =====================================================================
+    // [L0-L1] 数据管理与持久化（Storage & State）
+    // 核心原则：唯一数据源 appData、加密解密、本地存储、状态机
+    // =====================================================================
+
+    // ==================== 数据管理 ====================
         // 🌟 新增：带超时的 fetch，防止网络卡死
 async function fetchWithTimeout(resource, options = {}) {
     const { timeout = 8000 } = options;
@@ -395,8 +394,9 @@ async function fetchWithTimeout(resource, options = {}) {
         const OP_LOG_MAX = 200;
 
         let appData = {
-            tasks: [], incomes: [], expenses: [], notes: [],
-            menstrual: { records: [], loveDates: [] },
+    tasks: [], incomes: [], expenses: [], notes: [],
+    menstrual: { records: [], loveDates: [] },
+    menstrualRemote: { records: [], loveDates: [] },
             settings: { autoSync: true, giteeToken: '', giteeRepo: '', giteeFilename: '', syncMenstrualFrom: '', cloudConfigValid: false, lastSyncTime: null, lastSyncType: null }
         };
         let lastSyncData = null;
@@ -464,37 +464,74 @@ async function decryptData(encryptedBase64) {
             return JSON.parse(decoder.decode(decrypted));
         }
 
-        function loadData() {
-            const saved = localStorage.getItem(STORAGE_KEY);
-            if (saved) {
-                try {
-                    const parsed = JSON.parse(saved);
-                    if (parsed.dailyIncomes || parsed.workRecords) {
-                        parsed.incomes = migrateOldData(parsed);
-                        delete parsed.dailyIncomes; delete parsed.workRecords;
-                    }
-                    appData = { ...appData, ...parsed };
-                    if (appData.menstrual && Array.isArray(appData.menstrual.loveDates) && appData.menstrual.loveDates.length > 0) {
-                        const firstItem = appData.menstrual.loveDates[0];
-                        if (typeof firstItem === 'string') {
-                            appData.menstrual.loveDates = appData.menstrual.loveDates.map((date, index) => ({ id: 'ld_' + Date.now() + '_' + index, date: date, updatedAt: Date.now() }));
-                            localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
-                        }
-                    }
-                    if (!appData.menstrual) appData.menstrual = { records: [], loveDates: [] };
-                    if (!appData.menstrual.records) appData.menstrual.records = [];
-                    if (!appData.menstrual.loveDates) appData.menstrual.loveDates = [];
-                    if (!appData.settings.lastSyncTime) appData.settings.lastSyncTime = null;
-                    if (!appData.settings.lastSyncType) appData.settings.lastSyncType = null;
-                    if (appData.settings.syncMenstrualFrom === undefined) appData.settings.syncMenstrualFrom = '';
-                    lastSyncData = JSON.stringify(appData);
-                } catch (e) { console.error('加载数据失败', e); }
+        function getActiveMenstrual() {
+    if (appData.settings.syncMenstrualFrom) {
+        return appData.menstrualRemote || { records: [], loveDates: [] };
+    }
+    return appData.menstrual;
+}
+
+function loadData() {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+        try {
+            const parsed = JSON.parse(saved);
+            if (parsed.dailyIncomes || parsed.workRecords) {
+                parsed.incomes = migrateOldData(parsed);
+                delete parsed.dailyIncomes; delete parsed.workRecords;
             }
-            const accountKey = appData.settings.giteeFilename || '_default';
-            const savedSync = localStorage.getItem('life_manager_last_sync_data_' + accountKey);
-            if (savedSync) lastSyncData = savedSync;
-            else { lastSyncData = JSON.stringify(appData); localStorage.setItem('life_manager_last_sync_data_' + accountKey, lastSyncData); }
+            appData = { ...appData, ...parsed };
+            if (!appData.menstrual) appData.menstrual = { records: [], loveDates: [] };
+            if (!appData.menstrual.records) appData.menstrual.records = [];
+            if (!appData.menstrual.loveDates) appData.menstrual.loveDates = [];
+            if (!appData.menstrualRemote) appData.menstrualRemote = { records: [], loveDates: [] };
+            // 2.2 迁移：把 "子分类 · 备注" 拆成独立字段
+(appData.expenses || []).forEach(e => {
+    if (!e.subCategory && e.note) {
+        const parsed = parseLegacyNote(e.category, e.note);
+        if (parsed.subCategory) {
+            e.subCategory = parsed.subCategory;
+            e.note = parsed.note;
         }
+    }
+});
+            if (!appData.settings.lastSyncTime) appData.settings.lastSyncTime = null;
+            if (!appData.settings.lastSyncType) appData.settings.lastSyncType = null;
+            if (appData.settings.syncMenstrualFrom === undefined) appData.settings.syncMenstrualFrom = '';
+            // 旧 backup key 迁移到 menstrualRemote，然后删除
+            const legacyBackup = localStorage.getItem(LOCAL_MENSTRUAL_BACKUP_KEY);
+            if (legacyBackup) {
+                try {
+                    const bData = JSON.parse(legacyBackup);
+                    if (!appData.settings.syncMenstrualFrom) {
+                        // 没开只读：backup 里是本地数据，还原回 menstrual
+                        appData.menstrual = {
+                            records: bData.records || [],
+                            loveDates: bData.loveDates || []
+                        };
+                    } else {
+                        // 开了只读：backup 是本地数据，当前 menstrual 其实是远端数据
+                        // 把当前 menstrual 当作远端，backup 当本地
+                        appData.menstrualRemote = {
+                            records: appData.menstrual.records || [],
+                            loveDates: appData.menstrual.loveDates || []
+                        };
+                        appData.menstrual = {
+                            records: bData.records || [],
+                            loveDates: bData.loveDates || []
+                        };
+                    }
+                    localStorage.removeItem(LOCAL_MENSTRUAL_BACKUP_KEY);
+                } catch (e) {}
+            }
+            lastSyncData = JSON.stringify(appData);
+        } catch (e) { console.error('加载数据失败', e); }
+    }
+    const accountKey = appData.settings.giteeFilename || '_default';
+    const savedSync = localStorage.getItem('life_manager_last_sync_data_' + accountKey);
+    if (savedSync) lastSyncData = savedSync;
+    else { lastSyncData = JSON.stringify(appData); localStorage.setItem('life_manager_last_sync_data_' + accountKey, lastSyncData); }
+}
 
         function saveLastSyncData() {
             const accountKey = appData.settings.giteeFilename || '_default';
@@ -533,12 +570,17 @@ function normalizeFilename(name) {
             return r;
         }
         function sanitizeExpense(e) {
-            if (!e || typeof e !== 'object') return null;
-            const date = String(e.date || '').trim();
-            const amount = Number(e.amount);
-            if (!date || !isFinite(amount) || amount <= 0) return null;
-            return { id: String(e.id || 'exp_' + Date.now() + '_' + Math.random().toString(36).slice(2,8)), date, amount, category: String(e.category || '其他'), note: String(e.note || ''), updatedAt: Number(e.updatedAt) || Date.now() };
-        }
+    if (!e || typeof e !== 'object') return null;
+    const date = String(e.date || '').trim();
+    const amount = Number(e.amount);
+    if (!date || !isFinite(amount) || amount <= 0) return null;
+    const r = { id: String(e.id || 'exp_' + Date.now() + '_' + Math.random().toString(36).slice(2,8)), date, amount, category: String(e.category || '其他'), note: String(e.note || ''), subCategory: String(e.subCategory || ''), updatedAt: Number(e.updatedAt) || Date.now() };
+    if (e.payMethod) r.payMethod = String(e.payMethod);
+    if (e.insurance !== undefined) r.insurance = Number(e.insurance);
+    if (e.tax !== undefined) r.tax = Number(e.tax);
+    if (e.social !== undefined) r.social = Number(e.social);
+    return r;
+}
         function sanitizeNote(n) {
             if (!n || typeof n !== 'object') return null;
             const title = String(n.title || '').trim();
@@ -562,87 +604,66 @@ function normalizeFilename(name) {
             return { id: String(l.id || 'ld_' + Date.now() + '_' + Math.random().toString(36).slice(2,8)), date, updatedAt: Number(l.updatedAt) || Date.now() };
         }
 
-        function backupLocalMenstrualIfNeeded() {
-    if (localStorage.getItem(LOCAL_MENSTRUAL_BACKUP_KEY)) return;
-    const records = appData.menstrual.records || [];
-    const loveDates = appData.menstrual.loveDates || [];
-    // 🌟 核心修复：删掉了 return，哪怕自己是空数据，也要存一个空备份，否则上传时无法剥离假数据
-    localStorage.setItem(LOCAL_MENSTRUAL_BACKUP_KEY, JSON.stringify({ records, loveDates }));
-}
-        function restoreLocalMenstrual() {
-    const backup = localStorage.getItem(LOCAL_MENSTRUAL_BACKUP_KEY);
-    if (backup) { 
-        try { 
-            const data = JSON.parse(backup); 
-            appData.menstrual.records = data.records || []; 
-            appData.menstrual.loveDates = data.loveDates || []; 
-            return true; 
-        } catch (e) { return false; } 
-    }
-    // 🌟 核心修复：如果保险箱是空的，说明自己原本就没数据，强行清空当前的展示数据
-    appData.menstrual.records = [];
-    appData.menstrual.loveDates = [];
-    return false;
-}
+        
 
-let _isFetchingMenstrual = false; // 🌟 新增：防连点锁
+let _isFetchingMenstrual = false;
 
 async function fetchRemoteMenstrual(showResult = false) {
-    if (_isFetchingMenstrual) return; // 🌟 如果正在请求，直接拦截
+    if (_isFetchingMenstrual) return;
     const { giteeToken, giteeRepo, syncMenstrualFrom } = appData.settings;
     if (!giteeToken || !giteeRepo || !syncMenstrualFrom) return;
 
-    _isFetchingMenstrual = true; // 🌟 上锁
+    _isFetchingMenstrual = true;
     try {
-        // 🌟 核心修复：去掉自动加后缀，填什么用什么
         const getRes = await fetchWithTimeout(`https://gitee.com/api/v5/repos/${giteeRepo}/contents/${encodeURIComponent(syncMenstrualFrom)}?access_token=${giteeToken}`, { timeout: 8000 });
         if (getRes.ok) {
             const fileInfo = await getRes.json();
             let remoteData;
-            try { remoteData = await decryptData(fileInfo.content); } catch (err) { 
-                console.warn('对方文件解密失败:', err); 
-                if (showResult) showToast('无法读取 ' + syncMenstrualFrom + ' 的数据'); return; 
+            try { remoteData = await decryptData(fileInfo.content); } catch (err) {
+                console.warn('对方文件解密失败:', err);
+                if (showResult) showToast('无法读取 ' + syncMenstrualFrom + ' 的数据'); return;
             }
             if (remoteData && remoteData.menstrual) {
-                // 🌟 备份自己的数据
-                backupLocalMenstrualIfNeeded();
-                // 🌟 替换成对方的真实数据，供 UI 展示
-                appData.menstrual.records = (remoteData.menstrual.records || []).map(sanitizeMenstrualRecord).filter(Boolean);
-                appData.menstrual.loveDates = (remoteData.menstrual.loveDates || []).map(sanitizeLoveDate).filter(Boolean);
+                // 直接写 menstrualRemote，不碰 appData.menstrual
+                appData.menstrualRemote = {
+                    records: (remoteData.menstrual.records || []).map(sanitizeMenstrualRecord).filter(Boolean),
+                    loveDates: (remoteData.menstrual.loveDates || []).map(sanitizeLoveDate).filter(Boolean)
+                };
                 saveData(true);
                 if (currentTab === 'menstrual') refreshMenstrualView();
                 if (showResult) showToast('已更新共享经期数据');
             } else { if (showResult) showToast('该文件内无经期数据'); }
-        } else if (getRes.status === 404) { 
-            if (showResult) showToast('未找到文件 ' + syncMenstrualFrom); 
-        } else { 
-            if (showResult) showToast('拉取失败，请检查Token权限'); 
+        } else if (getRes.status === 404) {
+            if (showResult) showToast('未找到文件 ' + syncMenstrualFrom);
+        } else {
+            if (showResult) showToast('拉取失败，请检查Token权限');
         }
-    } catch (e) { 
-        console.warn('拉取对方经期异常:', e); 
-        if (showResult) showToast('网络异常或请求超时'); 
+    } catch (e) {
+        console.warn('拉取对方经期异常:', e);
+        if (showResult) showToast('网络异常或请求超时');
     } finally {
-        _isFetchingMenstrual = false; // 🌟 解锁
+        _isFetchingMenstrual = false;
     }
 }
 
         async function handleSyncMenstrualFromChange(newValue) {
-            const oldValue = appData.settings.syncMenstrualFrom || '';
-            const trimmed = normalizeFilename(newValue);
-            if (trimmed === oldValue) return;
-            if (trimmed) {
-                if (!oldValue) backupLocalMenstrualIfNeeded();
-                appData.settings.syncMenstrualFrom = trimmed;
-                saveData(true); logOp('设置经期来源', trimmed); showToast('正在拉取 ' + trimmed + ' 的数据...');
-                await fetchRemoteMenstrual(true);
-            } else {
-                appData.settings.syncMenstrualFrom = '';
-                restoreLocalMenstrual(); saveData(true); logOp('取消经期来源');
-                if (currentTab === 'menstrual') refreshMenstrualView();
-                showToast('已恢复自己的经期数据');
-            }
-            switchTab('home');
-        }
+    const oldValue = appData.settings.syncMenstrualFrom || '';
+    const trimmed = normalizeFilename(newValue);
+    if (trimmed === oldValue) return;
+    appData.settings.syncMenstrualFrom = trimmed;
+    if (trimmed) {
+        saveData(true);
+        logOp('设置经期来源', trimmed);
+        showToast('正在拉取 ' + trimmed + ' 的数据...');
+        await fetchRemoteMenstrual(true);
+    } else {
+        saveData(true);
+        logOp('取消经期来源');
+        if (currentTab === 'menstrual') refreshMenstrualView();
+        showToast('已恢复自己的经期数据');
+    }
+    switchTab('home');
+}
 
         function triggerSync(immediate = false) {
     if (!appData.settings.autoSync) return;
@@ -723,7 +744,7 @@ function showConfetti() {
             const successKeywords = ['成功', '已删除', '已取消', '修改成功', '导入成功', '已清除', '打卡成功', '保存成功', '添加成功', '合并', '已更新'];
             if (successKeywords.some(keyword => message.includes(keyword))) { if (navigator.vibrate) navigator.vibrate([20, 10, 20]); }
         }
-        function openModal(html) { document.getElementById('modal-body').innerHTML = html; document.getElementById('fullscreen-modal').classList.add('active'); lucide.createIcons(); }
+        function openModal(html) { document.getElementById('modal-body').innerHTML = html; document.getElementById('fullscreen-modal').classList.add('active'); updateIcons(document.getElementById('modal-body')); }
         function closeModal(e) { if (!e || e.target === document.getElementById('fullscreen-modal')) document.getElementById('fullscreen-modal').classList.remove('active'); }
 
         let currentTab = 'home';
@@ -736,12 +757,12 @@ let menstrualViewMonth = new Date();
 let _menstrualRenderCache = null;   // 新增：经期页渲染缓存，让预测函数在一次渲染里只算一次
 
         function formatDate(date) { const d = new Date(date); return `${d.getMonth() + 1}月${d.getDate()}日 星期${['日','一','二','三','四','五','六'][d.getDay()]}`; }
-        function formatAmount(num) {
+        function toPlainNumber(num) {
     const n = Number(num);
     if (isNaN(n)) return '0';
     return Number(n.toFixed(2)).toString();
 }
-function formatMoney(amount) {
+function toCurrency(amount) {
     const n = Number(amount);
     if (isNaN(n)) return '¥ 0';
     const parts = n.toFixed(2).split('.');
@@ -752,10 +773,21 @@ function formatMoney(amount) {
         function formatDateTime(timestamp) { const d = new Date(timestamp); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
         function formatTime(timestamp) { const d = new Date(timestamp); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
         function isFutureDate(dateStr) { const date = new Date(dateStr); const today = new Date(); today.setHours(23, 59, 59, 999); return date > today; }
-        function escapeHtml(str) { if (!str) return ''; return str.replace(/[&<>]/g, function(m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; return m; }); }
+        function escapeHtml(str) { if (!str) return ''; return String(str).replace(/[&<>"']/g, function(m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; if (m === '"') return '&quot;'; if (m === "'") return '&#39;'; return m; }); }
         function parseDate(dateStr) { const parts = dateStr.split('-').map(Number); return new Date(parts[0], parts[1] - 1, parts[2]); }
         function formatDateLocal(date) { const year = date.getFullYear(); const month = String(date.getMonth() + 1).padStart(2, '0'); const day = String(date.getDate()).padStart(2, '0'); return `${year}-${month}-${day}`; }
-
+function getTodayStr() {
+    return formatDateLocal(new Date());
+}
+function updateIcons(root = document) {
+    if (window.lucide && window.lucide.createIcons) {
+        try {
+            window.lucide.createIcons({ root: root });
+        } catch (e) {
+            window.lucide.createIcons();
+        }
+    }
+}
 function showCustomConfirm(message) {
     return new Promise((resolve) => {
         const modal = document.getElementById('custom-confirm');
@@ -773,7 +805,48 @@ function hideCustomConfirm() {
     const modal = document.getElementById('custom-confirm');
     modal.classList.remove('active'); // 触发收起动画
 }
+        // 新增：多选项弹窗，返回 Promise<string|null>
+function showChoiceConfirm(title, message, options) {
+    return new Promise((resolve) => {
+        const html = `
+            <div class="flex flex-col">
+                <h3 class="text-[15px] font-bold text-gray-800 text-center mb-2">${title}</h3>
+                <p class="text-[13px] text-gray-600 text-center mb-5 whitespace-pre-line">${message}</p>
+                <div class="flex flex-col gap-2">
+                    ${options.map((opt, idx) => `
+                        <button id="choice-btn-${idx}" class="w-full py-2.5 rounded-xl font-medium text-sm ${opt.primary ? 'btn-primary' : (opt.danger ? 'bg-red-50 text-red-500' : 'bg-gray-100 text-gray-600')}">
+                            ${opt.label}
+                        </button>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+        openCenterModal(html);
         
+        setTimeout(() => {
+            options.forEach((opt, idx) => {
+                const btn = document.getElementById(`choice-btn-${idx}`);
+                if (btn) {
+                    btn.onclick = () => {
+                        closeCenterModal();
+                        resolve(opt.value);
+                    };
+                }
+            });
+        }, 50);
+        
+        // 处理点击遮罩取消
+        const overlay = document.getElementById('center-modal-overlay');
+        const originalOnclick = overlay.onclick;
+        overlay.onclick = (e) => {
+            if (e.target === overlay) {
+                closeCenterModal();
+                overlay.onclick = originalOnclick; // 恢复
+                resolve(null);
+            }
+        };
+    });
+}
 
         function openSettings() { try { history.pushState({ from: 'home' }, '', ''); } catch(e) {} switchTab('me'); }
         function goBackFromSettings() { switchTab('home'); try { if (history.state && history.state.from === 'home') history.back(); } catch(e) {} }
@@ -806,7 +879,8 @@ function hideCustomConfirm() {
             }
 
             const pendingTasks = appData.tasks.filter(t => !t.completions.some(c => new Date(c.date).toDateString() === today.toDateString()));
-const menstrualRecords = appData.menstrual.records || [];
+const _viewMenstrualHome = getActiveMenstrual();
+const menstrualRecords = _viewMenstrualHome.records || [];
 const activePeriod = [...menstrualRecords].filter(r => r.isActive === true).sort((a, b) => parseDate(b.startDate) - parseDate(a.startDate))[0];
 
 // 🌟 全新的智能状态计算
@@ -927,7 +1001,7 @@ if (menstrualRecords.length === 0) {
 }
             const totalCompletions = appData.tasks.reduce((sum, t) => sum + t.completions.length, 0);
             const totalBills = appData.incomes.length + appData.expenses.length;
-            const totalMenstrual = appData.menstrual.records.length;
+            const totalMenstrual = getActiveMenstrual().records.length;
             const totalNotes = appData.notes.length;
             const syncHtml = renderSyncCard();
             const hour = today.getHours();
@@ -956,7 +1030,7 @@ if (menstrualRecords.length === 0) {
         <p class="text-[11px] text-gray-500 mt-1">今日打卡</p>
     </div>
     <div class="glass-card p-3 rounded-xl text-center" style="background: rgba(254, 242, 242, 0.85); border-color: rgba(254, 202, 202, 0.5);">
-        <p class="text-2xl font-bold text-red-500">¥${formatAmount(todayExpense)}</p>
+        <p class="text-2xl font-bold text-red-500">¥${toPlainNumber(todayExpense)}</p>
         <p class="text-[11px] text-gray-500 mt-1">今日支出</p>
     </div>
 <div class="glass-card p-3 rounded-xl flex flex-col justify-center items-center" style="background: rgba(253, 242, 248, 0.85); border-color: rgba(251, 207, 232, 0.5);">
@@ -1005,17 +1079,17 @@ if (menstrualRecords.length === 0) {
                         </div>
                         <div class="grid grid-cols-3 gap-2">
                             <div class="text-center">
-                                <p class="text-sm font-bold text-green-500">${formatMoney(monthIncome)}</p>
+                                <p class="text-sm font-bold text-green-500">${toCurrency(monthIncome)}</p>
                                 <p class="text-[10px] text-gray-400 mt-1">收入</p>
                                 <p class="text-[10px] mt-0.5 h-4">${compareText(monthIncome, lastMonthIncome)}</p>
                             </div>
                             <div class="text-center">
-                                <p class="text-sm font-bold text-red-500">${formatMoney(monthExpense)}</p>
+                                <p class="text-sm font-bold text-red-500">${toCurrency(monthExpense)}</p>
                                 <p class="text-[10px] text-gray-400 mt-1">支出</p>
                                 <p class="text-[10px] mt-0.5 h-4">${compareText(monthExpense, lastMonthExpense)}</p>
                             </div>
                             <div class="text-center">
-                                <p class="text-sm font-bold ${monthBalance >= 0 ? 'text-blue-500' : 'text-orange-500'}">${formatMoney(monthBalance)}</p>
+                                <p class="text-sm font-bold ${monthBalance >= 0 ? 'text-blue-500' : 'text-orange-500'}">${toCurrency(monthBalance)}</p>
                                 <p class="text-[10px] text-gray-400 mt-1">结余</p>
                                 <p class="text-[10px] mt-0.5 h-4"></p>
                             </div>
@@ -1114,7 +1188,7 @@ function renderSyncCard() {
 <input type="text" id="gitee-filename" class="input-field text-xs py-2.5" placeholder="文件名(.json)" value="${appData.settings.giteeFilename}">
                 <input type="text" id="sync-menstrual-from" class="input-field text-xs py-2.5" placeholder="经期数据来源（可选）" value="${appData.settings.syncMenstrualFrom || ''}" onchange="handleSyncMenstrualFromChange(this.value)">
                 <div class="flex gap-2 justify-center">
-                    <button onclick="smartSync(true, false)" class="flex-1 btn-primary py-2.5 rounded-lg text-xs font-semibold">一键同步</button>
+                    <button onclick="handleSyncClick()" class="flex-1 btn-primary py-2.5 rounded-lg text-xs font-semibold">一键同步</button>
                 </div>
                 <p class="text-[10px] text-gray-400 text-center mt-2">最近同步：${lastSyncText}</p>
                 <div id="sync-progress-container" class="sync-progress-container">
@@ -1132,7 +1206,7 @@ function renderSyncCard() {
                     <button onclick="reconfigureCloud()" class="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-3 py-1 rounded-lg text-xs font-semibold shadow-sm flex-shrink-0">修改</button>
                 </div>
                 <div class="flex gap-2 justify-center">
-                    <button onclick="smartSync(true, false)" class="flex-1 btn-primary py-2.5 rounded-lg text-xs font-semibold">一键同步</button>
+                    <button onclick="handleSyncClick()" class="flex-1 btn-primary py-2.5 rounded-lg text-xs font-semibold">一键同步</button>
                 </div>
                 <p class="text-[10px] text-gray-400 text-center mt-2">最近同步：${lastSyncText}</p>
                 <div id="sync-progress-container" class="sync-progress-container">
@@ -1146,7 +1220,7 @@ function renderSyncCard() {
 }
 
         
-// ==================== 打卡模块 ====================
+// [L2-L4] 打卡：引擎计算 + 视图渲染
 function getEncouragement(streak) {
     if (streak === 0) return '我们开始吧';
     if (streak === 1) return '今天也很棒';
@@ -1179,43 +1253,61 @@ function getGapEncouragement(gap) {
 }
 
 function calculateStreak(task) {
-    if (!task.completions.length) return 0;
-    const dates = [...new Set(task.completions.map(c => new Date(c.date).toDateString()))].sort((a, b) => new Date(b) - new Date(a));
-    const today = new Date().toDateString();
-    const yesterday = new Date(Date.now() - 86400000).toDateString();
+    if (!task.completions || !task.completions.length) return 0;
+    // 建立当天的字符串集合（去重）
+    const dateSet = new Set(task.completions.map(c => new Date(c.date).toDateString()));
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toDateString();
+    
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toDateString();
+    
+    // 确定基准日：今天打卡了算今天，没打但昨天打了算昨天，都没打直接断
+    let baseDate = null;
+    if (dateSet.has(todayStr)) baseDate = today;
+    else if (dateSet.has(yesterdayStr)) baseDate = yesterday;
+    else return 0;
+    
+    // 从基准日往前连乘
     let streak = 0;
-    let checkDate = dates[0];
-    if (checkDate !== today && checkDate !== yesterday) return 0;
-    for (let i = 0; i < dates.length; i++) {
-        const expectedDate = new Date(Date.now() - i * 86400000).toDateString();
-        if (dates[i] === expectedDate || (i === 0 && dates[i] === yesterday)) streak++;
-        else break;
+    let cursor = new Date(baseDate);
+    while (dateSet.has(cursor.toDateString())) {
+        streak++;
+        cursor.setDate(cursor.getDate() - 1);
     }
     return streak;
 }
 
 function calculateMaxStreak(task) {
-    if (!task.completions.length) return 0;
-    const dates = [...new Set(task.completions.map(c => new Date(c.date).toDateString()))].sort((a, b) => new Date(a) - new Date(b));
-    let maxStreak = 1, currentStreak = 1;
+    if (!task.completions || !task.completions.length) return 0;
+    const dateSet = new Set(task.completions.map(c => new Date(c.date).toDateString()));
+    const dates = Array.from(dateSet).map(d => new Date(d)).sort((a, b) => a - b);
+    
+    let maxStreak = 1;
+    let currentStreak = 1;
     for (let i = 1; i < dates.length; i++) {
-        const prev = new Date(dates[i - 1]);
-        const curr = new Date(dates[i]);
-        const diff = (curr - prev) / (1000 * 60 * 60 * 24);
-        if (diff === 1) { currentStreak++; maxStreak = Math.max(maxStreak, currentStreak); }
-        else currentStreak = 1;
+        const diff = (dates[i] - dates[i - 1]) / (1000 * 60 * 60 * 24);
+        if (diff === 1) {
+            currentStreak++;
+            maxStreak = Math.max(maxStreak, currentStreak);
+        } else {
+            currentStreak = 1;
+        }
     }
     return maxStreak;
 }
 
 function calculateMaxGap(task) {
-    if (!task.completions.length) return 0;
-    const dates = [...new Set(task.completions.map(c => new Date(c.date).toDateString()))].sort((a, b) => new Date(a) - new Date(b));
+    if (!task.completions || !task.completions.length) return 0;
+    const dateSet = new Set(task.completions.map(c => new Date(c.date).toDateString()));
+    const dates = Array.from(dateSet).map(d => new Date(d)).sort((a, b) => a - b);
+    
     let maxGap = 0;
     for (let i = 1; i < dates.length; i++) {
-        const prev = new Date(dates[i - 1]);
-        const curr = new Date(dates[i]);
-        const diff = (curr - prev) / (1000 * 60 * 60 * 24);
+        const diff = (dates[i] - dates[i - 1]) / (1000 * 60 * 60 * 24);
         maxGap = Math.max(maxGap, diff - 1);
     }
     return maxGap;
@@ -1556,7 +1648,6 @@ async function editTaskName(taskId) {
         </div>
     `;
     openModal(html);
-    lucide.createIcons();
     setTimeout(() => { const input = document.getElementById('edit-task-name-input'); if (input) input.focus(); }, 100);
 }
 
@@ -1675,7 +1766,7 @@ function showNoteDetail(noteId) {
                 <p class="text-xs text-gray-500 mb-1">账号</p>
                 <div class="flex justify-between items-center gap-2">
                     <span class="font-mono text-sm break-all flex-1 min-w-0">${escapeHtml(account)}</span>
-                    <button onclick="copyToClipboard('${escapeHtml(account)}')" class="${actionBtnClass}"><i data-lucide="copy" class="w-3 h-3"></i>复制</button>
+                    <button onclick="copyToClipboard(this)" data-copy="${escapeHtml(account)}" class="${actionBtnClass}"><i data-lucide="copy" class="w-3 h-3"></i>复制</button>
                 </div>
             </div>` : ''}
             <div class="glass-card p-3 rounded-xl">
@@ -1702,7 +1793,6 @@ const html = `
         </div>
     `;
     openCenterModal(html);
-    lucide.createIcons();
 }
 
 function togglePasswordDisplaySafe(noteId) {
@@ -1717,7 +1807,10 @@ function copyPassword(noteId) {
     if (password) navigator.clipboard.writeText(password).then(() => showToast('密码已复制'));
     else showToast('获取密码失败');
 }
-function copyToClipboard(text) { navigator.clipboard.writeText(text).then(() => showToast('已复制')); }
+function copyToClipboard(el) { 
+    const text = el.dataset.copy;
+    navigator.clipboard.writeText(text).then(() => showToast('已复制')); 
+}
 
 async function deleteNote(noteId) {
     const confirmed = await showCustomConfirm('确定要删除吗？');
@@ -1766,16 +1859,20 @@ function updateNote(noteId) {
     showToast('修改成功'); closeCenterModal(); switchTab('note');
 }
 
-// ==================== 经期模块 ====================
-function getCompletedPeriods() { return appData.menstrual.records.filter(r => r.endDate); }
+// [L2-L4] 经期：日期引擎 + 视图渲染
+function getCompletedPeriods() {
+    const data = getActiveMenstrual();
+    return data.records.filter(r => r.endDate);
+}
 function getActivePeriod() {
-    const actives = appData.menstrual.records.filter(r => r.isActive === true);
+    const data = getActiveMenstrual();
+    const actives = data.records.filter(r => r.isActive === true);
     if (actives.length <= 1) return actives[0];
-    // 有多条活跃经期时，取"最近开始"的那条
     return [...actives].sort((a, b) => parseDate(b.startDate) - parseDate(a.startDate))[0];
 }
 function getCycleLengths() {
-    const sorted = [...appData.menstrual.records].filter(r => r.endDate).sort((a, b) => parseDate(a.startDate) - parseDate(b.startDate));
+    const data = getActiveMenstrual();
+    const sorted = [...data.records].filter(r => r.endDate).sort((a, b) => parseDate(a.startDate) - parseDate(b.startDate));
     if (sorted.length < 2) return [];
     const lengths = [];
     for (let i = 1; i < sorted.length; i++) {
@@ -1836,31 +1933,9 @@ function getTrendOffset() {
     if (Math.abs(diff) >= 1) return Math.round(diff * 0.5);
     return 0;
 }
+// 🌟 废弃原本错误的算法，遵循绝对医学标准：黄体期固定为14天
 function getUserLutealLength() {
-    if (_menstrualRenderCache && _menstrualRenderCache.luteal !== undefined) return _menstrualRenderCache.luteal;
-    const result = _computeUserLutealLength();
-    if (_menstrualRenderCache) _menstrualRenderCache.luteal = result;
-    return result;
-}
-
-function _computeUserLutealLength() {
-    const completed = getCompletedPeriods();
-    if (completed.length < 2) return 14;
-    const sorted = [...completed].sort((a, b) => parseDate(b.startDate) - parseDate(a.startDate));
-    const recent = sorted.slice(0, Math.min(3, sorted.length));
-    const lutealLengths = [];
-    for (let i = 0; i < recent.length; i++) {
-        const r = recent[i];
-        const start = parseDate(r.startDate);
-        const end = parseDate(r.endDate);
-        const cycleLen = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
-        lutealLengths.push(cycleLen - 14);
-    }
-    lutealLengths.sort((a, b) => a - b);
-    const mid = Math.floor(lutealLengths.length / 2);
-    let median = lutealLengths[mid];
-    if (lutealLengths.length % 2 === 0) median = Math.round((lutealLengths[mid - 1] + lutealLengths[mid]) / 2);
-    return Math.min(16, Math.max(12, median));
+    return 14;
 }
 function predictNextPeriodStart() {
     if (_menstrualRenderCache && _menstrualRenderCache.pred !== undefined) return _menstrualRenderCache.pred;
@@ -1871,47 +1946,70 @@ function predictNextPeriodStart() {
 
 function _computePredictNextPeriodStart() {
     const lengths = getCycleLengths();
+    const today = new Date(); 
+    today.setHours(0, 0, 0, 0);
+
+    // 情况 1：只有一条或无完整周期数据
     if (lengths.length === 0) {
-    const lastStart = getLastPeriodStart();
-    if (lastStart) {
-        const d = parseDate(lastStart);
-        d.setDate(d.getDate() + 28); // 默认按照28天算
-        
-        // 🌟 修复：即使只有一条数据，也生成前3天和后3天的合理范围
-        const earliestD = new Date(d); earliestD.setDate(earliestD.getDate() - 3);
-        const latestD = new Date(d); latestD.setDate(latestD.getDate() + 3);
-        
-        return { 
-            best: formatDateLocal(d), 
-            earliest: formatDateLocal(earliestD), 
-            latest: formatDateLocal(latestD), 
-            confidence: '低', 
-            cycleLength: 28 
-        };
+        const lastStart = getLastPeriodStart();
+        if (lastStart) {
+            const d = parseDate(lastStart);
+            d.setDate(d.getDate() + 28); 
+            
+            // 🌟 P3 核心修复：如果默认算出来是过去的日期，按 28 天往后推，直到今天或未来
+            while (d < today) {
+                d.setDate(d.getDate() + 28);
+            }
+            
+            const earliestD = new Date(d); earliestD.setDate(earliestD.getDate() - 3);
+            const latestD = new Date(d); latestD.setDate(latestD.getDate() + 3);
+            
+            return { 
+                best: formatDateLocal(d), 
+                earliest: formatDateLocal(earliestD), 
+                latest: formatDateLocal(latestD), 
+                confidence: '低', 
+                cycleLength: 28 
+            };
+        }
+        return null;
     }
-    return null;
-}
+
+    // 情况 2：有多次记录，进行加权预测
     const avg = getWeightedAverageCycle();
     const trend = getTrendOffset();
     const lastStart = getLastPeriodStart();
     if (!lastStart) return null;
+    
     const sorted = [...lengths].sort((a, b) => a - b);
     const minCycle = sorted[0];
     const maxCycle = sorted[sorted.length - 1];
     const bestCycle = avg + trend;
     const baseDate = parseDate(lastStart);
-    const bestDate = new Date(baseDate);
+    
+    let bestDate = new Date(baseDate);
     bestDate.setDate(bestDate.getDate() + bestCycle);
     let earliestDate = new Date(baseDate);
     earliestDate.setDate(earliestDate.getDate() + minCycle + (trend > 0 ? trend : 0));
     let latestDate = new Date(baseDate);
     latestDate.setDate(latestDate.getDate() + maxCycle + (trend < 0 ? trend : 0));
+
+    // 🌟 P3 核心修复：如果最可能的日期已经过去，整体向后推演直到未来
+    while (bestDate < today) {
+        bestDate.setDate(bestDate.getDate() + bestCycle);
+        earliestDate.setDate(earliestDate.getDate() + bestCycle);
+        latestDate.setDate(latestDate.getDate() + bestCycle);
+    }
+
     const rangeDays = Math.round((latestDate - earliestDate) / (1000 * 60 * 60 * 24));
+    
+    // 如果最早和最晚差距过大，收敛为前后 3 天
     if (rangeDays > 7) {
         const midDate = new Date(bestDate);
         earliestDate = new Date(midDate); earliestDate.setDate(midDate.getDate() - 3);
         latestDate = new Date(midDate); latestDate.setDate(midDate.getDate() + 3);
     }
+    
     const stdDev = getCycleStdDev();
     let confidence = '中';
     if (stdDev !== null) {
@@ -1919,8 +2017,16 @@ function _computePredictNextPeriodStart() {
         else if (stdDev <= 4) confidence = '中';
         else confidence = '低';
     } else if (lengths.length < 4) confidence = '低';
-    return { best: formatDateLocal(bestDate), earliest: formatDateLocal(earliestDate), latest: formatDateLocal(latestDate), confidence, cycleLength: Math.round(bestCycle) };
+    
+    return { 
+        best: formatDateLocal(bestDate), 
+        earliest: formatDateLocal(earliestDate), 
+        latest: formatDateLocal(latestDate), 
+        confidence, 
+        cycleLength: Math.round(bestCycle) 
+    };
 }
+
 function predictPeriodEnd(startDate) {
     const avgDuration = getAverageDuration();
     const d = parseDate(startDate);
@@ -1930,11 +2036,18 @@ function predictPeriodEnd(startDate) {
 function getPredictionSource() {
     const count = getCompletedCount();
     const recent = getRecentCycleLengths(6);
+    
+    // 🌟 脏数据降级提示：有>=2条记录，但全被过滤了
+    if (count >= 2 && recent.length === 0) return '数据异常，当前基于默认 28 天周期估算';
+    
     if (recent.length >= 2) return `基于最近 ${recent.length} 次周期加权预测`;
     if (count >= 2) return `基于 ${count} 次周期`;
     return '基于默认周期估算';
 }
-function getCompletedCount() { return appData.menstrual.records.filter(r => r.endDate).length; }
+function getCompletedCount() {
+    const data = getActiveMenstrual();
+    return data.records.filter(r => r.endDate).length;
+}
 function getAverageDuration() {
     const completed = getCompletedPeriods();
     if (completed.length === 0) return 5;
@@ -1951,7 +2064,8 @@ function getAverageDuration() {
     return Math.round(validDurations.reduce((a, b) => a + b, 0) / validDurations.length);
 }
 function getLastPeriodStart() {
-    const sorted = [...appData.menstrual.records].filter(r => r.endDate).sort((a, b) => parseDate(b.startDate) - parseDate(a.startDate));
+    const data = getActiveMenstrual();
+    const sorted = [...data.records].filter(r => r.endDate).sort((a, b) => parseDate(b.startDate) - parseDate(a.startDate));
     return sorted.length > 0 ? sorted[0].startDate : null;
 }
 
@@ -1963,55 +2077,48 @@ function getAllCalculatedPeriods() {
 }
 
 function _computeAllCalculatedPeriods() {
-    const records = appData.menstrual.records.filter(r => r.endDate).sort((a, b) => parseDate(a.startDate) - parseDate(b.startDate));
-    if (records.length === 0) return [];
+    const data = getActiveMenstrual();
+    const allRecords = [...data.records].sort((a, b) => parseDate(a.startDate) - parseDate(b.startDate));
+    if (allRecords.length === 0) return [];
+
     const avgCycle = getWeightedAverageCycle();
     const avgDuration = getAverageDuration();
     const trend = getTrendOffset();
-    if (!avgCycle) return [];
+    
+    if (!avgCycle || avgCycle < 20 || avgCycle > 45) return [];
+
     const periods = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    for (let i = 0; i < records.length; i++) {
-        const r = records[i];
-        const start = parseDate(r.startDate); // 🌟 改为从 start 开始算
-        let cursor = new Date(start);
-        cursor.setDate(cursor.getDate() + avgCycle + trend); // 🌟 预测下次的开始时间 = 本次开始 + 周期
+    
+    const lastRecord = allRecords[allRecords.length - 1];
+    const lastStart = parseDate(lastRecord.startDate);
+    
+    let cursor = new Date(lastStart);
+    cursor.setDate(cursor.getDate() + avgCycle + trend);
+    
+    const limitDate = new Date(today.getTime() + 6 * 30 * 24 * 60 * 60 * 1000);
+    let maxIter = 30;
+    
+    while (cursor < limitDate && maxIter-- > 0) {
+        const periodStart = new Date(cursor);
+        const periodEnd = new Date(cursor);
+        periodEnd.setDate(periodEnd.getDate() + avgDuration - 1);
         
-        const isLast = (i === records.length - 1);
-        const limitDate = isLast ? new Date(today.getTime() + 6 * 30 * 24 * 60 * 60 * 1000) : parseDate(records[i + 1].startDate);
-        let maxIter = 30;
-        while (cursor < limitDate && maxIter-- > 0) {
-            const periodStart = new Date(cursor);
-            const periodEnd = new Date(cursor);
-            periodEnd.setDate(periodEnd.getDate() + avgDuration - 1);
-            
-            if (periodEnd >= limitDate && !isLast) break; // 不越过下一条真实记录
-            
-            periods.push({ start: new Date(periodStart), end: new Date(periodEnd) });
-            
-            const nextStart = new Date(cursor);
-            nextStart.setDate(nextStart.getDate() + avgCycle + trend);
-            cursor = nextStart;
-        }
+        periods.push({ start: new Date(periodStart), end: new Date(periodEnd) });
+        
+        const nextStart = new Date(cursor);
+        nextStart.setDate(nextStart.getDate() + avgCycle + trend);
+        cursor = nextStart;
     }
-    // ...下面保持不变
-    periods.sort((a, b) => a.start - b.start);
-    const merged = [];
-    for (let p of periods) {
-        if (merged.length === 0) merged.push(p);
-        else {
-            const last = merged[merged.length - 1];
-            if (p.start <= last.end) { if (p.end > last.end) last.end = p.end; }
-            else merged.push(p);
-        }
-    }
-    return merged;
+    
+    return periods;
 }
 
 function isDateInPeriod(dateStr) {
+    const data = getActiveMenstrual();
     const d = parseDate(dateStr);
-    for (let r of appData.menstrual.records) {
+    for (let r of data.records) {
         const s = parseDate(r.startDate);
         let e;
         if (r.endDate) e = parseDate(r.endDate);
@@ -2036,73 +2143,130 @@ function isDateInPredictedPeriod(dateStr) {
     return false;
 }
 
+// ==================== 核心判断引擎（绝对严谨版） ====================
+// isDateInPeriod / isDateInPredictedPeriod 已在文件上方定义，此处不重复
+
 function isDateInOvulation(dateStr) {
+    const data = getActiveMenstrual();
     const d = parseDate(dateStr);
-    if (isDateInPeriod(dateStr)) return false;
-    const records = appData.menstrual.records.filter(r => r.endDate).sort((a, b) => parseDate(a.startDate) - parseDate(b.startDate));
-    for (let r of records) {
-        const start = parseDate(r.startDate);
-        const end = parseDate(r.endDate);
-        const cycleLen = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
-        const lutealLen = getUserLutealLength();
-        const ovDay = new Date(start);
-        ovDay.setDate(ovDay.getDate() + (cycleLen - lutealLen));
-        const ovStart = new Date(ovDay); ovStart.setDate(ovStart.getDate() - 5);
-        const ovEnd = new Date(ovDay); ovEnd.setDate(ovEnd.getDate() + 4);
-        if (d >= ovStart && d <= ovEnd) return true;
-    }
-    const calculatedPeriods = getAllCalculatedPeriods();
+    
     const avgCycle = getWeightedAverageCycle();
-    const lutealLen = getUserLutealLength();
-    for (let p of calculatedPeriods) {
-        const ovDay = new Date(p.start);
-        ovDay.setDate(ovDay.getDate() + (avgCycle - lutealLen));
-        const ovStart = new Date(ovDay); ovStart.setDate(ovStart.getDate() - 5);
-        const ovEnd = new Date(ovDay); ovEnd.setDate(ovEnd.getDate() + 4);
-        if (d >= ovStart && d <= ovEnd) return true;
+    if (avgCycle < 20 || avgCycle > 45) return false;
+
+    if (isDateInPeriod(dateStr)) return false;
+    if (isDateInPredictedPeriod(dateStr)) return false;
+
+    const realStarts = data.records.map(r => r.startDate);
+    const predStarts = getAllCalculatedPeriods().map(p => formatDateLocal(p.start));
+    
+    const allStarts = [...new Set([...realStarts, ...predStarts])]
+        .map(s => parseDate(s).getTime())
+        .sort((a, b) => a - b);
+
+    const currentTimestamp = d.getTime();
+
+    for (let i = 0; i < allStarts.length; i++) {
+        const nextPeriodTimestamp = allStarts[i];
+        
+        if (nextPeriodTimestamp >= currentTimestamp) {
+            const nextPeriodDate = new Date(nextPeriodTimestamp);
+            
+            const ovDate = new Date(nextPeriodDate);
+            ovDate.setDate(ovDate.getDate() - 14);
+            ovDate.setHours(0, 0, 0, 0);
+            
+            const ovStart = new Date(ovDate); ovStart.setDate(ovStart.getDate() - 5);
+            const ovEnd = new Date(ovDate); ovEnd.setDate(ovEnd.getDate() + 4);
+            
+            if (d >= ovStart && d <= ovEnd) {
+                return true;
+            }
+            return false;
+        }
     }
     return false;
 }
 
 function isDateSafe(dateStr) {
-    if (appData.menstrual.records.length === 0) return false;
+    const data = getActiveMenstrual();
+    if (data.records.length === 0) return false;
+    
+    const earliestRecord = data.records.reduce((min, r) => {
+        const d = parseDate(r.startDate);
+        return d < min ? d : min;
+    }, new Date(3000, 1, 1));
+    
+    if (parseDate(dateStr) < earliestRecord) return false;
+
     if (isDateInPeriod(dateStr)) return false;
     if (isDateInPredictedPeriod(dateStr)) return false;
     if (isDateInOvulation(dateStr)) return false;
+    
     return true;
 }
 
 function isDateLove(dateStr) {
-    return appData.menstrual.loveDates.some(item => item.date === dateStr);
+    const data = getActiveMenstrual();
+    return data.loveDates.some(item => item.date === dateStr);
 }
 
 function getCurrentStatus() {
-    const today = new Date().toISOString().slice(0, 10);
-    if (appData.menstrual.records.length === 0) return { type: 'empty', label: '尚无记录', badgeClass: 'empty' };
+    const data = getActiveMenstrual();
+    const _t = new Date(); const today = `${_t.getFullYear()}-${String(_t.getMonth()+1).padStart(2,'0')}-${String(_t.getDate()).padStart(2,'0')}`;
+    
+    if (data.records.length === 0) {
+        return { type: 'empty', label: '尚无记录', badgeClass: 'empty' };
+    }
+    
     const active = getActivePeriod();
     if (active) {
         const s = parseDate(active.startDate);
-        const now = new Date();
-        now.setHours(0, 0, 0, 0);
+        const now = new Date(); now.setHours(0, 0, 0, 0);
         const day = Math.floor((now - s) / (1000 * 60 * 60 * 24)) + 1;
         return { type: 'menstruating', label: `经期中 · 第${day}天`, badgeClass: 'menstruating' };
     }
-    if (isDateInOvulation(today)) return { type: 'ovulation', label: '排卵期', badgeClass: 'ovulation' };
-    if (isDateSafe(today)) return { type: 'safe', label: '安全期', badgeClass: 'safe' };
-    const nextStart = predictNextPeriodStart();
-    if (nextStart) {
-        const d = parseDate(nextStart.best);
-        d.setDate(d.getDate() - 14);
-        const ovDay = d.toISOString().slice(0, 10);
-        if (parseDate(today) < parseDate(ovDay)) return { type: 'follicular', label: '卵泡期', badgeClass: 'follicular' };
-        else return { type: 'luteal', label: '黄体期', badgeClass: 'luteal' };
+
+    if (isDateInOvulation(today)) {
+        let isOvulationDay = false;
+        const nextPreds = getAllCalculatedPeriods().map(p => formatDateLocal(p.start));
+        const realStarts = data.records.map(r => r.startDate);
+        const allStarts = [...new Set([...realStarts, ...nextPreds])].map(s => parseDate(s).getTime()).sort((a,b)=>a-b);
+        const currentT = parseDate(today).getTime();
+        for (let t of allStarts) {
+            if (t >= currentT) {
+                const ovDate = new Date(t); ovDate.setDate(ovDate.getDate() - 14);
+                if (formatDateLocal(ovDate) === today) isOvulationDay = true;
+                break;
+            }
+        }
+        return { type: 'ovulation', label: isOvulationDay ? '排卵日' : '排卵期', badgeClass: 'ovulation' };
     }
-    return { type: 'follicular', label: '卵泡期', badgeClass: 'follicular' };
+    
+    if (isDateInPredictedPeriod(today)) {
+        return { type: 'predicted', label: '预测经期', badgeClass: 'predicted' };
+    }
+
+    const nextPreds = getAllCalculatedPeriods().map(p => p.start).sort((a,b)=>a-b);
+    const currentT = parseDate(today).getTime();
+    let nextStart = null;
+    for (let p of nextPreds) {
+        if (p.getTime() >= currentT) { nextStart = p; break; }
+    }
+    
+    if (nextStart) {
+        const ovDate = new Date(nextStart); 
+        ovDate.setDate(ovDate.getDate() - 14);
+        if (currentT < ovDate.getTime()) return { type: 'follicular', label: '卵泡期', badgeClass: 'follicular' };
+        else return { type: 'luteal', label: '黄体期', badgeClass: 'luteal' };
+    } else {
+        return { type: 'empty', label: '无近期预测', badgeClass: 'empty' };
+    }
 }
 
 function findAdjacentCompletedPeriod(dateStr, days = 2) {
+    const data = getActiveMenstrual();
     const d = parseDate(dateStr);
-    return appData.menstrual.records.find(r => {
+    return data.records.find(r => {
         if (r.isActive || !r.endDate) return false;
         const s = parseDate(r.startDate);
         const e = parseDate(r.endDate);
@@ -2248,12 +2412,16 @@ function deleteMenstrualRecord(recordId, clickedDate) {
 function onMenstrualDayClick(dateStr) {
     const isReadOnly = !!appData.settings.syncMenstrualFrom;
     if (isFutureDate(dateStr)) { showToast('不能对未来日期进行操作'); return; }
+    
+    // 1. 完全信任底层瀑布流判定
     const isMenstrual = isDateInPeriod(dateStr);
+    const isPredicted = !isMenstrual && isDateInPredictedPeriod(dateStr);
+    const isOvulation = !isMenstrual && !isPredicted && isDateInOvulation(dateStr);
+    const isSafe = !isMenstrual && !isPredicted && !isOvulation && isDateSafe(dateStr);
+    
     const isLove = isDateLove(dateStr);
     const active = getActivePeriod();
-    const isOvulation = isDateInOvulation(dateStr) && !isMenstrual;
-    const isSafe = isDateSafe(dateStr) && !isMenstrual && !isOvulation;
-    const isPredicted = isDateInPredictedPeriod(dateStr) && !isMenstrual && !isOvulation && !isSafe;
+    
     let record = null;
     if (isMenstrual) {
         record = appData.menstrual.records.find(r => {
@@ -2263,67 +2431,77 @@ function onMenstrualDayClick(dateStr) {
             return d >= s && d <= e;
         });
     }
-let contentHtml = '';
-let statusText = '';
+
+    // 2. 精准匹配文案
+    let statusText = '当天无记录';
     if (isMenstrual) {
         const dayNum = record ? Math.floor((parseDate(dateStr) - parseDate(record.startDate)) / (1000 * 60 * 60 * 24)) + 1 : '?';
         statusText = `经期第 ${dayNum} 天`;
-    } else if (isOvulation) statusText = '排卵期（预测）';
-    else if (isSafe) statusText = '安全期（预测）';
-    else if (isPredicted) statusText = '预测经期日';
-    else if (isLove) statusText = '❤️ 有爱爱标记';
-    else statusText = '当天无记录';
-    contentHtml += `<p class="text-center text-xs text-gray-400">${statusText}</p>`;
-let actionsHtml = '';
-if (isReadOnly) {
-    actionsHtml = `<div class="bg-gray-50 text-gray-500 rounded-xl p-3 flex items-center justify-center gap-2 text-sm w-full mt-2"><i data-lucide="lock" class="w-4 h-4"></i>只读模式，无法操作</div>`;
-} else {
-    // 🌟 终极修复：历史记录绝对优先！
-    if (record && !record.isActive) {
-        const isEnd = record.endDate && parseDate(dateStr).getTime() === parseDate(record.endDate).getTime();
-        if (!isEnd) {
-            actionsHtml += `<button onclick="handleModifyPeriodEnd('${record.id}', '${dateStr}')" class="w-full py-2.5 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium">修改结束日期为此日</button>`;
-        }
-        actionsHtml += `<button onclick="deleteMenstrualRecord('${record.id}', '${dateStr}')" class="w-full py-2.5 rounded-xl bg-red-50 text-red-500 text-sm font-medium">删除</button>`;
-    } 
-    else if (!active) {
-        // 没活跃经期，且没点在历史记录上 -> 设为开始
-        if (!record) {
-            actionsHtml += `<button onclick="handleSetPeriodStart('${dateStr}')" class="w-full py-2.5 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">设为经期开始</button>`;
-        }
-    } 
-    else {
-        // 有活跃经期，且没点在历史记录上
-        if (parseDate(dateStr) >= parseDate(active.startDate)) {
-            actionsHtml += `<button onclick="addPeriodEnd('${dateStr}')" class="w-full py-2.5 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium">设为经期结束</button>`;
-        } else if (!record) {
-            // 只有点在空白日期，才判断能否扩展
-            const diffDays = Math.round((parseDate(active.startDate) - parseDate(dateStr)) / (1000 * 60 * 60 * 24));
-            if (diffDays <= 7) {
-                actionsHtml += `<button onclick="handleSetPeriodStart('${dateStr}')" class="w-full py-2.5 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">扩展经期开始</button>`;
-            } else {
-                actionsHtml += `<p class="text-center text-xs text-red-400 w-full mt-2">距离当前经期太久，无法扩展。<br>（如要记录更早的经期，请先结束当前经期）</p>`;
+    } else if (isPredicted) {
+        statusText = '预测经期日';
+    } else if (isOvulation) {
+        statusText = '排卵期（预测）';
+    } else if (isSafe) {
+        statusText = '安全期（预测）';
+    } else if (isLove) {
+        statusText = '❤️ 有爱爱标记';
+    }
+
+    let contentHtml = `<p class="text-center text-xs text-gray-400">${statusText}</p>`;
+    let actionsHtml = '';
+
+    if (isReadOnly) {
+        actionsHtml = `<div class="bg-gray-50 text-gray-500 rounded-xl p-3 flex items-center justify-center gap-2 text-sm w-full mt-2"><i data-lucide="lock" class="w-4 h-4"></i>只读模式，无法操作</div>`;
+    } else {
+        // 3. 菜单操作逻辑（历史记录绝对优先）
+        if (record && !record.isActive) {
+            // 点在已结束的真实历史经期上
+            const isEnd = record.endDate && parseDate(dateStr).getTime() === parseDate(record.endDate).getTime();
+            if (!isEnd) {
+                actionsHtml += `<button onclick="handleModifyPeriodEnd('${record.id}', '${dateStr}')" class="w-full py-2.5 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium">修改结束日期为此日</button>`;
+            }
+            actionsHtml += `<button onclick="deleteMenstrualRecord('${record.id}', '${dateStr}')" class="w-full py-2.5 rounded-xl bg-red-50 text-red-500 text-sm font-medium">删除</button>`;
+        } 
+        else if (!active) {
+            // 没有活跃经期，且没点在历史记录上 -> 设为开始
+            if (!record) {
+                actionsHtml += `<button onclick="handleSetPeriodStart('${dateStr}')" class="w-full py-2.5 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">设为经期开始</button>`;
+            }
+        } 
+        else {
+            // 有活跃经期，且没点在历史记录上
+            if (parseDate(dateStr) >= parseDate(active.startDate)) {
+                actionsHtml += `<button onclick="addPeriodEnd('${dateStr}')" class="w-full py-2.5 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium">设为经期结束</button>`;
+            } else if (!record) {
+                // 只有点在空白日期，才判断能否扩展
+                const diffDays = Math.round((parseDate(active.startDate) - parseDate(dateStr)) / (1000 * 60 * 60 * 24));
+                if (diffDays <= 7) {
+                    actionsHtml += `<button onclick="handleSetPeriodStart('${dateStr}')" class="w-full py-2.5 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">扩展经期开始</button>`;
+                } else {
+                    actionsHtml += `<p class="text-center text-xs text-red-400 w-full mt-2">距离当前经期太久，无法扩展。<br>（如要记录更早的经期，请先结束当前经期）</p>`;
+                }
             }
         }
+        
+        // 爱爱记录按钮
+        if (!isFutureDate(dateStr)) {
+            if (isLove) actionsHtml += `<button onclick="removeLoveDate('${dateStr}')" class="w-full py-2.5 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">❤️ 删除爱爱</button>`;
+            else actionsHtml += `<button onclick="addLoveFromDate('${dateStr}')" class="w-full py-2.5 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">❤️ 添加爱爱</button>`;
+        }
+        if (!actionsHtml) actionsHtml = `<p class="text-center text-xs text-gray-400">无可用操作</p>`;
     }
-    
-    if (!isFutureDate(dateStr)) {
-        if (isLove) actionsHtml += `<button onclick="removeLoveDate('${dateStr}')" class="w-full py-2.5 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">❤️ 删除爱爱</button>`;
-        else actionsHtml += `<button onclick="addLoveFromDate('${dateStr}')" class="w-full py-2.5 rounded-xl bg-pink-50 text-pink-600 text-sm font-medium">❤️ 添加爱爱</button>`;
-    }
-    if (!actionsHtml) actionsHtml = `<p class="text-center text-xs text-gray-400">无可用操作</p>`;
-}
-const html = `
-<div class="max-h-[60vh] overflow-y-auto flex flex-col">
-        <div class="flex justify-between items-center mb-3">
-            <h3 class="text-[15px] font-bold text-gray-800">${dateStr}</h3>
-            <button onclick="closeCenterModal()" class="p-1.5 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
+
+    const html = `
+    <div class="max-h-[60vh] overflow-y-auto flex flex-col">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-[15px] font-bold text-gray-800">${dateStr}</h3>
+                <button onclick="closeCenterModal()" class="p-1.5 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            ${contentHtml}
+            <div class="flex flex-col gap-2 mt-4">${actionsHtml}</div>
         </div>
-        ${contentHtml}
-        <div class="flex flex-col gap-2 mt-4">${actionsHtml}</div>
-    </div>
-`;
-openCenterModal(html);
+    `;
+    openCenterModal(html);
 }
 
 function renderMenstrualView() {
@@ -2347,14 +2525,24 @@ let sourceText = source; // 使用传入的预测来源依据
 
 if (active) {
     const endDate = predictPeriodEnd(active.startDate);
-    const now = new Date(); now.setHours(0, 0, 0, 0);
-    const end = parseDate(endDate); end.setHours(0, 0, 0, 0);
+    const now = new Date(); 
+    now.setHours(0, 0, 0, 0);
+    const end = parseDate(endDate); 
+    end.setHours(0, 0, 0, 0);
     const diffDays = Math.round((end - now) / (1000 * 60 * 60 * 24));
+    
+    // 核心逻辑：如果用户还没点结束，预测日期只是参考，真实还在流血
     predictMainText = `预计结束：${endDate.slice(5)}`;
-    if (diffDays > 0) predictBadge = `还有 ${diffDays} 天`;
-    else if (diffDays === 0) predictBadge = '今天结束';
-    else predictBadge = `已过 ${Math.abs(diffDays)} 天`;
-    confidenceText = ''; // 🌟 正在经期时，去掉“当前经期中”的重复提示
+    if (diffDays > 0) {
+        predictBadge = `还有 ${diffDays} 天`;
+    } else if (diffDays === 0) {
+        predictBadge = '今天结束';
+    } else {
+        // 实际还没结束，但预测已经过了
+        predictBadge = `已超 ${Math.abs(diffDays)} 天`;
+        predictMainText = `经期第 ${Math.floor((now - parseDate(active.startDate)) / (1000 * 60 * 60 * 24)) + 1} 天（未结束）`;
+    }
+    confidenceText = ''; 
 } else if (pred) {
     const { best, earliest, latest, confidence } = pred;
     if (earliest === latest) predictMainText = `预测开始： ${best.slice(5)}`;
@@ -2389,7 +2577,7 @@ let theme = {
 if (status.type === 'safe') {
     theme = { bg: 'linear-gradient(135deg, #34D399 0%, #10B981 100%)', shadow: 'rgba(16, 185, 129, 0.4)', badgeText: 'text-emerald-600', badgeSub: 'text-emerald-400', lightBg: 'bg-emerald-50/70', lightBorder: 'border-emerald-100' };
 } else if (status.type === 'ovulation') {
-    theme = { bg: 'linear-gradient(135deg, #FBBF24 0%, #F59E0B 100%)', shadow: 'rgba(245, 158, 11, 0.4)', badgeText: 'text-amber-600', badgeSub: 'text-amber-400', lightBg: 'bg-amber-50/70', lightBorder: 'border-amber-100' };
+    theme = { bg: 'linear-gradient(135deg, #A78BFA 0%, #8B5CF6 100%)', shadow: 'rgba(139, 92, 246, 0.4)', badgeText: 'text-purple-600', badgeSub: 'text-purple-400', lightBg: 'bg-purple-50/70', lightBorder: 'border-purple-100' };
 } else if (status.type === 'follicular') {
     theme = { bg: 'linear-gradient(135deg, #60A5FA 0%, #3B82F6 100%)', shadow: 'rgba(59, 130, 246, 0.4)', badgeText: 'text-blue-600', badgeSub: 'text-blue-400', lightBg: 'bg-blue-50/70', lightBorder: 'border-blue-100' };
 } else if (status.type === 'luteal') {
@@ -2421,48 +2609,98 @@ const diffDays = Math.round((bestDate - now) / (1000 * 60 * 60 * 24));
 `;
 } else rightContent = '';
         let calHtml = '';
-        const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
-        for (let day = 1; day <= daysInMonth; day++) {
-            const dateStr = `${monthStr}-${String(day).padStart(2, '0')}`;
-            const isToday = isCurrentMonth && today.getDate() === day;
-            const isMenstrual = isDateInPeriod(dateStr);
-            const isPredicted = !isMenstrual && isDateInPredictedPeriod(dateStr);
-            const isOvulation = isDateInOvulation(dateStr) && !isMenstrual && !isPredicted;
-const isSafe = isDateSafe(dateStr) && !isMenstrual && !isPredicted && !isOvulation;
-
-// 🌟 新增：区分卵泡期和黄体期
-let isFollicular = false;
-let isLuteal = false;
-if (isSafe) {
-    // 获取下一次预测的日期，倒推 14 天作为排卵日
-    const nextPred = predictNextPeriodStart();
-    if (nextPred) {
-        const ovDate = parseDate(nextPred.best);
-        ovDate.setDate(ovDate.getDate() - 14);
-        // 如果今天在排卵日之前，就是卵泡期；之后就是黄体期
-        if (parseDate(dateStr) < ovDate) isFollicular = true;
-        else isLuteal = true;
-    }
+const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+// 首日占位：让 1 号落在正确的星期列
+for (let i = 0; i < firstDay; i++) {
+    calHtml += `<div class="menstrual-calendar-day" style="visibility:hidden;"></div>`;
 }
 
-const isLove = isDateLove(dateStr);
-let classes = 'menstrual-calendar-day';
-if (isToday) classes += ' today';
-if (isMenstrual) classes += ' menstrual';
-else if (isPredicted) classes += ' predicted-menstrual';
-else if (isOvulation) classes += ' ovulation';
-else if (isFollicular) classes += ' follicular'; // 蓝
-else if (isLuteal) classes += ' luteal';         // 紫
-else if (isSafe) classes += ' safe';             // 兜底绿色
-            let loveIcon = '';
-            if (isLove) loveIcon = `<span class="love-icon">${isMenstrual ? '🧡' : '💓'}</span>`;
-            calHtml += `
-                <div class="${classes}" onclick="onMenstrualDayClick('${dateStr}')" data-date="${dateStr}">
-                    <span>${day}</span>
-                    ${loveIcon}
-                </div>
-            `;
+// 🌟 性能优化：一次性提取所有的真实和预测基准线
+const _viewMenstrual = getActiveMenstrual();
+const allRealStarts = _viewMenstrual.records.map(r => r.startDate);
+const allPredictedStarts = getAllCalculatedPeriods().map(p => formatDateLocal(p.start));
+const cachedAllStarts = [...new Set([...allRealStarts, ...allPredictedStarts])]
+    .map(s => parseDate(s).getTime())
+    .sort((a, b) => a - b);
+
+// 🌟 修改点2（历史边界）：提取最早的一条真实记录
+const earliestRecord = _viewMenstrual.records.reduce((min, r) => {
+    const d = parseDate(r.startDate);
+    return (min === null || d < min) ? d : min;
+}, null);
+
+// 🌟 修改点3（脏数据拦截）：如果预测引擎算出来是空的（周期异常），日历强制留白，不瞎涂颜色
+const hasValidPrediction = getAllCalculatedPeriods().length > 0;
+
+for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${monthStr}-${String(day).padStart(2, '0')}`;
+    const isToday = isCurrentMonth && today.getDate() === day;
+    
+// 边界1：早于最早记录，直接渲染普通格子（去掉 other-month 隐藏类）
+if (earliestRecord && parseDate(dateStr) < earliestRecord) {
+    // 留白，但依然允许点击补录
+    calHtml += `<div class="menstrual-calendar-day" onclick="onMenstrualDayClick('${dateStr}')" data-date="${dateStr}"><span>${day}</span></div>`;
+    continue;
+}
+
+    const isMenstrual = isDateInPeriod(dateStr);
+    const isPredicted = !isMenstrual && isDateInPredictedPeriod(dateStr);
+    
+    let isOvulation = false;
+    let isOvulationDay = false;
+    let isSafe = false;
+    let isFollicular = false;
+    let isLuteal = false;
+
+    // 2. 只有在既非经期也非预测经期，且预测数据有效时，才计算衍生期
+    if (!isMenstrual && !isPredicted && hasValidPrediction) {
+        isOvulation = isDateInOvulation(dateStr);
+        isSafe = isDateSafe(dateStr);
+
+        if (isOvulation || isSafe) {
+            const currentT = parseDate(dateStr).getTime();
+            for (let t of cachedAllStarts) {
+                if (t >= currentT) {
+                    const ovDate = new Date(t);
+                    ovDate.setDate(ovDate.getDate() - 14);
+                    if (isOvulation && formatDateLocal(ovDate) === dateStr) {
+                        isOvulationDay = true;
+                    } else if (isSafe) {
+                        if (currentT < ovDate.getTime()) isFollicular = true;
+                        else isLuteal = true;
+                    }
+                    break;
+                }
+            }
         }
+    }
+
+    // 3. 分配颜色（如果数据无效，这里所有衍生期标志都是 false，自然就只会显示经期或留白）
+    const isLove = isDateLove(dateStr);
+    let classes = 'menstrual-calendar-day';
+    if (isToday) classes += ' today';
+    
+    if (isMenstrual) classes += ' menstrual';
+    else if (isPredicted) classes += ' predicted-menstrual';
+    else if (isOvulation) classes += ' ovulation';
+    else if (isFollicular) classes += ' follicular'; 
+    else if (isLuteal) classes += ' luteal';         
+    else if (isSafe) classes += ' safe';             
+
+    let loveIcon = '';
+    if (isLove) loveIcon = `<span class="love-icon">${isMenstrual ? '🧡' : '💓'}</span>`;
+    
+    let ovIcon = '';
+    if (isOvulationDay) ovIcon = `<span class="ovulation-icon">🤰</span>`;
+
+    calHtml += `
+        <div class="${classes}" onclick="onMenstrualDayClick('${dateStr}')" data-date="${dateStr}">
+            <span>${day}</span>
+            ${ovIcon}
+            ${loveIcon}
+        </div>
+    `;
+}
         const totalCells = firstDay + daysInMonth;
         const remaining = (7 - (totalCells % 7)) % 7;
         for (let i = 0; i < remaining; i++) calHtml += `<div class="menstrual-calendar-day other-month"></div>`;
@@ -2501,9 +2739,10 @@ else if (isSafe) classes += ' safe';             // 兜底绿色
     <div class="flex flex-wrap justify-center gap-3 text-[10px] text-gray-500 mt-2 mb-1">
         <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-pink-500 align-middle mr-1"></span>经期</span>
         <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-pink-200 align-middle mr-1"></span>预测</span>
-        <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-purple-400 align-middle mr-1"></span>排卵</span>
-        <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-blue-400 align-middle mr-1"></span>卵泡</span>
-        <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-purple-300 align-middle mr-1"></span>黄体</span>
+        <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-[#8B5CF6] align-middle mr-1"></span>排卵期</span>
+        <span><span class="text-[12px] align-middle mr-1">🤰</span>排卵日</span>
+        <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-[#60A5FA] align-middle mr-1"></span>卵泡</span>
+        <span><span class="inline-block w-2.5 h-2.5 rounded-full bg-[#D97706] align-middle mr-1"></span>黄体</span>
     </div>
 `;
         return `
@@ -2567,14 +2806,14 @@ else if (isSafe) classes += ' safe';             // 兜底绿色
             </div>
 
             <!-- 3. 最近记录 -->
-            ${appData.menstrual.records.filter(r => r.endDate).length > 0 ? `
+            ${_viewMenstrual.records.filter(r => r.endDate).length > 0 ? `
             <div class="glass-card p-4 rounded-2xl">
                 <div class="flex justify-between items-center mb-3">
                     <p class="text-xs font-bold text-gray-800">最近记录</p>
                     <span class="text-[10px] text-gray-400">仅展示最近3次</span>
                 </div>
                 <div class="space-y-2">
-                    ${appData.menstrual.records.filter(r => r.endDate).sort((a, b) => parseDate(b.startDate) - parseDate(a.startDate)).slice(0, 3).map(r => {
+                    ${_viewMenstrual.records.filter(r => r.endDate).sort((a, b) => parseDate(b.startDate) - parseDate(a.startDate)).slice(0, 3).map(r => {
                         const start = r.startDate.slice(5).replace('-', '/');
                         const end = r.endDate.slice(5).replace('-', '/');
                         const days = Math.round((parseDate(r.endDate) - parseDate(r.startDate)) / (1000 * 60 * 60 * 24)) + 1;
@@ -2607,7 +2846,7 @@ function refreshMenstrualView() {
         const pageDiv = document.getElementById('page-wrapper-menstrual');
         if (pageDiv) {
             pageDiv.innerHTML = renderMenstrualView();
-            lucide.createIcons();
+            updateIcons(pageDiv);
         }
     }
 }
@@ -2617,51 +2856,54 @@ function changeMenstrualMonth(delta) {
     switchTab('menstrual');
 }
 
-// ==================== 全新记账模块 ====================
+// [L2-L4] 记账：草稿状态机 + 视图渲染
 function renderSubCategories() {
     const wrap = document.getElementById('sub-category-wrap');
     const list = document.getElementById('sub-category-list');
-    if (!wrap || !list) return;
+    if (!wrap || !list || !billDraft) return;
 
-    const subs = SUBCATEGORY_MAP[_selectedCategory];
+    const subs = SUBCATEGORY_MAP[billDraft.category];
     if (!subs || subs.length === 0) {
         wrap.style.display = 'none';
         return;
     }
     
     wrap.style.display = 'block';
-    // 🌟 样式变浅：未选中是透明灰字，选中是极浅的淡蓝底
     list.innerHTML = subs.map(sub => `
         <div onclick="selectSubCategory(this, '${sub}')" 
-             class="flex-shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-medium border transition-all active:scale-95 cursor-pointer ${_selectedSubCategory === sub ? 'bg-blue-50 text-blue-500 border-blue-200' : 'bg-transparent text-gray-400 border-gray-200'}">
+             class="flex-shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-medium border transition-all active:scale-95 cursor-pointer ${billDraft.subCategory === sub ? 'bg-blue-50 text-blue-500 border-blue-200' : 'bg-transparent text-gray-400 border-gray-200'}">
              ${sub}
         </div>
     `).join('');
 }
 
-function selectCapsule(el, val, type) {
+function selectCapsule(el) {
+    if (!billDraft) return;
+    const val = el.dataset.val;
+    const type = el.dataset.type;
     if (type === 'category') {
-        _selectedCategory = val;
-        _selectedSubCategory = ''; // 切大类清空子类
-        showAddBillModal(null, true); // 传入 true，触发静默刷新
+        billDraft.category = val;
+        billDraft.subCategory = '';
+        showAddBillModal(true);
     } else if (type === 'pay') {
-        _selectedPayMethod = (_selectedPayMethod === val) ? '' : val;
-        showAddBillModal(null, true); // 传入 true，触发静默刷新
+        billDraft.payMethod = (billDraft.payMethod === val) ? '' : val;
+        showAddBillModal(true);
     }
 }
 
 function selectSubCategory(el, val) {
-    const wasActive = _selectedSubCategory === val;
-    _selectedSubCategory = wasActive ? '' : val; // 可以取消选中
+    if (!billDraft) return;
+    const wasActive = billDraft.subCategory === val;
+    billDraft.subCategory = wasActive ? '' : val;
     
     el.parentElement.querySelectorAll('div').forEach(node => {
-        node.classList.remove('bg-blue-100', 'text-blue-600', 'border-blue-200');
-        node.classList.add('bg-gray-50', 'text-gray-500', 'border-gray-200');
+        node.classList.remove('bg-blue-50', 'text-blue-500', 'border-blue-200');
+        node.classList.add('bg-transparent', 'text-gray-400', 'border-gray-200');
     });
     
     if (!wasActive) {
-        el.classList.remove('bg-gray-50', 'text-gray-500', 'border-gray-200');
-        el.classList.add('bg-blue-100', 'text-blue-600', 'border-blue-200');
+        el.classList.remove('bg-transparent', 'text-gray-400', 'border-gray-200');
+        el.classList.add('bg-blue-50', 'text-blue-500', 'border-blue-200');
     }
 }
 
@@ -2669,28 +2911,26 @@ function showMoreOptions(type) {
     const layer = document.getElementById('more-options-layer');
     const grid = document.getElementById('more-options-grid');
     const title = document.getElementById('more-title');
+    if (!billDraft) return;
     
     let items = [];
 let selectedVal = '';
 
-// 🌟 统一动态控制高度：内容少，统一自适应贴底
 if (type === 'category') {
     title.innerText = '全部分类';
     items = EXPENSE_CATEGORIES.slice(5); 
-    selectedVal = _selectedCategory;
+    selectedVal = billDraft.category;
 } else {
     title.innerText = '全部支付方式';
     items = PAY_METHODS.slice(5);
-    selectedVal = _selectedPayMethod;
+    selectedVal = billDraft.payMethod;
 }
 
-// 无论分类还是支付方式，都使用自适应高度，贴着底部
 layer.style.top = 'auto'; 
 layer.style.bottom = '0';
 layer.style.height = 'auto';
 grid.style.maxHeight = 'none';
 
-    // 按用户的点击频次自动排序 (仅对分类有效)
     if (type === 'category') {
         if (!appData.settings.categoryStats) appData.settings.categoryStats = {};
         const stats = appData.settings.categoryStats;
@@ -2701,61 +2941,106 @@ grid.style.maxHeight = 'none';
         });
     }
 
-    // 渲染列表
     grid.innerHTML = items.map(item => {
         const val = item.name || item;
         const icon = item.icon ? `<span class="text-base mb-0.5">${item.icon}</span>` : ``;
         const isActive = selectedVal === val;
         const activeClass = isActive ? 'bg-blue-50 border-blue-500 text-blue-600' : 'bg-white border-gray-200 text-gray-600';
         return `
-            <div onclick="selectFromMore('${val}', '${type}')" class="flex flex-col items-center justify-center py-1.5 px-1 rounded-lg border transition-all ${activeClass} active:scale-95">
-                ${icon}
-                <span class="text-[10px] font-medium truncate w-full text-center scale-90">${val}</span>
-            </div>
-        `;
+    <div onclick="selectFromMore(this)" data-val="${escapeHtml(val)}" data-type="${type}" class="flex flex-col items-center justify-center py-1.5 px-1 rounded-lg border transition-all ${activeClass} active:scale-95">
+        ${icon}
+        <span class="text-[10px] font-medium truncate w-full text-center scale-90">${escapeHtml(val)}</span>
+    </div>
+`;
     }).join('');
     
     layer.style.display = 'flex';
-    lucide.createIcons();
 }
 
-function selectFromMore(val, type) {
+function selectFromMore(el) {
+    if (!billDraft) return;
+    const val = el.dataset.val;
+    const type = el.dataset.type;
     if (type === 'category') {
-        _selectedCategory = val;
-        _selectedSubCategory = ''; // 🌟 核心修复：清空残留的子类
+        billDraft.category = val;
+        billDraft.subCategory = '';
         
-        // 记录频次
         if (!appData.settings.categoryStats) appData.settings.categoryStats = {};
         appData.settings.categoryStats[val] = (appData.settings.categoryStats[val] || 0) + 1;
-        saveData(); 
+        saveData(true);
     } else if (type === 'pay') {
-        _selectedPayMethod = (_selectedPayMethod === val) ? '' : val;
+        billDraft.payMethod = (billDraft.payMethod === val) ? '' : val;
     }
     
     document.getElementById('more-options-layer').style.display = 'none';
-    showAddBillModal(null, true); // 🌟 重新渲染，让更多按钮恢复原样
+    showAddBillModal(true);
 }
 
 function updateBillDate(val) {
+    if (!billDraft) return;
     const today = formatDateLocal(new Date());
     if (val > today) {
         showToast('不能选择未来日期');
         const input = document.getElementById('bill-date-input');
-        if (input) input.value = _currentBillDate;
+        if (input) input.value = billDraft.date;
         return;
     }
-    _currentBillDate = val;
+    billDraft.date = val;
     const display = document.getElementById('date-display-text');
     if (display) display.textContent = val.replace(/-/g, '/');
 }
-let _filterCategory = null; // 当前筛选的分类（null 表示未筛选）
-let _filterPayMethod = null; // 🌟 新增：当前筛选的支付方式
-let currentBillWeek = 1; 
-let _currentBillDate = ''; 
-let _currentIncomeType = 'expense'; // 默认支出
-let _editingBillId = null; // 用于判断是新增还是修改
-let _selectedCategory = '餐饮';
-let _selectedPayMethod = ''; // 🌟 当前选中的支付方式（默认不选）
+// 账单页筛选状态（不属于弹窗草稿）
+let billFilter = { category: null, payMethod: null };
+let currentBillWeek = 1;
+
+// 记账弹窗草稿：null 表示未打开
+// 结构：{ date, type, category, subCategory, payMethod, editingId }
+let billDraft = null;
+
+function openDraft(record, presetDate) {
+    if (record) {
+        const isIncome = appData.incomes.some(i => i.id === record.id);
+        billDraft = {
+            date: record.date,
+            type: isIncome ? (record.recordType || 'daily') : 'expense',
+            category: record.category || (isIncome ? 'other' : '餐饮'),
+            subCategory: record.subCategory || '',
+            payMethod: record.payMethod || '',
+            editingId: record.id
+        };
+    } else {
+        billDraft = {
+            date: presetDate || formatDateLocal(new Date()),
+            type: 'expense',
+            category: '餐饮',
+            subCategory: '',
+            payMethod: '',
+            editingId: null
+        };
+    }
+}
+
+function resetDraft() {
+    billDraft = null;
+}
+
+// 旧数据迁移：从 "子分类 · 备注" 解析出独立字段
+function parseLegacyNote(category, note) {
+    if (!note) return { subCategory: '', note: '' };
+    const subs = SUBCATEGORY_MAP[category];
+    if (subs) {
+        for (const sub of subs) {
+            // 旧数据无备注：note 直接等于子分类名
+            if (note === sub) return { subCategory: sub, note: '' };
+            // 旧数据有备注："子分类 · 备注"
+            const prefix = sub + ' · ';
+            if (note.startsWith(prefix)) {
+                return { subCategory: sub, note: note.slice(prefix.length) };
+            }
+        }
+    }
+    return { subCategory: '', note };
+}
 
 // 🌟 分类与支付方式的字典库
 const EXPENSE_CATEGORIES = [
@@ -2782,7 +3067,6 @@ const SUBCATEGORY_MAP = {
     '烟酒': ['香烟', '白酒', '啤酒', '红酒'],
     '理财': ['基金', '股票', '保险']
 };
-let _selectedSubCategory = ''; // 🌟 记录选中的子标签
 
 function openCenterModal(html, isNarrow = false, skipIcons = false, onRendered = null) {
     const content = document.querySelector('.center-modal-content');
@@ -2796,21 +3080,20 @@ function openCenterModal(html, isNarrow = false, skipIcons = false, onRendered =
     
     document.getElementById('center-modal-overlay').classList.add('active');
     
-    requestAnimationFrame(() => {
-        document.getElementById('center-modal-body').innerHTML = html;
-        if (!skipIcons) {
-            lucide.createIcons();
-        }
-        // 🌟 渲染完成后，如果有回调函数，就执行它
-        if (onRendered) {
-            onRendered();
-        }
-    });
+    // 🌟 同步写入，避免 rAF 时序问题
+    const body = document.getElementById('center-modal-body');
+body.innerHTML = html;
+if (!skipIcons) {
+    updateIcons(body);
+}
+    if (onRendered) {
+        onRendered();
+    }
 }
 function closeCenterModal(e) { 
     if(!e || e.target === document.getElementById('center-modal-overlay')) {
         document.getElementById('center-modal-overlay').classList.remove('active'); 
-        _editingBillId = null;
+        resetDraft();
     }
 }
 
@@ -2834,9 +3117,9 @@ function renderBillView() {
 // 🌟 核心：如果有筛选，就不看周，直接扫描全月
 appData.incomes.filter(i => i.date.startsWith(monthStr)).forEach(i => {
     const d = parseInt(i.date.split('-')[2]);
-    const inRange = (_filterCategory || _filterPayMethod) ? true : (d >= startDay && d <= endDay);
-    const isMatchCat = _filterCategory ? (i.category === _filterCategory) : true;
-    const isMatchPay = _filterPayMethod ? (i.payMethod === _filterPayMethod) : true;
+    const inRange = (billFilter.category || billFilter.payMethod) ? true : (d >= startDay && d <= endDay);
+    const isMatchCat = billFilter.category ? (i.category === billFilter.category) : true;
+    const isMatchPay = billFilter.payMethod ? (i.payMethod === billFilter.payMethod) : true;
     
     if (inRange && isMatchCat && isMatchPay) {
         if (!recordsInWeek[i.date]) recordsInWeek[i.date] = { in: [], out: [] };
@@ -2846,9 +3129,9 @@ appData.incomes.filter(i => i.date.startsWith(monthStr)).forEach(i => {
 
 appData.expenses.filter(e => e.date.startsWith(monthStr)).forEach(e => {
     const d = parseInt(e.date.split('-')[2]);
-    const inRange = (_filterCategory || _filterPayMethod) ? true : (d >= startDay && d <= endDay);
-    const isMatchCat = _filterCategory ? (e.category === _filterCategory) : true;
-    const isMatchPay = _filterPayMethod ? (e.payMethod === _filterPayMethod) : true;
+    const inRange = (billFilter.category || billFilter.payMethod) ? true : (d >= startDay && d <= endDay);
+    const isMatchCat = billFilter.category ? (e.category === billFilter.category) : true;
+    const isMatchPay = billFilter.payMethod ? (e.payMethod === billFilter.payMethod) : true;
     
     if (inRange && isMatchCat && isMatchPay) {
         if (!recordsInWeek[e.date]) recordsInWeek[e.date] = { in: [], out: [] };
@@ -2881,9 +3164,9 @@ return `
         <div class="day-card-header" style="background: #F8FAFC; color: #64748B; border-bottom: 1px solid rgba(0,0,0,0.03);">
             <span class="font-bold text-[11px] ${isToday ? 'text-blue-500' : ''}">${dateObj.getMonth()+1}月${dateObj.getDate()}日 ${weekStr}</span>
                         <div class="text-[10px]">
-    ${dayIn > 0 ? `<span class="text-green-500 font-bold">收 ${formatAmount(dayIn)}</span>` : ''}
+    ${dayIn > 0 ? `<span class="text-green-500 font-bold">收 ${toPlainNumber(dayIn)}</span>` : ''}
     ${dayIn > 0 && dayOut > 0 ? ' <span class="text-gray-300">/</span> ' : ''}
-    ${dayOut > 0 ? `<span class="text-red-500 font-bold">支 ${formatAmount(dayOut)}</span>` : ''}
+    ${dayOut > 0 ? `<span class="text-red-500 font-bold">支 ${toPlainNumber(dayOut)}</span>` : ''}
 </div>
                     </div>
                     <div class="day-card-body">
@@ -2895,7 +3178,7 @@ return `
                                 else if (r.recordType === 'monthly') { typeName = '月薪'; icon = '💼'; }
                                 else { typeName = '日结'; icon = '🦺'; }
                             } else {
-    typeName = r.category || '其他';
+    typeName = r.subCategory || r.category || '其他';
     const catConfig = EXPENSE_CATEGORIES.find(c => c.name === r.category);
     icon = catConfig ? catConfig.icon : '⭕';
 }
@@ -2909,15 +3192,15 @@ if (r.isIncome) {
     let deducts = [];
     if (r.recordType === 'work' && r.hours && r.pricePerHour) {
         originalAmount = r.hours * r.pricePerHour;
-        if (r.insurance > 0) deducts.push(`保险 ¥${formatAmount(r.insurance)}`);
-        detailText = `${r.hours}h×¥${formatAmount(r.pricePerHour)}=¥${formatAmount(originalAmount)}` + (deducts.length ? ` (扣${deducts.join(' ')})` : '');
+        if (r.insurance > 0) deducts.push(`保险 ¥${toPlainNumber(r.insurance)}`);
+        detailText = `${r.hours}h×¥${toPlainNumber(r.pricePerHour)}=¥${toPlainNumber(originalAmount)}` + (deducts.length ? ` (扣${deducts.join(' ')})` : '');
     } else {
-        if (r.insurance > 0) { originalAmount += r.insurance; deducts.push(`保险 ¥${formatAmount(r.insurance)}`); }
-        if (r.tax > 0) { originalAmount += r.tax; deducts.push(`个税 ¥${formatAmount(r.tax)}`); }
-        if (r.social > 0) { originalAmount += r.social; deducts.push(`社保 ¥${formatAmount(r.social)}`); }
+        if (r.insurance > 0) { originalAmount += r.insurance; deducts.push(`保险 ¥${toPlainNumber(r.insurance)}`); }
+        if (r.tax > 0) { originalAmount += r.tax; deducts.push(`个税 ¥${toPlainNumber(r.tax)}`); }
+        if (r.social > 0) { originalAmount += r.social; deducts.push(`社保 ¥${toPlainNumber(r.social)}`); }
         
         if (deducts.length > 0) {
-            const calcStr = `应发 ¥${formatAmount(originalAmount)} (扣${deducts.join(' ')})`;
+            const calcStr = `应发 ¥${toPlainNumber(originalAmount)} (扣${deducts.join(' ')})`;
             detailText = detailText ? `${detailText} · ${calcStr}` : calcStr;
         }
     }
@@ -2939,7 +3222,7 @@ if (r.isIncome) {
                                     `}
                                 </div>
                                 <div class="flex flex-col items-end flex-shrink-0 ml-2">
-                                    <span class="text-[13px] font-bold text-black">${r.isIncome ? '+' : '-'}¥${formatAmount(r.amount)}</span>
+                                    <span class="text-[13px] font-bold text-black">${r.isIncome ? '+' : '-'}¥${toPlainNumber(r.amount)}</span>
                                     ${detailText ? `<span class="text-[10px] text-gray-500 font-normal mt-0.5 whitespace-nowrap">${detailText}</span>` : ''}
                                 </div>
                             </div>
@@ -2963,7 +3246,7 @@ if (r.isIncome) {
     <p class="text-xs opacity-90 mb-1 mt-1">${year}年${month+1}月结余</p>
 <div class="flex justify-center mt-1">
     <div class="relative inline-flex items-center">
-        <span class="text-4xl font-bold leading-none">${formatAmount(Math.abs(balance)).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}</span>
+        <span class="text-4xl font-bold leading-none">${toPlainNumber(Math.abs(balance)).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}</span>
         <div class="absolute right-full top-0 bottom-0 pr-1 flex items-center">
             <span class="text-sm font-bold opacity-90 mr-1" style="transform: translateY(-9px);">¥</span>
             ${balance < 0 ? '<span class="text-3xl font-bold leading-none mr-0.5">-</span>' : ''}
@@ -2975,11 +3258,11 @@ if (r.isIncome) {
                         <div class="overview-body pb-3 pt-3">
         <div class="flex-1 border-r border-gray-100 text-center">
             <p class="text-[11px] text-gray-400 mb-1">总收入</p>
-            <p class="text-[13px] font-bold text-gray-700">+¥${formatAmount(totalIn)}</p>
+            <p class="text-[13px] font-bold text-gray-700">+¥${toPlainNumber(totalIn)}</p>
         </div>
         <div class="flex-1 text-center">
             <p class="text-[11px] text-gray-400 mb-1">总支出</p>
-            <p class="text-[13px] font-bold text-red-500">-¥${formatAmount(totalOut)}</p>
+            <p class="text-[13px] font-bold text-red-500">-¥${toPlainNumber(totalOut)}</p>
         </div>
     </div>
     
@@ -2999,11 +3282,11 @@ if (r.isIncome) {
 </div>
            
 <!-- 🌟 筛选状态提示栏 -->
-${(_filterCategory || _filterPayMethod) ? `
+${(billFilter.category || billFilter.payMethod) ? `
 <div class="flex justify-between items-center bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 animate-fade-in" style="margin-top: -8px; margin-bottom: -8px;">
     <div class="flex items-center gap-2 text-blue-600 text-xs font-medium">
         <i data-lucide="filter" class="w-3.5 h-3.5"></i>
-        <span>正在查看全月「${_filterCategory ? _filterCategory : _filterPayMethod}」</span>
+        <span>正在查看全月「${billFilter.category ? billFilter.category : billFilter.payMethod}」</span>
     </div>
     <button onclick="clearBillFilter()" class="text-gray-400 hover:text-red-500 p-1 bg-white rounded-md shadow-sm">
         <i data-lucide="x" class="w-3.5 h-3.5"></i>
@@ -3011,7 +3294,7 @@ ${(_filterCategory || _filterPayMethod) ? `
 </div>
 ` : ''}
 
-${!(_filterCategory || _filterPayMethod) ? `
+${!(billFilter.category || billFilter.payMethod) ? `
 <div class="flex bg-gray-200/60 p-0.5 rounded-xl" style="margin-top: -8px; margin-bottom: -8px;">
     ${[1,2,3,4,5].map(w => {
         if (w === 5 && daysInMonth <= 28) return ''; 
@@ -3073,7 +3356,7 @@ async function showStatsModal(type = 'category') {
     const listHtml = statsArray.map(item => {
         const percent = ((item.amount / totalAmount) * 100).toFixed(1);
         return `
-            <div onclick="applyBillFilter('${item.name}', '${type}')" class="flex items-center justify-between p-3 bg-gray-50 rounded-xl mb-2 active:scale-95 transition-transform cursor-pointer">
+    <div onclick="applyBillFilter(this)" data-name="${escapeHtml(item.name)}" data-type="${type}" class="flex items-center justify-between p-3 bg-gray-50 rounded-xl mb-2 active:scale-95 transition-transform cursor-pointer">
                 <div class="flex items-center gap-3">
                     <div class="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center text-lg">${item.icon}</div>
                     <div>
@@ -3082,7 +3365,7 @@ async function showStatsModal(type = 'category') {
                     </div>
                 </div>
                 <div class="text-right">
-                    <p class="text-sm font-bold text-gray-800">¥${formatAmount(item.amount)}</p>
+                    <p class="text-sm font-bold text-gray-800">¥${toPlainNumber(item.amount)}</p>
                     <p class="text-[10px] text-blue-500 font-medium">点击查看账单 ❯</p>
                 </div>
             </div>
@@ -3094,7 +3377,7 @@ async function showStatsModal(type = 'category') {
             <div class="flex justify-between items-center mb-3">
                 <div>
                     <h3 class="text-[15px] font-bold text-gray-800">${title}</h3>
-                    <p class="text-[10px] text-gray-400 mt-0.5">总支出 ¥${formatAmount(totalAmount)}</p>
+                    <p class="text-[10px] text-gray-400 mt-0.5">总支出 ¥${toPlainNumber(totalAmount)}</p>
                 </div>
                 <button onclick="closeCenterModal()" class="p-1.5 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
             </div>
@@ -3108,13 +3391,15 @@ async function showStatsModal(type = 'category') {
     openCenterModal(html);
 }
 
-function applyBillFilter(target, type) {
+function applyBillFilter(el) {
+    const target = el.dataset.name;
+    const type = el.dataset.type;
     if (type === 'category') {
-        _filterCategory = target;
-        _filterPayMethod = null;
+        billFilter.category = target;
+        billFilter.payMethod = null;
     } else {
-        _filterPayMethod = target;
-        _filterCategory = null;
+        billFilter.payMethod = target;
+        billFilter.category = null;
     }
     closeCenterModal();
     switchTab('bill', true);
@@ -3122,8 +3407,8 @@ function applyBillFilter(target, type) {
 }
 
 function clearBillFilter() {
-    _filterCategory = null;
-    _filterPayMethod = null;
+    billFilter.category = null;
+    billFilter.payMethod = null;
     switchTab('bill', true);
     showToast('已清除筛选');
 }
@@ -3136,8 +3421,8 @@ function changeBillMonth(delta) {
         showToast('暂不支持查看未来的账单哦');
         return;
     }
-    _filterCategory = null; // 切换月份时，清空分类筛选
-    _filterPayMethod = null; // 清空支付方式筛选
+    billFilter.category = null;
+    billFilter.payMethod = null;
     currentMonth = targetMonth;
     switchTab('bill', true);
 }
@@ -3149,7 +3434,7 @@ function switchBillWeek(w) {
     const pageDiv = document.getElementById('page-wrapper-bill');
     if (pageDiv) {
         pageDiv.innerHTML = renderBillView();
-        lucide.createIcons();
+        updateIcons(pageDiv);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 }
@@ -3158,7 +3443,8 @@ function switchBillWeek(w) {
 let _wheelYear = 0, _wheelMonth = 0, _wheelDay = 0;
 
 function openCustomDatePicker() {
-    const parts = _currentBillDate.split('-');
+    if (!billDraft) return;
+    const parts = billDraft.date.split('-');
     _wheelYear = parseInt(parts[0]);
     _wheelMonth = parseInt(parts[1]);
     _wheelDay = parseInt(parts[2]);
@@ -3229,191 +3515,154 @@ function fillWheel(id, items, activeVal, onChange) {
 }
 
 function confirmCustomDatePicker() {
+    if (!billDraft) return;
     const pad = (n) => String(n).padStart(2, '0');
     const dateStr = `${_wheelYear}-${pad(_wheelMonth)}-${pad(_wheelDay)}`;
     
-    // 检查未来日期
     const today = formatDateLocal(new Date());
     if (dateStr > today) {
         showToast('不能选择未来日期');
         return;
     }
     
-    _currentBillDate = dateStr;
+    billDraft.date = dateStr;
     closeCustomDatePicker();
     
-    // 更新主界面的文本（不重绘整个弹窗，只是改文字，避免输入框失效）
     const display = document.getElementById('date-display-text');
     if (display) display.textContent = dateStr.replace(/-/g, '/');
 }
 
-function showAddBillModal(dateStr = null, isRefreshing = false) {
-    const isEditing = !!_editingBillId;
-    const record = isEditing ? (_currentIncomeType === 'expense' ? appData.expenses.find(e => e.id === _editingBillId) : appData.incomes.find(i => i.id === _editingBillId)) : null;
-    
-if (!isEditing && !isRefreshing) {
-    _currentBillDate = dateStr || formatDateLocal(new Date());
-    _currentIncomeType = 'expense';
-    _selectedCategory = '餐饮';
-    _selectedPayMethod = ''; // 新增时默认为空
-}
+function showAddBillModal(isRefreshing = false) {
+    if (!billDraft) openDraft();
 
-// 预设各种输入框的值
-let amountVal = '', hoursVal = '', priceVal = '', insuranceVal = '', taxVal = '', socialVal = '', noteVal = '';
-if (record) {
-    noteVal = record.note || '';
-    insuranceVal = record.insurance ? formatAmount(record.insurance) : '';
-    taxVal = record.tax ? formatAmount(record.tax) : '';
-    socialVal = record.social ? formatAmount(record.social) : '';
-    _selectedPayMethod = record.payMethod || '';
-    if (_currentIncomeType === 'work') {
-        hoursVal = record.hours ? formatAmount(record.hours) : '';
-        priceVal = record.pricePerHour ? formatAmount(record.pricePerHour) : '';
-    } else {
-        const total = record.amount + (record.insurance || 0) + (record.tax || 0) + (record.social || 0);
-        amountVal = total > 0 ? formatAmount(total) : '';
+    const isEditing = !!billDraft.editingId;
+    const record = isEditing
+        ? (appData.incomes.find(i => i.id === billDraft.editingId) || appData.expenses.find(e => e.id === billDraft.editingId))
+        : null;
+
+    let amountVal = '', hoursVal = '', priceVal = '', insuranceVal = '', taxVal = '', socialVal = '', noteVal = '';
+
+    if (isRefreshing) {
+        amountVal = document.getElementById('bill-amount')?.value || '';
+        hoursVal = document.getElementById('work-hours')?.value || '';
+        priceVal = document.getElementById('work-price')?.value || '';
+        insuranceVal = document.getElementById('insurance-amount')?.value || '';
+        taxVal = document.getElementById('tax-amount')?.value || '';
+        socialVal = document.getElementById('social-amount')?.value || '';
+        noteVal = document.getElementById('bill-note')?.value || '';
+    } else if (record) {
+        noteVal = record.note || '';
+        insuranceVal = record.insurance ? toPlainNumber(record.insurance) : '';
+        taxVal = record.tax ? toPlainNumber(record.tax) : '';
+        socialVal = record.social ? toPlainNumber(record.social) : '';
+        if (billDraft.type === 'work') {
+            hoursVal = record.hours ? toPlainNumber(record.hours) : '';
+            priceVal = record.pricePerHour ? toPlainNumber(record.pricePerHour) : '';
+        } else {
+            const total = record.amount + (record.insurance || 0) + (record.tax || 0) + (record.social || 0);
+            amountVal = total > 0 ? toPlainNumber(total) : '';
+        }
     }
-}
-
-// 🌟 核心：如果是刷新状态（切分类），把当前界面上的输入值抓取下来！
-if (isRefreshing) {
-    const elAmount = document.getElementById('bill-amount');
-    const elHours = document.getElementById('work-hours');
-    const elPrice = document.getElementById('work-price');
-    const elIns = document.getElementById('insurance-amount');
-    const elTax = document.getElementById('tax-amount');
-    const elSocial = document.getElementById('social-amount');
-    const elNote = document.getElementById('bill-note');
-    
-    if (elAmount) amountVal = elAmount.value;
-    if (elHours) hoursVal = elHours.value;
-    if (elPrice) priceVal = elPrice.value;
-    if (elIns) insuranceVal = elIns.value;
-    if (elTax) taxVal = elTax.value;
-    if (elSocial) socialVal = elSocial.value;
-    if (elNote) noteVal = elNote.value;
-}
 
     const typeTabHtml = `
     <div class="flex bg-gray-100/70 p-0.5 rounded-xl mb-3">
-        <button id="type-btn-expense" onclick="switchRecordType('expense')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${_currentIncomeType === 'expense' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-400 font-medium'}">支出</button>
-        <button id="type-btn-daily" onclick="switchRecordType('daily')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${_currentIncomeType === 'daily' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-400 font-medium'}">日结</button>
-        <button id="type-btn-monthly" onclick="switchRecordType('monthly')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${_currentIncomeType === 'monthly' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-400 font-medium'}">月薪</button>
-        <button id="type-btn-work" onclick="switchRecordType('work')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${_currentIncomeType === 'work' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-400 font-medium'}">工时</button>
+        <button id="type-btn-expense" onclick="switchRecordType('expense')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${billDraft.type === 'expense' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-400 font-medium'}">支出</button>
+        <button id="type-btn-daily" onclick="switchRecordType('daily')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${billDraft.type === 'daily' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-400 font-medium'}">日结</button>
+        <button id="type-btn-monthly" onclick="switchRecordType('monthly')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${billDraft.type === 'monthly' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-400 font-medium'}">月薪</button>
+        <button id="type-btn-work" onclick="switchRecordType('work')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${billDraft.type === 'work' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-400 font-medium'}">工时</button>
     </div>
 `;
 
-// 生成横滑分类的 HTML
 const buildCapsuleList = (items, selectedVal, type, showMore = true) => {
-    // 如果 showMore 为 false，就全显示；否则只显示前 5 个
     const commonItems = showMore ? items.slice(0, 5) : items;
     let html = commonItems.map(item => {
-            const val = item.name || item;
-            const icon = item.icon ? `${item.icon} ` : '';
-            const isActive = selectedVal === val;
-            const activeClass = isActive ? 'bg-blue-500 text-white shadow-sm border-blue-500 font-bold' : 'bg-white text-gray-500 border-gray-200 font-medium';
-return `<div onclick="selectCapsule(this, '${val}', '${type}')" class="flex-shrink-0 px-3 py-1.5 rounded-full text-xs border transition-all active:scale-95 cursor-pointer ${activeClass}">${icon}${val}</div>`;
-        }).join('');
-        
-// 更多按钮
-if (showMore) {
-    const isMoreActive = items.slice(5).some(i => (i.name || i) === selectedVal);
-    const moreActiveClass = isMoreActive ? 'bg-blue-500 text-white border-blue-500 font-bold' : 'bg-white text-gray-500 border-gray-200 font-medium';
+        const val = item.name || item;
+        const icon = item.icon ? `${item.icon} ` : '';
+        const isActive = selectedVal === val;
+        const activeClass = isActive ? 'bg-blue-500 text-white shadow-sm border-blue-500 font-bold' : 'bg-white text-gray-500 border-gray-200 font-medium';
+        return `<div onclick="selectCapsule(this)" data-val="${escapeHtml(val)}" data-type="${type}" class="flex-shrink-0 px-3 py-1.5 rounded-full text-xs border transition-all active:scale-95 cursor-pointer ${activeClass}">${icon}${escapeHtml(val)}</div>`;
+    }).join('');
     
-    // 🌟 核心：如果选中项不在前 5 个里，就把文字直接变成选中的项，而不是显示“更多”
-    let btnText = '••• 更多';
-    if (isMoreActive) {
-        const currentItem = items.find(i => (i.name || i) === selectedVal);
-        // 如果选中的是带 icon 的分类，就把 icon 也带上
-        btnText = currentItem.icon ? `${currentItem.icon} ${selectedVal}` : selectedVal; 
+    if (showMore) {
+        const isMoreActive = items.slice(5).some(i => (i.name || i) === selectedVal);
+        const moreActiveClass = isMoreActive ? 'bg-blue-500 text-white border-blue-500 font-bold' : 'bg-white text-gray-500 border-gray-200 font-medium';
+        let btnText = '••• 更多';
+        if (isMoreActive) {
+            const currentItem = items.find(i => (i.name || i) === selectedVal);
+            btnText = currentItem.icon ? `${currentItem.icon} ${selectedVal}` : selectedVal;
+        }
+        html += `<div onclick="showMoreOptions('${type}')" class="flex-shrink-0 px-3 py-1.5 rounded-full text-xs border transition-all active:scale-95 cursor-pointer flex items-center gap-1 ${moreActiveClass}">${btnText}</div>`;
     }
     
-    html += `<div onclick="showMoreOptions('${type}')" class="flex-shrink-0 px-3 py-1.5 rounded-full text-xs border transition-all active:scale-95 cursor-pointer flex items-center gap-1 ${moreActiveClass}">${btnText}</div>`;
-}
-        
-        return `<div class="flex gap-2 overflow-x-auto pb-1" style="scrollbar-width: none; -webkit-overflow-scrolling: touch;">${html}</div>`;
-    };
+    return `<div class="flex gap-2 overflow-x-auto pb-1" style="scrollbar-width: none; -webkit-overflow-scrolling: touch;">${html}</div>`;
+};
 
     const html = `
         <div class="flex flex-col relative">
 <div class="flex justify-center mb-2">
     <label class="flex items-center gap-1 cursor-pointer text-gray-400 hover:text-gray-600 transition-colors" onclick="openCustomDatePicker()">
-        <span id="date-display-text" class="text-xs font-medium tracking-wide">${_currentBillDate.replace(/-/g, '/')}</span>
+        <span id="date-display-text" class="text-xs font-medium tracking-wide">${billDraft.date.replace(/-/g, '/')}</span>
     </label>
 </div>
             
             ${typeTabHtml}
 
             <div class="flex flex-col mb-1 min-h-[110px]">
-                <!-- 正常金额框 -->
-<div id="normal-amount-wrap" style="display: ${_currentIncomeType === 'work' ? 'none' : 'block'};">
+<div id="normal-amount-wrap" style="display: ${billDraft.type === 'work' ? 'none' : 'block'};">
     <input type="tel" id="bill-amount" class="finance-input" placeholder="输入金额" value="${amountVal}" style="font-size: 15px; padding: 8px;">
 </div>
 
-<!-- 工时专属框 -->
-<div id="work-inputs-wrap" style="display: ${_currentIncomeType === 'work' ? 'block' : 'none'};" class="space-y-2">
+<div id="work-inputs-wrap" style="display: ${billDraft.type === 'work' ? 'block' : 'none'};" class="space-y-2">
     <input type="tel" id="work-hours" class="finance-input" placeholder="时长(小时)" value="${hoursVal}">
     <input type="tel" id="work-price" class="finance-input" placeholder="时薪(元)" value="${priceVal}">
 </div>
 
-<!-- 保险 / 个税社保 -->
-<div id="insurance-wrap" style="display: ${_currentIncomeType === 'daily' || _currentIncomeType === 'work' ? 'block' : 'none'};" class="mt-2">
+<div id="insurance-wrap" style="display: ${billDraft.type === 'daily' || billDraft.type === 'work' ? 'block' : 'none'};" class="mt-2">
     <input type="tel" id="insurance-amount" class="finance-input" placeholder="扣除保险 (可选)" value="${insuranceVal}" style="border: 1px dashed #FCA5A5; background: #FEF2F2; color: #EF4444;">
 </div>
-<div id="tax-social-wrap" style="display: ${_currentIncomeType === 'monthly' ? 'flex' : 'none'};" class="flex gap-2 mt-2">
+<div id="tax-social-wrap" style="display: ${billDraft.type === 'monthly' ? 'flex' : 'none'};" class="flex gap-2 mt-2">
     <input type="tel" id="tax-amount" class="finance-input" placeholder="扣除个税(可选)" value="${taxVal}" style="border: 1px dashed #FCD34D; background: #FFFBEB; color: #D97706;">
     <input type="tel" id="social-amount" class="finance-input" placeholder="扣除社保(可选)" value="${socialVal}" style="border: 1px dashed #FCD34D; background: #FFFBEB; color: #D97706;">
 </div>
                 
-                                <!-- 🌟 新的支出分类与支付方式 -->
-                <div id="expense-category-wrap" style="display: ${_currentIncomeType === 'expense' ? 'block' : 'none'};" class="mt-2">
+<div id="expense-category-wrap" style="display: ${billDraft.type === 'expense' ? 'block' : 'none'};" class="mt-2">
     <p class="text-[11px] text-gray-500 mb-1">支出分类</p>
-    ${buildCapsuleList(EXPENSE_CATEGORIES, _selectedCategory, 'category')}
+    ${buildCapsuleList(EXPENSE_CATEGORIES, billDraft.category, 'category')}
     
-    <!-- 🌟 细分标签区（动态显示） -->
-    <div id="sub-category-wrap" style="display: ${SUBCATEGORY_MAP[_selectedCategory] ? 'block' : 'none'};">
+    <div id="sub-category-wrap" style="display: ${SUBCATEGORY_MAP[billDraft.category] ? 'block' : 'none'};">
         <p class="text-[11px] text-gray-500 mb-1 mt-1.5">细分标签 <span class="text-gray-400 font-normal">(可选)</span></p>
         <div id="sub-category-list" class="flex gap-2 overflow-x-auto pb-1" style="scrollbar-width: none; -webkit-overflow-scrolling: touch;">
-            <!-- JS 会动态填入 -->
         </div>
     </div>
 
     <p class="text-[11px] text-gray-500 mb-1 mt-2">支付方式 <span class="text-gray-400 font-normal">(可选)</span></p>
-    ${buildCapsuleList(PAY_METHODS, _selectedPayMethod, 'pay')}
+    ${buildCapsuleList(PAY_METHODS, billDraft.payMethod, 'pay')}
 </div>
 
-                <!-- 🌟 收入入账账户 -->
-<div id="income-account-wrap" style="display: ${_currentIncomeType !== 'expense' ? 'block' : 'none'};" class="mt-3">
+<div id="income-account-wrap" style="display: ${billDraft.type !== 'expense' ? 'block' : 'none'};" class="mt-3">
     <p class="text-[11px] text-gray-500 mb-1.5">入账账户 <span class="text-gray-400 font-normal">(可选)</span></p>
-    ${buildCapsuleList(['微信', '支付宝', '银行卡', '现金'], _selectedPayMethod, 'pay', false)}
+    ${buildCapsuleList(['微信', '支付宝', '银行卡', '现金'], billDraft.payMethod, 'pay', false)}
 </div>
 
-                <input type="text" id="bill-note" class="finance-input mt-2" placeholder="添加备注..." value="${noteVal}" style="font-size: 12px; font-weight: normal; text-align: left; padding: 6px 8px;" onfocus="if(this.value===''){this.value=' ';this.value='';}">
+                <input type="text" id="bill-note" class="finance-input mt-2" placeholder="添加备注..." value="${noteVal}" style="font-size: 12px; font-weight: normal; text-align: left; padding: 6px 8px;">
             </div>
             
             <button onclick="saveBillRecord()" class="w-full py-2.5 rounded-xl font-bold text-white text-sm shadow-md active:scale-95 transition-transform mt-auto" style="background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);">保存</button>
 
-            <!-- 更多选项的覆盖层（浅灰翻页效果） -->
 <div id="more-options-layer" class="absolute left-0 right-0 bottom-0 top-0 bg-gray-50 border border-gray-100 z-50 flex flex-col p-3 transition-all" style="display: none; border-radius: 24px;">
     <div class="flex justify-between items-center mb-3">
         <span class="text-[15px] font-bold text-gray-800" id="more-title">全部分类</span>
-        <!-- 加一个浅色返回按钮 -->
         <button onclick="document.getElementById('more-options-layer').style.display='none'" class="px-2 py-1 bg-gray-100 rounded-lg text-gray-600 flex items-center gap-1 text-xs">
     ‹ 返回
 </button>
     </div>
-    <!-- 🌟 改成 4 列小方块，限制高度 -->
 <div class="grid grid-cols-4 gap-1.5 overflow-y-auto pb-2 pr-1" id="more-options-grid" style="max-height: 260px; scrollbar-width: none;">
-    <!-- 动态生成 -->
 </div>
 </div>
         </div>
     `;
-        openCenterModal(html, false, true, () => {
-        // 🌟 此时 DOM 已经就绪，完美渲染子分类
+    openCenterModal(html, false, true, () => {
         renderSubCategories();
-
-        // 🌟 恢复滚动条：让选中的选项自动居中显示（瞬间归位）
         if (isRefreshing) {
             document.querySelectorAll('.overflow-x-auto').forEach(container => {
                 const activeItem = container.querySelector('.bg-blue-500'); 
@@ -3424,18 +3673,22 @@ if (showMore) {
         }
     });
 }
+
 function switchRecordType(type) {
-    _currentIncomeType = type;
-    // 如果切到收入，清空当前选中的支付方式，防止混淆
+    if (!billDraft) return;
+    billDraft.type = type;
     if (type !== 'expense') {
-        _selectedPayMethod = ''; 
+        billDraft.payMethod = ''; 
     }
-    showAddBillModal(null, true); // 传入 true，只刷新界面
+    showAddBillModal(true);
 }
 
 function saveBillRecord() {
-    if (_currentBillDate > formatDateLocal(new Date())) { showToast('不能记录未来日期的账目'); return; }
-    let amount, isExpense = (_currentIncomeType === 'expense');
+    if (!billDraft) return;
+    if (billDraft.date > formatDateLocal(new Date())) { showToast('不能记录未来日期的账目'); return; }
+    
+    const isExpense = (billDraft.type === 'expense');
+    let amount;
     
     const insurance = parseFloat(document.getElementById('insurance-amount')?.value) || 0;
     const tax = parseFloat(document.getElementById('tax-amount')?.value) || 0;
@@ -3444,16 +3697,16 @@ function saveBillRecord() {
     let baseAmount = 0;
     let workHours = 0, workPrice = 0;
 
-    if (_currentIncomeType === 'work') {
+    if (billDraft.type === 'work') {
         workHours = parseFloat(document.getElementById('work-hours').value);
         workPrice = parseFloat(document.getElementById('work-price').value);
         if (!workHours || !workPrice) { showToast('请填写时长和时薪'); return; }
         amount = (workHours * workPrice) - insurance;
-    } else if (_currentIncomeType === 'monthly') {
+    } else if (billDraft.type === 'monthly') {
         baseAmount = parseFloat(document.getElementById('bill-amount').value);
         if (!baseAmount || baseAmount <= 0) { showToast('请输入金额'); return; }
         amount = baseAmount - tax - social;
-    } else if (_currentIncomeType === 'daily') {
+    } else if (billDraft.type === 'daily') {
         baseAmount = parseFloat(document.getElementById('bill-amount').value);
         if (!baseAmount || baseAmount <= 0) { showToast('请输入金额'); return; }
         amount = baseAmount - insurance;
@@ -3464,37 +3717,34 @@ function saveBillRecord() {
 
     if (amount <= 0) { showToast('扣除后金额必须大于0'); return; }
 
-let note = document.getElementById('bill-note').value;
-if (isExpense && _selectedSubCategory) {
-    note = note ? `${_selectedSubCategory} · ${note}` : _selectedSubCategory;
-}
-const category = isExpense ? _selectedCategory : (_currentIncomeType === 'monthly' ? 'salary' : 'other');
-const payMethod = _selectedPayMethod || ''; // 🌟 获取支付方式
+    // 2.2 核心：note 只存纯备注，subCategory 独立字段
+    const note = document.getElementById('bill-note').value;
+    const category = isExpense ? billDraft.category : (billDraft.type === 'monthly' ? 'salary' : 'other');
+    const payMethod = billDraft.payMethod || '';
+    const subCategory = isExpense ? (billDraft.subCategory || '') : '';
 
-// 把保险/税等金额以及支付方式存起来
-const recordExtras = { insurance, tax, social, payMethod };
+    const recordExtras = { insurance, tax, social, payMethod, subCategory };
+    const editingId = billDraft.editingId;
 
-if (_editingBillId) {
-    appData.expenses = appData.expenses.filter(e => e.id !== _editingBillId);
-    appData.incomes = appData.incomes.filter(i => i.id !== _editingBillId);
+if (editingId) {
+    appData.expenses = appData.expenses.filter(e => e.id !== editingId);
+    appData.incomes = appData.incomes.filter(i => i.id !== editingId);
     
     if (isExpense) {
-        appData.expenses.push({ id: _editingBillId, date: _currentBillDate, amount, category, note, updatedAt: Date.now(), ...recordExtras });
+        appData.expenses.push({ id: editingId, date: billDraft.date, amount, category, note, updatedAt: Date.now(), ...recordExtras });
     } else {
-        const rec = { id: _editingBillId, date: _currentBillDate, amount, category, note, recordType: _currentIncomeType, hours: workHours, pricePerHour: workPrice, updatedAt: Date.now(), ...recordExtras };
-        appData.incomes.push(rec);
+        appData.incomes.push({ id: editingId, date: billDraft.date, amount, category, note, recordType: billDraft.type, hours: workHours, pricePerHour: workPrice, updatedAt: Date.now(), ...recordExtras });
     }
 } else {
     const id = Date.now().toString();
     if (isExpense) {
-        appData.expenses.push({ id, date: _currentBillDate, amount, category, note, updatedAt: Date.now(), ...recordExtras });
+        appData.expenses.push({ id, date: billDraft.date, amount, category, note, updatedAt: Date.now(), ...recordExtras });
     } else {
-        const rec = { id, date: _currentBillDate, amount, category, note, recordType: _currentIncomeType, hours: workHours, pricePerHour: workPrice, updatedAt: Date.now(), ...recordExtras };
-        appData.incomes.push(rec);
+        appData.incomes.push({ id, date: billDraft.date, amount, category, note, recordType: billDraft.type, hours: workHours, pricePerHour: workPrice, updatedAt: Date.now(), ...recordExtras });
     }
 }
 
-    saveData(); logOp(_editingBillId ? '修改记录' : '记一笔', `${_currentBillDate} ${amount}`);
+    saveData(); logOp(editingId ? '修改记录' : '记一笔', `${billDraft.date} ${amount}`);
     showToast('保存成功'); 
     closeCenterModal(); 
     switchTab('bill', true);
@@ -3504,11 +3754,7 @@ function editRecord(id, isIncome) {
     const record = isIncome ? appData.incomes.find(i => i.id === id) : appData.expenses.find(e => e.id === id);
     if (!record) return;
     
-    _editingBillId = id;
-    _currentBillDate = record.date;
-    _currentIncomeType = isIncome ? (record.recordType || 'daily') : 'expense';
-    _selectedCategory = record.category || '餐饮';
-    
+    openDraft(record);
     showAddBillModal();
 }
 
@@ -3524,15 +3770,15 @@ if (isIncome) {
     let deducts = [];
     if (record.recordType === 'work' && record.hours && record.pricePerHour) {
         originalAmount = record.hours * record.pricePerHour;
-        calcText = `${record.hours}h × ¥${formatAmount(record.pricePerHour)} = ¥${formatAmount(originalAmount)}`;
-        if (record.insurance > 0) deducts.push(`保险 ¥${formatAmount(record.insurance)}`);
+        calcText = `${record.hours}h × ¥${toPlainNumber(record.pricePerHour)} = ¥${toPlainNumber(originalAmount)}`;
+        if (record.insurance > 0) deducts.push(`保险 ¥${toPlainNumber(record.insurance)}`);
     } else {
-        if (record.insurance > 0) { originalAmount += record.insurance; deducts.push(`保险 ¥${formatAmount(record.insurance)}`); }
-        if (record.tax > 0) { originalAmount += record.tax; deducts.push(`个税 ¥${formatAmount(record.tax)}`); }
-        if (record.social > 0) { originalAmount += record.social; deducts.push(`社保 ¥${formatAmount(record.social)}`); }
+        if (record.insurance > 0) { originalAmount += record.insurance; deducts.push(`保险 ¥${toPlainNumber(record.insurance)}`); }
+        if (record.tax > 0) { originalAmount += record.tax; deducts.push(`个税 ¥${toPlainNumber(record.tax)}`); }
+        if (record.social > 0) { originalAmount += record.social; deducts.push(`社保 ¥${toPlainNumber(record.social)}`); }
         
         if (deducts.length > 0) {
-            calcText = `应发 ¥${formatAmount(originalAmount)}`;
+            calcText = `应发 ¥${toPlainNumber(originalAmount)}`;
         }
     }
     if (deducts.length > 0) {
@@ -3544,8 +3790,8 @@ const methodText = record.payMethod ? `${isIncome ? '入账账户' : '支付方�
 const html = `
     <div class="flex flex-col">
         <div class="text-center mb-4">
-            <p class="text-base font-bold text-gray-800 mb-1">${escapeHtml(record.note || (isIncome ? '收入' : '支出'))}</p>
-            <p class="text-2xl font-bold ${isIncome ? 'text-green-500' : 'text-red-500'} mb-1">${isIncome ? '+' : '-'}¥${formatAmount(record.amount)}</p>
+            <p class="text-base font-bold text-gray-800 mb-1">${escapeHtml(record.note || record.subCategory || (isIncome ? '收入' : '支出'))}</p>
+            <p class="text-2xl font-bold ${isIncome ? 'text-green-500' : 'text-red-500'} mb-1">${isIncome ? '+' : '-'}¥${toPlainNumber(record.amount)}</p>
             ${methodText ? `<p class="text-[12px] text-blue-500 font-medium mb-1">${methodText}</p>` : ''}
             ${calcText ? `<p class="text-[12px] text-gray-500 mb-0.5">${calcText}</p>` : ''}
             ${deductText ? `<p class="text-[12px] text-red-400 mb-1">${deductText}</p>` : ''}
@@ -3631,7 +3877,7 @@ function renderMeView() {
     </div>
 </div>
 
-            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v4.6.7.5</p></div>
+            <div class="text-center text-[10px] text-gray-400 mt-6"><p>Life Manager v5.0</p></div>
         </div>
     `;
     return html;
@@ -3649,7 +3895,7 @@ function showAbout() {
                     <i data-lucide="sparkles" class="w-8 h-8 text-white"></i>
                 </div>
                 <p class="text-lg font-bold text-gray-800">Life Manager</p>
-                <p class="text-xs text-gray-400 mt-1">v4.6.7.5</p>
+                <p class="text-xs text-gray-400 mt-1">v5.0</p>
             </div>
             <div class="glass-card rounded-2xl overflow-hidden mt-4" style="padding: 0;">
                 <div class="setting-item" onclick="openGithubRepo()" style="margin-bottom: 0; border-radius: 0;">
@@ -3766,7 +4012,7 @@ async function clearOpLogsConfirm() {
     clearOpLogs(); showToast('已清空'); closeModal(); switchTab('me');
 }
 
-// ==================== 云同步 ====================
+// [L3] 同步服务：状态机与网络交互
 function mergeTasks(localTasks, remoteTasks, deletedIdSet) {
     const map = new Map();
     localTasks.forEach(t => { if (t.id) map.set(t.id, { ...t, _source: 'local' }); });
@@ -3876,41 +4122,37 @@ function countTotalRecords(data) {
     return (data.tasks || []).length + (data.incomes || []).length + (data.expenses || []).length + (data.notes || []).length + (data.menstrual?.records || []).length;
 }
 
-async function smartSync(showResult = true, isAuto = false) {
-    if (_syncInProgress) { _pendingSync = true; return; }
 
-    // 🌟 拦截：点击一键同步时，检查配置是否改变
-    if (showResult && currentTab === 'home') {
-        const inputToken = document.getElementById('gitee-token')?.value.trim();
-        const inputRepo = document.getElementById('gitee-repo')?.value.trim();
-        const inputFilename = document.getElementById('gitee-filename')?.value.trim();
 
-        // 🌟 修复：强制读取最新经期配置，防止事件触发时间差
-        const inputMenstrualFrom = document.getElementById('sync-menstrual-from')?.value;
-        if (inputMenstrualFrom !== undefined) {
-            const trimmed = normalizeFilename(inputMenstrualFrom);
-            if (trimmed !== appData.settings.syncMenstrualFrom) {
-                if (trimmed) {
-                    if (!appData.settings.syncMenstrualFrom) backupLocalMenstrualIfNeeded();
-                    appData.settings.syncMenstrualFrom = trimmed;
-                } else {
-                    appData.settings.syncMenstrualFrom = '';
-                    restoreLocalMenstrual();
-                }
-                saveData(true);
-            }
-        }
+// 一键同步按钮的统一入口：先检测配置变更（需切号），否则直接同步
+async function handleSyncClick() {
+    const inputToken = document.getElementById('gitee-token')?.value.trim();
+    const inputRepo = document.getElementById('gitee-repo')?.value.trim();
+    const inputFilename = document.getElementById('gitee-filename')?.value.trim();
 
-        if (inputToken !== undefined) {
+    if (inputToken !== undefined) {
+        const oldToken = appData.settings.giteeToken || '';
+        const oldRepo = appData.settings.giteeRepo || '';
+        const oldFilename = appData.settings.giteeFilename || '';
+        
+        if (inputToken !== oldToken || inputRepo !== oldRepo || inputFilename !== oldFilename) {
             const result = await safeSwitchAccount(inputToken, inputRepo, inputFilename);
             if (result === 'switched') {
                 showToast('已切换新账号，正在上传本地数据...');
-                return smartSync(true, isAuto);
-            } else if (result === 'aborted') {
-                return;
+                await smartSync(true, false);
             }
+            return;
         }
     }
+    
+    smartSync(true, false);
+}
+
+async function smartSync(showResult = true, isAuto = false) {
+    if (_syncInProgress) { _pendingSync = true; return; }
+
+    // 配置检测已移至 handleSyncClick，smartSync 只负责同步。
+    // syncMenstrualFrom 的变更由输入框 onchange (handleSyncMenstrualFromChange) 处理。
 
     const { giteeToken, giteeRepo, giteeFilename, syncMenstrualFrom } = appData.settings;
     if (!giteeToken || !giteeRepo) { if (showResult) showToast('请先配置 Gitee 仓库信息'); return; }
@@ -3918,6 +4160,8 @@ async function smartSync(showResult = true, isAuto = false) {
     _syncInProgress = true;
     showSyncProgress(true);
     let syncSuccess = false;
+    const SYNCABLE_FIELDS = ['tasks', 'incomes', 'expenses', 'notes', 'menstrual'];
+    // 注：settings 是本地专属（含 token），不参与同步；menstrualRemote 仅展示，不参与同步
 
     const globalIndicator = document.getElementById('global-sync-indicator');
     if (globalIndicator) {
@@ -3925,7 +4169,7 @@ async function smartSync(showResult = true, isAuto = false) {
         globalIndicator.style.display = 'flex';
         globalIndicator.style.background = 'rgba(59, 130, 246, 0.95)';
         document.getElementById('sync-indicator-text').innerText = '正在同步数据，请勿退出...';
-        lucide.createIcons();
+updateIcons(globalIndicator);
     }
 
     try {
@@ -3957,24 +4201,14 @@ async function smartSync(showResult = true, isAuto = false) {
 
         let mergedData;
         let uploadData;
-        const _strip = d => JSON.stringify({
-            tasks: d.tasks, incomes: d.incomes, expenses: d.expenses, notes: d.notes, menstrual: d.menstrual
-        });
+        const _strip = d => {
+            const obj = {};
+            SYNCABLE_FIELDS.forEach(k => { obj[k] = d[k]; });
+            return JSON.stringify(obj);
+        };
 
-// 🌟 核心修复：同步准备阶段，剥离显示用的共享经期，拿出真实的本地经期数据
 let syncLocalData = JSON.parse(JSON.stringify(appData));
-if (syncMenstrualFrom) {
-    const backup = localStorage.getItem(LOCAL_MENSTRUAL_BACKUP_KEY);
-    if (backup) {
-        try {
-            const bData = JSON.parse(backup);
-            syncLocalData.menstrual = { records: bData.records || [], loveDates: bData.loveDates || [] };
-        } catch(e) {}
-    } else {
-        // 🌟 兜底：没有备份说明自己是空的，强行清空防止污染
-        syncLocalData.menstrual = { records: [], loveDates: [] };
-    }
-}
+// 双字段后：appData.menstrual 永远就是本地数据，无需剥离
 
         if (fileExists && remoteData) {
             const deletedIdSet = new Set();
@@ -4004,9 +4238,7 @@ if (syncMenstrualFrom) {
 
             if (_strip(uploadData) === remoteStripBeforeMerge) {
                 if (!_pendingSync) {
-                    const currentDisplayMenstrual = appData.menstrual; 
-                    appData = mergedData;
-                    if (syncMenstrualFrom) appData.menstrual = currentDisplayMenstrual; // 恢复UI展示的对方数据
+                    appData = mergedData; // 恢复UI展示的对方数据
                     lastSyncData = JSON.stringify(appData);
                     saveLastSyncData();
                 }
@@ -4043,9 +4275,7 @@ if (syncMenstrualFrom) {
         
         if (response.ok) {
             if (!_pendingSync) {
-                const currentDisplayMenstrual = appData.menstrual;
-                appData = mergedData;
-                if (syncMenstrualFrom) appData.menstrual = currentDisplayMenstrual; // 恢复UI展示的对方数据
+                appData = mergedData; // 恢复UI展示的对方数据
                 lastSyncData = JSON.stringify(appData);
                 saveLastSyncData();
             }
@@ -4113,86 +4343,205 @@ async function safeSwitchAccount(newToken, newRepo, newFilename) {
     if (_accountSwitching) return 'aborted';
     _accountSwitching = true;
 
-    showToast('正在验证新账号...');
     try {
-        const testRes = await fetchWithTimeout(`https://gitee.com/api/v5/repos/${newRepo}?access_token=${newToken}`, { timeout: 5000 });
-        if (!testRes.ok) throw new Error('Token无权访问或仓库不存在');
-    } catch (e) {
-        _accountSwitching = false;
-        showToast('❌ 验证失败：请检查Token权限或仓库名');
-        return 'aborted';
-    }
+        // ===== Step 1: 切号前对账 =====
+        if (oldToken && oldRepo) {
+            const currentStrip = JSON.stringify(appData); // 简化比对，直接用整体
+            if (lastSyncData && currentStrip !== lastSyncData) {
+                const choice = await showChoiceConfirm(
+                    '未同步数据提醒',
+                    '本地有未同步的数据。直接切换账号可能导致这些数据仅留在本地。',
+                    [
+                        { label: '立即同步到当前账号', value: 'sync', primary: true },
+                        { label: '跳过，直接切（有丢失风险）', value: 'skip', danger: true },
+                        { label: '取消切号', value: 'cancel' }
+                    ]
+                );
+                
+                if (choice === 'cancel' || choice === null) { _accountSwitching = false; return 'aborted'; }
+                if (choice === 'sync') {
+                    showToast('正在同步当前账号...');
+                    await smartSync(false, true);
+                }
+                // choice === 'skip' 则直接往下走
+            }
+        }
 
-    // 🌟 核心：只要旧账号有配置，必须先完美备份，一旦失败立刻中断！
-    if (oldToken && oldRepo) {
-        showToast('正在备份旧账号，请稍候...');
+        // ===== Step 2: 验证新账号 =====
+        showToast('正在验证新账号...');
         try {
-            appData.settings.autoSync = true;
-            
-   // 1. 准备纯净的本地数据
-let syncLocalData = JSON.parse(JSON.stringify(appData));
-if (appData.settings.syncMenstrualFrom) {
-    const backup = localStorage.getItem(LOCAL_MENSTRUAL_BACKUP_KEY);
-    if (backup) {
+            const testRes = await fetchWithTimeout(`https://gitee.com/api/v5/repos/${newRepo}?access_token=${newToken}`, { timeout: 5000 });
+            if (!testRes.ok) throw new Error('Token无权访问或仓库不存在');
+        } catch (e) {
+            _accountSwitching = false;
+            showToast('❌ 验证失败：请检查Token权限或仓库名');
+            return 'aborted';
+        }
+
+        // ===== Step 3: 探测新账号数据状态 =====
+        let remoteData = null;
+        let fileSha = null;
+        let fileExists = false;
+        let fileCorrupted = false;
+
         try {
-            const bData = JSON.parse(backup);
-            syncLocalData.menstrual = { records: bData.records || [], loveDates: bData.loveDates || [] };
-        } catch(e) {}
-    } else {
-        // 🌟 兜底：没有备份说明自己是空的，强行清空防止污染
-        syncLocalData.menstrual = { records: [], loveDates: [] };
-    }
-}
-            
-            const content = await encryptData(syncLocalData);
-            const url = `https://gitee.com/api/v5/repos/${oldRepo}/contents/${encodeURIComponent(oldFilename)}`;
-            
-            // 2. 获取旧文件的 SHA (如果旧文件不存在，404 是正常的)
-            let body = { access_token: oldToken, content, message: `自动备份 - ${new Date().toLocaleString()}` };
-            const getRes = await fetchWithTimeout(`https://gitee.com/api/v5/repos/${oldRepo}/contents/${encodeURIComponent(oldFilename)}?access_token=${oldToken}`, { timeout: 5000 });
-            
+            const getRes = await fetchWithTimeout(`https://gitee.com/api/v5/repos/${newRepo}/contents/${encodeURIComponent(newFilename)}?access_token=${newToken}`, { timeout: 5000 });
             if (getRes.ok) {
                 const fileInfo = await getRes.json();
-                if (fileInfo && fileInfo.sha) body.sha = fileInfo.sha;
+                if (fileInfo && fileInfo.sha && fileInfo.content) {
+                    fileExists = true;
+                    fileSha = fileInfo.sha;
+                    try {
+                        remoteData = await decryptData(fileInfo.content);
+                    } catch (err) {
+                        fileCorrupted = true;
+                    }
+                }
             } else if (getRes.status !== 404) {
-                throw new Error('获取旧文件信息失败'); // 断网或旧Token失效
+                throw new Error('获取新账号文件信息失败');
             }
-            
-            // 3. 执行备份上传
-            const putRes = await fetchWithTimeout(url, { 
-                method: 'PUT', 
-                headers: { 'Content-Type': 'application/json' }, 
+        } catch (e) {
+            _accountSwitching = false;
+            showToast('❌ 探测新账号失败：' + e.message);
+            return 'aborted';
+        }
+
+        // ===== Step 4: 按情况弹选择 =====
+        let executeAction = null; // 'upload_local' | 'merge' | 'use_remote' | 'repair' | 'cancel'
+
+        if (!fileExists) {
+            // A 情况：空账号
+            const choice = await showChoiceConfirm(
+                '新账号为空',
+                '是否将当前本地数据迁移到新账号？',
+                [
+                    { label: '迁移本地数据到新账号', value: 'upload_local', primary: true },
+                    { label: '取消', value: 'cancel' }
+                ]
+            );
+            executeAction = choice;
+        } else if (fileCorrupted) {
+            // B 情况：文件损坏
+            const choice = await showChoiceConfirm(
+                '新账号文件损坏',
+                '新账号文件无法读取（可能损坏）。是否用本地数据覆盖修复？',
+                [
+                    { label: '用本地数据修复', value: 'repair', primary: true },
+                    { label: '取消', value: 'cancel' }
+                ]
+            );
+            executeAction = choice;
+        } else {
+            // C 情况：已有数据
+            const remoteTasks = (remoteData?.tasks || []).length;
+            const remoteIncomes = (remoteData?.incomes || []).length + (remoteData?.expenses || []).length;
+            const choice = await showChoiceConfirm(
+                '新账号已有数据',
+                `新账号已有记录（打卡 ${remoteTasks} / 记账 ${remoteIncomes}）。请选择操作：`,
+                [
+                    { label: '合并：本地 + 新账号都保留', value: 'merge', primary: true },
+                    { label: '仅使用新账号数据（本地不迁移）', value: 'use_remote' },
+                    { label: '取消', value: 'cancel' }
+                ]
+            );
+            executeAction = choice;
+        }
+
+        if (!executeAction || executeAction === 'cancel') {
+            _accountSwitching = false;
+            return 'aborted';
+        }
+
+        // ===== Step 5: 执行 + 切换 =====
+        showSyncProgress(true);
+        const globalIndicator = document.getElementById('global-sync-indicator');
+        if (globalIndicator) {
+            globalIndicator.style.display = 'flex';
+            globalIndicator.style.background = 'rgba(59, 130, 246, 0.95)';
+            document.getElementById('sync-indicator-text').innerText = '正在执行切号操作...';
+updateIcons(globalIndicator);
+        }
+
+        let finalUploadData = null;
+        let finalLocalData = null;
+
+        if (executeAction === 'upload_local' || executeAction === 'repair') {
+            finalUploadData = JSON.parse(JSON.stringify(appData));
+            finalLocalData = finalUploadData;
+        } else if (executeAction === 'merge') {
+            const deletedIdSet = new Set(); // 切号合并暂不处理跨账号删除
+            const mergeRes = mergeAppData(JSON.parse(JSON.stringify(appData)), remoteData, deletedIdSet);
+            finalUploadData = mergeRes.merged;
+            finalLocalData = finalUploadData;
+        } else if (executeAction === 'use_remote') {
+            finalUploadData = null; // 不需要上传
+            finalLocalData = remoteData;
+        }
+
+        // 如果有需要上传的数据，执行 PUT
+        if (finalUploadData) {
+            const content = await encryptData(finalUploadData);
+            const url = `https://gitee.com/api/v5/repos/${newRepo}/contents/${encodeURIComponent(newFilename)}`;
+            const method = fileExists ? 'PUT' : 'POST';
+            const body = { access_token: newToken, content, message: `切号同步 - ${new Date().toLocaleString()}` };
+            if (fileSha) body.sha = fileSha;
+
+            const putRes = await fetchWithTimeout(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
-                timeout: 8000
+                timeout: 10000
             });
 
             if (!putRes.ok) {
-                throw new Error('备份上传失败');
+                const err = await putRes.json();
+                throw new Error(err.message || '上传新账号失败');
             }
-            
-        } catch (e) {
-            console.warn('旧账号备份失败:', e);
-            _accountSwitching = false;
-            // 🌟 备份失败：中断操作，保留旧配置，提示用户
-            showToast('❌ 旧账号备份失败。若需强行切号，请先前往“设置”清除所有数据');
-            return 'aborted'; 
         }
-    }
 
-    // 备份完美成功（或旧号本来就没配置），才开始替换新账号配置
-    appData.settings.giteeToken = newToken;
-    appData.settings.giteeRepo = newRepo;
-    appData.settings.giteeFilename = newFilename;
-    appData.settings.lastSyncTime = null;
-    appData.settings.lastSyncType = null;
-    
-    const accountKey = newFilename || '_default';
-    lastSyncData = JSON.stringify(appData);
-    localStorage.setItem('life_manager_last_sync_data_' + accountKey, lastSyncData);
-    
-    saveData(true);
-    _accountSwitching = false;
-    return 'switched';
+        // 原子替换配置与本地数据
+        appData.settings.giteeToken = newToken;
+        appData.settings.giteeRepo = newRepo;
+        appData.settings.giteeFilename = newFilename;
+        appData.settings.lastSyncTime = Date.now();
+        appData.settings.lastSyncType = executeAction;
+        
+        if (finalLocalData) {
+            // 保留 settings，替换业务数据
+            const keepSettings = appData.settings;
+            appData = finalLocalData;
+            appData.settings = keepSettings;
+            // 确保 menstrualRemote 等字段存在
+            if (!appData.menstrualRemote) appData.menstrualRemote = { records: [], loveDates: [] };
+        }
+
+        const accountKey = newFilename || '_default';
+        lastSyncData = JSON.stringify(appData);
+        localStorage.setItem('life_manager_last_sync_data_' + accountKey, lastSyncData);
+        localStorage.setItem(LAST_SYNC_ACCOUNT_KEY, accountKey);
+        
+        saveData(true);
+        
+        // 清理 UI 状态
+        if (globalIndicator) {
+            globalIndicator.style.background = 'rgba(34, 197, 94, 0.95)';
+            document.getElementById('sync-indicator-text').innerText = '切号成功';
+            setTimeout(() => { globalIndicator.style.display = 'none'; }, 1500);
+        }
+        showSyncProgress(false);
+        
+        _accountSwitching = false;
+        return 'switched';
+
+    } catch (e) {
+        console.error('切号异常:', e);
+        showToast('❌ 切号失败: ' + e.message);
+        showSyncProgress(false);
+        const globalIndicator = document.getElementById('global-sync-indicator');
+        if (globalIndicator) globalIndicator.style.display = 'none';
+        _accountSwitching = false;
+        return 'aborted';
+    }
 }
 
 function toggleAutoSync() {
@@ -4203,9 +4552,6 @@ function toggleAutoSync() {
     showToast(appData.settings.autoSync ? '自动同步已开启' : '自动同步已关闭');
 }
 
-async function autoSaveGiteeConfig() {
-    // 🌟 废弃原逻辑，改由 smartSync 触发
-}
 
 function showSyncProgress(show) {
     const container = document.getElementById('sync-progress-container');
@@ -4390,6 +4736,13 @@ async function confirmImport() {
     }
     if (selectedModules.includes('expenses') && Array.isArray(data.expenses)) {
         const cleaned = data.expenses.map(sanitizeExpense).filter(Boolean);
+        cleaned.forEach(e => {
+            if (!e.subCategory && e.note) {
+                const parsed = parseLegacyNote(e.category, e.note);
+                e.subCategory = parsed.subCategory;
+                e.note = parsed.note;
+            }
+        });
         appData.expenses = cleaned;
         details.push(`支出 ${cleaned.length} 条`);
     }
@@ -4406,6 +4759,8 @@ async function confirmImport() {
         details.push(`经期 ${appData.menstrual.records.length} 条`);
     }
     lastSyncData = null;
+    const _accountKey = appData.settings.giteeFilename || '_default';
+    localStorage.removeItem('life_manager_last_sync_data_' + _accountKey);
     window._pendingImportData = null;
     saveData();
     logOp('导入数据', details.join(' / '));
@@ -4544,10 +4899,8 @@ async function executeSelectiveClear() {
     if (clearMenstrual) {
         const count = appData.menstrual.records.length + appData.menstrual.loveDates.length;
         appData.menstrual = { records: [], loveDates: [] };
-        
-        // 🌟 关键：清空经期时，必须解除只读模式，并清理保险箱
+        appData.menstrualRemote = { records: [], loveDates: [] };
         appData.settings.syncMenstrualFrom = '';
-        localStorage.removeItem(LOCAL_MENSTRUAL_BACKUP_KEY);
         
         details.push(`经期 ${count} 条`);
     }
@@ -4574,14 +4927,16 @@ async function clearAllData() {
 const confirmed = await showCustomConfirm(message);
 if (!confirmed) return;
 if (_syncTimer) { clearTimeout(_syncTimer); _syncTimer = null; }
-    appData = {
-        tasks: [], incomes: [], expenses: [], notes: [],
-        menstrual: { records: [], loveDates: [] },
-        settings: { autoSync: false, giteeToken: '', giteeRepo: '', giteeFilename: '', syncMenstrualFrom: '', cloudConfigValid: false, lastSyncTime: null, lastSyncType: null }
-    };
-    lastSyncData = null;
-    localStorage.removeItem(LOCAL_MENSTRUAL_BACKUP_KEY);
-    saveData();
+    const _oldAccountKey = appData.settings.giteeFilename || '_default';
+appData = {
+    tasks: [], incomes: [], expenses: [], notes: [],
+    menstrual: { records: [], loveDates: [] },
+    menstrualRemote: { records: [], loveDates: [] },
+    settings: { autoSync: false, giteeToken: '', giteeRepo: '', giteeFilename: '', syncMenstrualFrom: '', cloudConfigValid: false, lastSyncTime: null, lastSyncType: null }
+};
+lastSyncData = null;
+localStorage.removeItem('life_manager_last_sync_data_' + _oldAccountKey);
+saveData();
     logOp('清除所有数据', `${taskCount}习惯/${incomeCount}收入/${expenseCount}支出/${noteCount}记事/${menstrualCount}经期`);
     showToast('数据已清除');
     switchTab('home', true);
@@ -4638,9 +4993,9 @@ function switchTab(tab, forceRender = false) {
         }
         
         try { 
-            pageDiv.innerHTML = data.render(); 
-            lucide.createIcons(); 
-        } catch (e) {
+    pageDiv.innerHTML = data.render(); 
+    updateIcons(pageDiv); 
+} catch (e) {
             console.error('渲染错误:', e);
             pageDiv.innerHTML = `<div class="text-center text-red-500 p-4">页面渲染出错，请重试</div>`;
         }
@@ -4662,7 +5017,11 @@ function switchTab(tab, forceRender = false) {
         btn.classList.remove('active-tab');
     });
     const navBtn = document.getElementById('btn-' + tab);
-    if (navBtn) { navBtn.classList.remove('text-gray-400'); navBtn.classList.add('active-tab'); }
+if (navBtn) { navBtn.classList.remove('text-gray-400'); navBtn.classList.add('active-tab'); }
+
+// 补充更新导航栏和 FAB 悬浮按钮的图标
+updateIcons(document.querySelector('.nav-container'));
+updateIcons(document.getElementById('fab-add-btn'));
 
     // 右下角 FAB 按钮
     const fabBtn = document.getElementById('fab-add-btn');
@@ -4670,7 +5029,7 @@ function switchTab(tab, forceRender = false) {
         fabBtn.style.display = 'flex';
         if (tab === 'finish') fabBtn.onclick = showAddTaskModal;
         else if (tab === 'note') fabBtn.onclick = showAddNoteModal;
-        else if (tab === 'bill') fabBtn.onclick = () => showAddBillModal();
+        else if (tab === 'bill') fabBtn.onclick = () => { resetDraft(); openDraft(); showAddBillModal(); };
     } else {
         fabBtn.style.display = 'none';
     }
@@ -4725,31 +5084,54 @@ window.addEventListener('popstate', () => {
 loadData();
 switchTab('home');
 
-// 键盘弹出时隐藏底部导航栏和 FAB 按钮，避免遮挡输入框
+// 键盘弹出处理（通过可视区域高度精准判断，彻底解决“单独收起键盘”不恢复的问题）
 let _keyboardHideTimer = null;
-document.addEventListener('focusin', (e) => {
-    const t = e.target;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) {
-        if (_keyboardHideTimer) { clearTimeout(_keyboardHideTimer); _keyboardHideTimer = null; }
-        document.body.classList.add('keyboard-open');
-    }
-});
-document.addEventListener('focusout', () => {
-    // 延迟 120ms：避免从一个输入框切到另一个输入框时导航栏一闪一闪
-    if (_keyboardHideTimer) clearTimeout(_keyboardHideTimer);
-    _keyboardHideTimer = setTimeout(() => {
-        document.body.classList.remove('keyboard-open');
-        _keyboardHideTimer = null;
-    }, 120);
-});
-document.addEventListener('focusin', (e) => {
-    const t = e.target;
+function showKeyboardUI() {
+    document.body.classList.add('keyboard-open');
+    // 确保输入框可见
+    const t = document.activeElement;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) {
         setTimeout(() => {
             try { t.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (err) {}
-        }, 300);
+        }, 100);
     }
-});
+}
+function hideKeyboardUI() {
+    document.body.classList.remove('keyboard-open');
+}
+
+if (window.visualViewport) {
+    // 现代设备：直接监听屏幕可视高度变化
+    let _initialHeight = window.visualViewport.height;
+    window.visualViewport.addEventListener('resize', () => {
+        // 如果高度缩水 100px 以上，说明键盘弹起了
+        if (window.visualViewport.height < _initialHeight - 100) {
+            showKeyboardUI();
+        } else {
+            // 高度恢复，说明键盘收起了（不管焦点丢没丢）
+            hideKeyboardUI();
+        }
+    });
+    
+    // 旋转屏幕时重置初始高度
+    window.addEventListener('orientationchange', () => {
+        setTimeout(() => { _initialHeight = window.visualViewport.height; }, 300);
+    });
+} else {
+    // 老旧浏览器兜底：只能靠焦点事件
+    document.addEventListener('focusin', (e) => {
+        const t = e.target;
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) {
+            if (_keyboardHideTimer) { clearTimeout(_keyboardHideTimer); _keyboardHideTimer = null; }
+            showKeyboardUI();
+        }
+    });
+    document.addEventListener('focusout', () => {
+        if (_keyboardHideTimer) clearTimeout(_keyboardHideTimer);
+        _keyboardHideTimer = setTimeout(hideKeyboardUI, 120);
+    });
+}
+
 
 // ==================== 性能优化：滚动监听 & FAB 按钮 ====================
 let _isScrolling = false;
