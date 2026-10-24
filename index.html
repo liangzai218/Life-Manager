@@ -166,9 +166,10 @@
         .predict-card .main-text { font-size: 15px; font-weight: 600; }
         .predict-card .sub-text { font-size: 11px; color: #9CA3AF; }
         .predict-card .badge { font-size: 12px; font-weight: 600; padding: 2px 12px; border-radius: 30px; background: #DBEAFE; color: #2563EB; }
-        /* 彻底隐藏滚动条（兼容 iOS, Android, 微信等 WebView） */
-::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
-html, body { scrollbar-width: none !important; -ms-overflow-style: none !important; }
+/* 彻底隐藏滚动条（兼容 iOS, Android, 微信等 WebView） */
+::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; background: transparent !important; }
+* { scrollbar-width: none !important; -ms-overflow-style: none !important; }
+html, body { scrollbar-width: none !important; -ms-overflow-style: none !important; overflow-x: hidden; }
         body, .glass-card, .nav-btn, .btn-primary, .fab-btn, .setting-item, .note-card, .record-item { -webkit-touch-callout: none; user-select: none; }
         input, textarea { -webkit-touch-callout: default; user-select: text; }
 
@@ -5211,7 +5212,7 @@ async function showVersionLog() {
             const html = `
                 <div class="p-5">
                     <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-base font-bold">版本日志 (v${data.version})</h3>
+                        <h3 class="text-base font-bold">版本日志</h3>
                         <button onclick="closeModal()" class="p-2 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
                     </div>
                     <div class="space-y-1 max-h-[60vh] overflow-y-auto">
