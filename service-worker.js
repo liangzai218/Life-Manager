@@ -7,7 +7,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
     event.waitUntil(clients.claim());
 });
-const CACHE_NAME = 'life-manager-v5.0';
+const CACHE_NAME = 'life-manager-v5.1';
 // 如果有本地化的 lucide.js、css 等，可以加在这里
 const ASSETS_TO_CACHE = [
   './',
