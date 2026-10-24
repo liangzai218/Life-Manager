@@ -1,43 +1,55 @@
-// 强制让新的 Service Worker 跳过等待，立刻激活
-self.addEventListener('install', (event) => {
-    self.skipWaiting();
-});
+// 🌟 每次发版，只需修改这里的版本号！
+const CACHE_NAME = 'life-manager-v5.1.4'; 
 
-// 让新的 Service Worker 立刻接管当前页面
-self.addEventListener('activate', (event) => {
-    event.waitUntil(clients.claim());
-});
-const CACHE_NAME = 'life-manager-v5.1.3';
-// 如果有本地化的 lucide.js、css 等，可以加在这里
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './app-icon.png'
 ];
 
-// 安装时缓存文件
-self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE))
-  );
+// ==========================================
+// 1. 监听安装事件：只缓存文件，绝对不自动跳过等待！
+// ==========================================
+self.addEventListener('install', (event) => {
+    // 注意：这里千万不要写 self.skipWaiting();
+    event.waitUntil(
+        caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE))
+    );
 });
 
-// 拦截请求，优先使用缓存
-self.addEventListener('fetch', (e) => {
-  e.respondWith(
-    caches.match(e.request).then((response) => {
-      return response || fetch(e.request);
-    })
-  );
+// ==========================================
+// 2. 监听消息事件：接收前端“立即更新”的指令
+// ==========================================
+self.addEventListener('message', (event) => {
+    if (event.data && event.data.action === 'skipWaiting') {
+        self.skipWaiting(); // 只有前端明确下达指令，才跳过等待
+    }
 });
 
-// 清理旧缓存
-self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys().then((keyList) => {
-      return Promise.all(keyList.map((key) => {
-        if (key !== CACHE_NAME) return caches.delete(key);
-      }));
-    })
-  );
+// ==========================================
+// 3. 监听激活事件：清理旧缓存，并立刻接管页面
+// ==========================================
+self.addEventListener('activate', (event) => {
+    event.waitUntil(
+        caches.keys().then((keyList) => {
+            return Promise.all(keyList.map((key) => {
+                if (key !== CACHE_NAME) {
+                    return caches.delete(key);
+                }
+            }));
+        }).then(() => {
+            return self.clients.claim(); // 接管所有页面
+        })
+    );
+});
+
+// ==========================================
+// 4. 拦截请求：优先使用缓存（保持你原来的策略）
+// ==========================================
+self.addEventListener('fetch', (event) => {
+    event.respondWith(
+        caches.match(event.request).then((response) => {
+            return response || fetch(event.request);
+        })
+    );
 });
