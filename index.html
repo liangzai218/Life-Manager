@@ -3056,7 +3056,7 @@ const EXPENSE_CATEGORIES = [
     { name: '餐饮', icon: '🍜' }, { name: '日用', icon: '🧻' }, { name: '购物', icon: '🛍️' }, 
     { name: '交通', icon: '🚗' }, { name: '居住', icon: '🏠' }, { name: '娱乐', icon: '🎬' }, 
     { name: '医疗', icon: '💊' }, { name: '人情', icon: '🧧' }, { name: '学习', icon: '📚' }, 
-    { name: '通讯', icon: '📱' }, { name: '宠物', icon: '🐶' }, { name: '烟酒', icon: '🚬' },
+    { name: '通讯', icon: '📱' }, { name: '宠物', icon: '🐶' }, { name: '烟酒', icon: '🍺' },
     { name: '理财', icon: '📈' }, { name: '其他', icon: '⭕' }
 ];
 const PAY_METHODS = ['微信', '支付宝', '花呗', '信用卡', '现金', '抖音月付', '京东白条', '美团月付'];
@@ -3169,125 +3169,148 @@ appData.expenses.filter(e => e.date.startsWith(monthStr)).forEach(e => {
             
 const isToday = dateStr === formatDateLocal(new Date());   // 👈 新增这一行
 return `
-    <div class="day-card">
-        <div class="day-card-header" style="background: #F8FAFC; color: #64748B; border-bottom: 1px solid rgba(0,0,0,0.03);">
-            <span class="font-bold text-[11px] ${isToday ? 'text-blue-500' : ''}">${dateObj.getMonth()+1}月${dateObj.getDate()}日 ${weekStr}</span>
-                        <div class="text-[10px]">
-    ${dayIn > 0 ? `<span class="text-green-500 font-bold">收 ${toPlainNumber(dayIn)}</span>` : ''}
-    ${dayIn > 0 && dayOut > 0 ? ' <span class="text-gray-300">/</span> ' : ''}
-    ${dayOut > 0 ? `<span class="text-red-500 font-bold">支 ${toPlainNumber(dayOut)}</span>` : ''}
-</div>
-                    </div>
-                    <div class="day-card-body">
-                        ${allRecords.map(r => {
-                            let typeName = '';
-                            let icon = '';
-                            if (r.isIncome) {
-                                if (r.recordType === 'work') { typeName = '工时'; icon = '🔧'; }
-                                else if (r.recordType === 'monthly') { typeName = '月薪'; icon = '💼'; }
-                                else { typeName = '日结'; icon = '🦺'; }
-                            } else {
-    typeName = r.subCategory || r.category || '其他';
-    const catConfig = EXPENSE_CATEGORIES.find(c => c.name === r.category);
-    icon = catConfig ? catConfig.icon : '⭕';
-}
-                            
-                                const hasNote = !!(r.note && r.note.trim());
-    
-// 计算应发金额和扣除明细，并包含支付方式
-let detailText = r.payMethod || '';
-if (r.isIncome) {
-    let originalAmount = r.amount;
-    let deducts = [];
-    if (r.recordType === 'work' && r.hours && r.pricePerHour) {
-        originalAmount = r.hours * r.pricePerHour;
-        if (r.insurance > 0) deducts.push(`保险 ¥${toPlainNumber(r.insurance)}`);
-        detailText = `${r.hours}h×¥${toPlainNumber(r.pricePerHour)}=¥${toPlainNumber(originalAmount)}` + (deducts.length ? ` (扣${deducts.join(' ')})` : '');
-    } else {
-        if (r.insurance > 0) { originalAmount += r.insurance; deducts.push(`保险 ¥${toPlainNumber(r.insurance)}`); }
-        if (r.tax > 0) { originalAmount += r.tax; deducts.push(`个税 ¥${toPlainNumber(r.tax)}`); }
-        if (r.social > 0) { originalAmount += r.social; deducts.push(`社保 ¥${toPlainNumber(r.social)}`); }
+    <!-- 🌟 按天分组的无边框包裹层 -->
+    <div class="mb-5">
         
-        if (deducts.length > 0) {
-            const calcStr = `应发 ¥${toPlainNumber(originalAmount)} (扣${deducts.join(' ')})`;
-            detailText = detailText ? `${detailText} · ${calcStr}` : calcStr;
-        }
-    }
-}
+        <!-- 日期头：微光氛围渐变 -->
+<div class="flex justify-between items-center bg-gradient-to-r from-blue-50/80 to-purple-50/80 rounded-[12px] px-3 py-2 mb-2 border border-white/60 shadow-sm">
+            <span class="font-bold text-[12px] ${isToday ? 'text-blue-500' : 'text-gray-600'} tracking-wider">
+                ${dateObj.getMonth()+1}月${dateObj.getDate()}日 <span class="text-[10px] text-gray-400 font-normal ml-0.5">${weekStr}</span>
+            </span>
+            
+            <!-- 收支金额统计 -->
+            <div class="flex gap-1 items-center">
+                ${dayIn > 0 ? `<span class="text-emerald-500 text-[10px] font-bold">收 ${toPlainNumber(dayIn)}</span>` : ''}
+                ${dayIn > 0 && dayOut > 0 ? `<span class="text-gray-300 text-[10px]">/</span>` : ''}
+                ${dayOut > 0 ? `<span class="text-red-400 text-[10px] font-bold">支 ${toPlainNumber(dayOut)}</span>` : ''}
+            </div>
+        </div>
 
-          return `
-<div class="record-row" onclick="showRecordActions('${r.id}', ${r.isIncome})">
-    <div class="flex items-center gap-3 flex-1 min-w-0">
-        <span class="text-[24px] leading-none flex-shrink-0">${icon}</span>
-                                    ${hasNote ? `
-                                    <div class="min-w-0">
-                                        <p class="text-[13px] text-black font-medium truncate">${typeName}</p>
-                                        <p class="text-[11px] text-gray-500 font-normal truncate">${escapeHtml(r.note)}</p>
-                                    </div>
-                                    ` : `
-                                    <div class="flex-1 min-w-0">
-                                        <p class="text-[14px] text-black font-medium truncate">${typeName}</p>
-                                    </div>
-                                    `}
-                                </div>
-                                <div class="flex flex-col items-end flex-shrink-0 ml-2">
-                                    <span class="text-[13px] font-bold text-black">${r.isIncome ? '+' : '-'}¥${toPlainNumber(r.amount)}</span>
-                                    ${detailText ? `<span class="text-[10px] text-gray-500 font-normal mt-0.5 whitespace-nowrap">${detailText}</span>` : ''}
-                                </div>
-                            </div>
-`}).join('')}
-                    </div>
-                </div>
-            `;
+        <!-- 下方直接悬浮的白色卡片列表 -->
+        <div class="flex flex-col gap-2">
+            ${allRecords.map(r => {
+                let typeName = '';
+                let icon = '';
+                if (r.isIncome) {
+                    if (r.recordType === 'work') { typeName = '工时'; icon = '🔧'; }
+                    else if (r.recordType === 'monthly') { typeName = '月薪'; icon = '💼'; }
+                    else { typeName = '日结'; icon = '🦺'; }
+                } else {
+                    typeName = r.subCategory || r.category || '其他';
+                    const catConfig = EXPENSE_CATEGORIES.find(c => c.name === r.category);
+                    icon = catConfig ? catConfig.icon : '⭕';
+                }
+                
+                const hasNote = !!(r.note && r.note.trim());
+                
+                let detailText = r.payMethod || '';
+                if (r.isIncome) {
+                    let originalAmount = r.amount;
+                    let deducts = [];
+                    if (r.recordType === 'work' && r.hours && r.pricePerHour) {
+                        originalAmount = r.hours * r.pricePerHour;
+                        if (r.insurance > 0) deducts.push(`保险 ¥${toPlainNumber(r.insurance)}`);
+                        detailText = `${r.hours}h×¥${toPlainNumber(r.pricePerHour)}=¥${toPlainNumber(originalAmount)}` + (deducts.length ? ` (扣${deducts.join(' ')})` : '');
+                    } else {
+                        if (r.insurance > 0) { originalAmount += r.insurance; deducts.push(`保险 ¥${toPlainNumber(r.insurance)}`); }
+                        if (r.tax > 0) { originalAmount += r.tax; deducts.push(`个税 ¥${toPlainNumber(r.tax)}`); }
+                        if (r.social > 0) { originalAmount += r.social; deducts.push(`社保 ¥${toPlainNumber(r.social)}`); }
+                        
+                        if (deducts.length > 0) {
+                            const calcStr = `应发 ¥${toPlainNumber(originalAmount)} (扣${deducts.join(' ')})`;
+                            detailText = detailText ? `${detailText} · ${calcStr}` : calcStr;
+                        }
+                    }
+                }
+
+                return `
+<!-- 半透明通透悬浮卡片（0性能开销的类玻璃质感） -->
+<div class="bg-white/65 rounded-[13px] px-3 py-2 flex items-center justify-between shadow-[0_2px_10px_-4px_rgba(0,0,0,0.04)] border border-white/60 active:scale-[0.98] transition-transform cursor-pointer" onclick="showRecordActions('${r.id}', ${r.isIncome})">
+    
+    <div class="flex items-center gap-2.5 flex-1 min-w-0">
+        <!-- 图标底座微调：32px -->
+        <div class="w-[32px] h-[32px] rounded-[9px] bg-gray-50 flex items-center justify-center text-[17px] flex-shrink-0 border border-gray-100/50">
+            ${icon}
+        </div>
+        <div class="min-w-0 flex-1">
+            <p class="text-[13px] text-gray-800 font-bold truncate leading-tight">${typeName}</p>
+            ${hasNote ? `<p class="text-[10px] text-gray-400 font-normal truncate mt-0.5 leading-tight">${escapeHtml(r.note)}</p>` : ''}
+        </div>
+    </div>
+    
+    <div class="flex flex-col items-end flex-shrink-0 ml-2">
+        <span class="text-[14px] font-black tracking-tight leading-tight ${r.isIncome ? 'text-emerald-500' : 'text-gray-800'}">
+            ¥${toPlainNumber(r.amount)}
+        </span>
+        ${detailText ? `<span class="text-[9px] text-gray-400 font-medium mt-0.5 leading-tight whitespace-nowrap">${detailText}</span>` : ''}
+    </div>
+</div>
+`;
+            }).join('')}
+        </div>
+    </div>
+`;
         }).join('');
     }
 
     return `
         <div class="space-y-4 mt-2 pb-6">
-            <div class="overview-card">
-                <div class="overview-header relative">
-    <!-- 🌟 背景光晕装饰 -->
-    <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
-    <div class="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full blur-xl -ml-8 -mb-8 pointer-events-none"></div>
+            <!-- 🌟 拆分为两张独立卡片 -->
+    <div class="mb-4">
+        <!-- 卡片1：深色结余（独立全圆角，带阴影） -->
+        <div class="relative isolate rounded-[20px] shadow-[0_4px_16px_-4px_rgba(15,23,42,0.3)]" style="padding: 14px 16px 16px; background: radial-gradient(circle at top right, rgba(56, 189, 248, 0.15) 0%, transparent 50%), radial-gradient(circle at bottom left, rgba(139, 92, 246, 0.15) 0%, transparent 50%), linear-gradient(135deg, #1e293b 0%, #0f172a 100%);">
 
-    <button onclick="changeBillMonth(-1)" class="absolute left-2 top-1/2 -translate-y-1/2 p-2 text-white/80 active:scale-75 transition-transform z-10"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+<!-- 顶部高光细线 -->
+<div class="absolute top-0 left-0 right-0 h-[1px] pointer-events-none z-0" style="background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);"></div>
 
-    <p class="text-xs opacity-90 mb-1 mt-1">${year}年${month+1}月结余</p>
-<div class="flex justify-center mt-1">
+<!-- 左右切换按钮 -->
+<button onclick="changeBillMonth(-1)" class="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 text-white/80 bg-white/5 hover:bg-white/10 rounded-full active:scale-75 transition-all z-20"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+
+<!-- 文字 -->
+<p class="text-center text-[11px] tracking-widest text-gray-400 mb-1 mt-1 z-10 relative">${year}年${month+1}月结余</p>
+
+<div class="flex justify-center mt-1.5 z-10 relative">
     <div class="relative inline-flex items-center">
-        <span class="text-4xl font-bold leading-none">${toPlainNumber(Math.abs(balance)).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}</span>
+        <span class="text-4xl font-bold leading-none text-white tracking-tight" style="font-variant-numeric: tabular-nums;">${toPlainNumber(Math.abs(balance)).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}</span>
         <div class="absolute right-full top-0 bottom-0 pr-1 flex items-center">
-            <span class="text-sm font-bold opacity-90 mr-1" style="transform: translateY(-9px);">¥</span>
-            ${balance < 0 ? '<span class="text-3xl font-bold leading-none mr-0.5">-</span>' : ''}
+            <span class="text-sm font-bold text-gray-400 mr-1" style="transform: translateY(-9px);">¥</span>
+            ${balance < 0 ? '<span class="text-3xl font-bold leading-none mr-0.5 text-white">-</span>' : ''}
         </div>
     </div>
 </div>
-                    <button onclick="changeBillMonth(1)" class="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-white/80 active:scale-75 transition-transform z-10"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
-                </div>
-                        <div class="overview-body pb-3 pt-3">
-        <div class="flex-1 border-r border-gray-100 text-center">
-            <p class="text-[11px] text-gray-400 mb-1">总收入</p>
-            <p class="text-[13px] font-bold text-gray-700">+¥${toPlainNumber(totalIn)}</p>
+<button onclick="changeBillMonth(1)" class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-white/80 bg-white/5 hover:bg-white/10 rounded-full active:scale-75 transition-all z-20"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+        </div>
+
+        <!-- 卡片2：融合收支与统计的白色大卡片（紧凑+大圆角版） -->
+<div class="bg-white rounded-[16px] p-2 mt-2 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.04)] border border-gray-100/50">
+    
+    <!-- 上半部：总收入/总支出 -->
+    <div class="flex justify-between items-center mb-1.5">
+        <div class="flex-1 text-center">
+    <p class="text-[11px] text-gray-400 mb-0.5">总收入</p>
+            <p class="text-[14px] font-bold text-gray-700">+¥${toPlainNumber(totalIn)}</p>
         </div>
         <div class="flex-1 text-center">
-            <p class="text-[11px] text-gray-400 mb-1">总支出</p>
-            <p class="text-[13px] font-bold text-red-500">-¥${toPlainNumber(totalOut)}</p>
+            <p class="text-[11px] text-gray-400 mb-0.5">总支出</p>
+            <p class="text-[14px] font-bold text-red-500">-¥${toPlainNumber(totalOut)}</p>
         </div>
     </div>
     
-    <!-- 🌟 修改：把统计按钮做成两个并排的胶囊卡片 -->
-    <div class="px-4 pb-3 bg-[#F9FAFB] flex gap-2">
-        <div onclick="showStatsModal('category')" class="flex-1 bg-blue-50/80 rounded-xl py-2 text-center cursor-pointer active:scale-95 transition-all shadow-sm border border-blue-100/50">
-            <span class="text-xs font-bold text-blue-600 flex items-center justify-center gap-1.5">
+    <!-- 下半部：统计按钮（恢复圆角，减小上下 padding） -->
+    <div class="flex gap-2">
+        <div onclick="showStatsModal('category')" class="flex-1 bg-blue-50/80 rounded-xl py-1 text-center cursor-pointer active:scale-95 transition-all border border-blue-100/50">
+            <span class="text-[11px] font-bold text-blue-600 flex items-center justify-center gap-1">
                 <i data-lucide="pie-chart" class="w-3.5 h-3.5"></i> 分类统计
             </span>
         </div>
-        <div onclick="showStatsModal('payMethod')" class="flex-1 bg-orange-50/80 rounded-xl py-2 text-center cursor-pointer active:scale-95 transition-all shadow-sm border border-orange-100/50">
-            <span class="text-xs font-bold text-orange-600 flex items-center justify-center gap-1.5">
+        <div onclick="showStatsModal('payMethod')" class="flex-1 bg-orange-50/80 rounded-xl py-1 text-center cursor-pointer active:scale-95 transition-all border border-orange-100/50">
+            <span class="text-[11px] font-bold text-orange-600 flex items-center justify-center gap-1">
                 <i data-lucide="credit-card" class="w-3.5 h-3.5"></i> 支付统计
             </span>
         </div>
     </div>
+
+</div>
 </div>
            
 <!-- 🌟 筛选状态提示栏 -->
@@ -3327,6 +3350,9 @@ async function showStatsModal(type = 'category') {
     const month = currentMonth.getMonth();
     const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
 
+    // ==========================================
+    // 底层数据计算（保持原有逻辑，绝不修改）
+    // ==========================================
     const statsMap = {};
     appData.expenses.filter(e => e.date.startsWith(monthStr)).forEach(e => {
         let key = '';
@@ -3338,7 +3364,6 @@ async function showStatsModal(type = 'category') {
         statsMap[key] = (statsMap[key] || 0) + e.amount;
     });
 
-    // 转换成数组并降序排列
     let statsArray = Object.keys(statsMap).map(key => {
         let icon = '⭕';
         if (type === 'category') {
@@ -3352,7 +3377,7 @@ async function showStatsModal(type = 'category') {
             else if (key === '未记录方式') icon = '❓';
         }
         return { name: key, amount: statsMap[key], icon };
-    }).sort((a, b) => b.amount - a.amount);
+    }).sort((a, b) => b.amount - a.amount); // 这里依然保证降序排列
 
     if (statsArray.length === 0) {
         showToast('本月暂无支出记录');
@@ -3362,37 +3387,120 @@ async function showStatsModal(type = 'category') {
     const totalAmount = statsArray.reduce((sum, item) => sum + item.amount, 0);
     const title = type === 'category' ? '本月分类统计' : '本月支付方式';
 
-    const listHtml = statsArray.map(item => {
-        const percent = ((item.amount / totalAmount) * 100).toFixed(1);
-        return `
-    <div onclick="applyBillFilter(this)" data-name="${escapeHtml(item.name)}" data-type="${type}" class="flex items-center justify-between p-3 bg-gray-50 rounded-xl mb-2 active:scale-95 transition-transform cursor-pointer">
-                <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center text-lg">${item.icon}</div>
-                    <div>
-                        <p class="text-sm font-bold text-gray-800">${item.name}</p>
-                        <p class="text-[10px] text-gray-400">占比 ${percent}%</p>
-                    </div>
-                </div>
-                <div class="text-right">
-                    <p class="text-sm font-bold text-gray-800">¥${toPlainNumber(item.amount)}</p>
-                    <p class="text-[10px] text-blue-500 font-medium">点击查看账单 ❯</p>
-                </div>
-            </div>
-        `;
+    // ==========================================
+    // UI 逻辑与样式重构（Top 4 + 杂项）
+    // ==========================================
+
+    // 1. 高对比度色板 + 分类专属色映射字典（确保颜色认知固定）
+    const colorMap = {
+        '餐饮': '#3B82F6', // 蓝
+        '购物': '#10B981', // 绿
+        '交通': '#F59E0B', // 橙
+        '娱乐': '#8B5CF6', // 紫
+        '居住': '#EF4444', // 红
+        '医疗': '#F97316', // 橘
+        '日用': '#06B6D4', // 青
+        '人情': '#EC4899', // 粉
+        '微信': '#10B981', '支付宝': '#3B82F6', '花呗': '#38BDF8', 
+        '信用卡': '#EAB308', '现金': '#22C55E', '未记录方式': '#9CA3AF'
+    };
+    // 如果某个分类不在字典里，给个默认的高对比色轮换
+    const fallbackColors = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444'];
+    const getColor = (name, index) => colorMap[name] || fallbackColors[index % fallbackColors.length];
+    const GRAY_COLOR = '#9CA3AF'; // 杂项统一灰色
+
+    // 2. 分离前 4 名和 杂项
+    let top4Array = [];
+    let otherItem = null;
+
+    if (statsArray.length > 4) {
+        top4Array = statsArray.slice(0, 4);
+        const restArray = statsArray.slice(4);
+        const otherAmount = restArray.reduce((sum, item) => sum + item.amount, 0);
+        otherItem = { name: '杂项', amount: otherAmount, isOther: true };
+    } else {
+        top4Array = statsArray;
+    }
+
+    // 用于顶部进度条渲染的数组（最多5项）
+    const chartArray = otherItem ? [...top4Array, otherItem] : top4Array;
+
+    // 3. 构建进度条与百分比
+    const progressBarHtml = chartArray.map((item, index) => {
+        const percent = (item.amount / totalAmount) * 100;
+        const color = item.isOther ? GRAY_COLOR : getColor(item.name, index);
+        return `<div style="width: ${percent}%; background-color: ${color};" class="h-full transition-all duration-500"></div>`;
     }).join('');
 
+    const percentLabelsHtml = chartArray.map((item) => {
+    const percent = (item.amount / totalAmount) * 100;
+    // 处理 <1% 的情况
+    const displayPercent = (percent > 0 && percent < 1) ? '<1' : percent.toFixed(0);
+    
+    return `
+        <div style="width: ${percent}%; position: relative;">
+            <!-- 🌟 使用 calc 让整体向右偏移 1px，抵消 % 符号右侧自带的空白，实现视觉绝对居中 -->
+            <div class="absolute left-1/2 -translate-x-[calc(50%-1.5px)] top-1 flex items-baseline whitespace-nowrap text-gray-500">
+                <span class="text-[9px] font-bold tracking-tighter">${displayPercent}</span>
+                <span class="text-[7px] font-medium ml-[0.5px]">%</span>
+            </div>
+        </div>
+    `;
+}).join('');
+
+    // 4. 构建底部网格列表（前4名彩色，第5名及以后灰色）
+const listHtml = statsArray.map((item, index) => {
+    const isTop4 = index < 4;
+    const color = isTop4 ? getColor(item.name, index) : GRAY_COLOR;
+    const rawPercent = (item.amount / totalAmount) * 100;
+    const percent = (rawPercent > 0 && rawPercent < 1) ? '<1' : rawPercent.toFixed(0);
+    
+    // 杂项卡片排版：去掉多余的顶部边距，缩短上下行间距
+    const amountHtml = isTop4 
+        ? `<p class="text-xs font-bold text-gray-800 tracking-tight ml-1 flex-shrink-0">¥${toPlainNumber(item.amount)}</p>`
+        : `
+            <div class="flex flex-col items-end flex-shrink-0 text-right">
+                <p class="text-xs font-bold text-gray-800 tracking-tight leading-none">¥${toPlainNumber(item.amount)}</p>
+                <p class="text-[9px] text-gray-400 font-medium mt-0.5 leading-none -mr-[2px]">${percent}%</p>
+            </div>
+          `;
+    
+    return `
+        <div onclick="applyBillFilter(this)" data-name="${escapeHtml(item.name)}" data-type="${type}" class="flex items-center justify-between py-1.5 px-2.5 bg-gray-50 rounded-xl border border-gray-100 active:scale-95 transition-transform cursor-pointer">
+            <div class="flex items-center gap-1.5 min-w-0">
+                <span class="w-2 h-2 rounded-full flex-shrink-0" style="background-color: ${color}; box-shadow: 0 0 5px ${color}40;"></span>
+                <p class="text-[11px] font-bold text-gray-700 truncate">${item.name}</p>
+            </div>
+            ${amountHtml}
+        </div>
+    `;
+}).join('');
+
     const html = `
-        <div class="flex flex-col max-h-[70vh]">
+        <div class="flex flex-col max-h-[75vh]">
             <div class="flex justify-between items-center mb-3">
                 <div>
                     <h3 class="text-[15px] font-bold text-gray-800">${title}</h3>
-                    <p class="text-[10px] text-gray-400 mt-0.5">总支出 ¥${toPlainNumber(totalAmount)}</p>
+                    <p class="text-[11px] text-gray-400 mt-0.5">总支出 <span class="font-bold text-gray-700">¥${toPlainNumber(totalAmount)}</span></p>
                 </div>
                 <button onclick="closeCenterModal()" class="p-1.5 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
             </div>
+
+            <!-- 进度条 -->
+            <div class="w-full h-2.5 rounded-full overflow-hidden flex bg-gray-100">
+                ${progressBarHtml}
+            </div>
+
+            <!-- 百分比 -->
+            <div class="flex w-full mb-4 h-3">
+                ${percentLabelsHtml}
+            </div>
             
+            <!-- 紧凑双列网格 (稍微拉高一点，p-2.5) -->
             <div class="overflow-y-auto pr-1 pb-2" style="scrollbar-width: none;">
-                ${listHtml}
+                <div class="grid grid-cols-2 gap-1.5">
+                    ${listHtml}
+                </div>
             </div>
         </div>
     `;
