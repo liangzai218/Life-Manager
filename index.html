@@ -564,7 +564,7 @@ function normalizeFilename(name) {
             if (!t || typeof t !== 'object') return null;
             const name = String(t.name || '').trim();
             if (!name) return null;
-            return { id: String(t.id || 'task_' + Date.now() + '_' + Math.random().toString(36).slice(2,8)), name, isOnce: t.isOnce === true, createdAt: Number(t.createdAt) || Date.now(), updatedAt: Number(t.updatedAt) || Date.now(), completions: Array.isArray(t.completions) ? t.completions.filter(c => c && c.date).map(c => ({ id: String(c.id || 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2,8)), date: Number(c.date) || Date.now() })) : [] };
+            return { id: String(t.id || 'task_' + Date.now() + '_' + Math.random().toString(36).slice(2,8)), name, createdAt: Number(t.createdAt) || Date.now(), updatedAt: Number(t.updatedAt) || Date.now(), completions: Array.isArray(t.completions) ? t.completions.filter(c => c && c.date).map(c => ({ id: String(c.id || 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2,8)), date: Number(c.date) || Date.now() })) : [] };
         }
         function sanitizeIncome(i) {
             if (!i || typeof i !== 'object') return null;
