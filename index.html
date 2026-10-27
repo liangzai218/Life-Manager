@@ -318,7 +318,7 @@ html, body { scrollbar-width: none !important; -ms-overflow-style: none !importa
     <div id="toast" class="toast"></div>
     
     <!-- 全局云同步提示 -->
-<div id="global-sync-indicator" style="display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(59, 130, 246, 0.95); color: white; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 500; z-index: 99999; box-shadow: 0 4px 12px rgba(0,0,0,0.15); align-items: center; gap: 6px;">
+<div id="global-sync-indicator" style="display: none; position: fixed; top: calc(env(safe-area-inset-top, 0px) + 12px); left: 50%; transform: translateX(-50%); background: rgba(59, 130, 246, 0.95); color: white; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 500; z-index: 99999; box-shadow: 0 4px 12px rgba(0,0,0,0.15); align-items: center; gap: 6px;">
     <i data-lucide="cloud" class="w-4 h-4 animate-pulse"></i>
     <span id="sync-indicator-text">正在同步数据，请勿退出...</span>
 </div>
@@ -397,12 +397,14 @@ async function fetchWithTimeout(resource, options = {}) {
         const LAST_SYNC_ACCOUNT_KEY = 'life_manager_last_sync_account';
         const OP_LOG_MAX = 200;
 
-        let appData = {
-    tasks: [], incomes: [], expenses: [], notes: [],
-    menstrual: { records: [], loveDates: [] },
-    menstrualRemote: { records: [], loveDates: [] },
-            settings: { autoSync: true, giteeToken: '', giteeRepo: '', giteeFilename: '', syncMenstrualFrom: '', cloudConfigValid: false, lastSyncTime: null, lastSyncType: null }
-        };
+            let appData = {
+tasks: [], incomes: [], expenses: [], notes: [],
+menstrual: { records: [], loveDates: [] },
+menstrualRemote: { records: [], loveDates: [] },
+goals: [],          // 自己的心愿单
+goalsRemote: [],    // 拉取到的对方心愿单（隔离存放）
+        settings: { autoSync: true, giteeToken: '', giteeRepo: '', giteeFilename: '', syncMenstrualFrom: '', shareModules: { menstrual: true }, cloudConfigValid: false, lastSyncTime: null, lastSyncType: null }
+    };
         let lastSyncData = null;
         let notePasswordsMap = new Map();
         let currentBillType = 'income';
@@ -505,7 +507,10 @@ function loadData() {
             if (!appData.settings.lastSyncTime) appData.settings.lastSyncTime = null;
             if (!appData.settings.lastSyncType) appData.settings.lastSyncType = null;
             if (appData.settings.syncMenstrualFrom === undefined) appData.settings.syncMenstrualFrom = '';
-            // 旧 backup key 迁移到 menstrualRemote，然后删除
+           if (!appData.settings.shareModules) appData.settings.shareModules = { menstrual: true };
+if (!appData.goals) appData.goals = [];
+if (!appData.goalsRemote) appData.goalsRemote = [];
+             // 旧 backup key 迁移到 menstrualRemote，然后删除
             const legacyBackup = localStorage.getItem(LOCAL_MENSTRUAL_BACKUP_KEY);
             if (legacyBackup) {
                 try {
@@ -613,6 +618,17 @@ function normalizeFilename(name) {
 
         
 
+// 🌟 L2 引擎：判断我是否允许对方看经期
+function canIShareMenstrual() {
+    return appData.settings.shareModules?.menstrual !== false;
+}
+
+// 🌟 L2 引擎：判断对方是否允许我看经期（基于拉取到的对方数据）
+function canISeePartnerMenstrual(remoteData) {
+    if (!remoteData || !remoteData.settings || !remoteData.settings.shareModules) return true;
+    return remoteData.settings.shareModules.menstrual !== false;
+}
+
 let _isFetchingMenstrual = false;
 
 async function fetchRemoteMenstrual(showResult = false) {
@@ -630,17 +646,39 @@ async function fetchRemoteMenstrual(showResult = false) {
                 console.warn('对方文件解密失败:', err);
                 if (showResult) showToast('无法读取 ' + syncMenstrualFrom + ' 的数据'); return;
             }
-            if (remoteData && remoteData.menstrual) {
-                // 直接写 menstrualRemote，不碰 appData.menstrual
-                appData.menstrualRemote = {
-                    records: (remoteData.menstrual.records || []).map(sanitizeMenstrualRecord).filter(Boolean),
-                    loveDates: (remoteData.menstrual.loveDates || []).map(sanitizeLoveDate).filter(Boolean)
-                };
-                saveData(true);
-if (currentTab === 'menstrual') refreshMenstrualView();
-else if (currentTab === 'home') switchTab('home', true);
-if (showResult) showToast('已更新共享经期数据');
-            } else { if (showResult) showToast('该文件内无经期数据'); }
+// 🌟 调用 L2 引擎审查对方权限
+const isAllowed = canISeePartnerMenstrual(remoteData);
+
+if (isAllowed && remoteData && remoteData.menstrual) {
+    appData.menstrualRemote = {
+        records: (remoteData.menstrual.records || []).map(sanitizeMenstrualRecord).filter(Boolean),
+        loveDates: (remoteData.menstrual.loveDates || []).map(sanitizeLoveDate).filter(Boolean)
+    };
+    appData.settings.partnerShareMenstrual = true; // 记录对方允许了
+    
+    // 🌟 核心新增：顺手拉取对方的 goals（取决于开关）
+    const isGoalShared = !remoteData.settings || !remoteData.settings.shareModules || remoteData.settings.shareModules.goals !== false;
+    if (isGoalShared && remoteData.goals) {
+        appData.goalsRemote = remoteData.goals; // 隔离存入远端池
+    } else {
+        appData.goalsRemote = [];
+    }
+
+    saveData(true);
+    if (currentTab === 'menstrual') refreshMenstrualView();
+    else if (currentTab === 'home') switchTab('home', true);
+    if (showResult) showToast('已更新共享数据');
+} else {
+    // 对方关闭了共享，或者确实没数据
+    appData.menstrualRemote = { records: [], loveDates: [] };
+    appData.goalsRemote = [];
+    appData.settings.partnerShareMenstrual = isAllowed;
+    saveData(true);
+    if (currentTab === 'menstrual') refreshMenstrualView();
+    else if (currentTab === 'home') switchTab('home', true);
+    if (!isAllowed && showResult) showToast('对方已关闭经期共享');
+    else if (showResult) showToast('该文件内无经期数据');
+}
         } else if (getRes.status === 404) {
             if (showResult) showToast('未找到文件 ' + syncMenstrualFrom);
         } else {
@@ -764,7 +802,7 @@ function showConfetti() {
 let taskStatsMonth = new Date();
 let menstrualViewMonth = new Date();
 let _menstrualRenderCache = null;   // 新增：经期页渲染缓存，让预测函数在一次渲染里只算一次
-
+let _closeCenterReturnAction = null; // 用于记录关闭弹窗时的返回动作
         function formatDate(date) { const d = new Date(date); return `${d.getMonth() + 1}月${d.getDate()}日 星期${['日','一','二','三','四','五','六'][d.getDay()]}`; }
         function toPlainNumber(num) {
     const n = Number(num);
@@ -887,7 +925,8 @@ function showChoiceConfirm(title, message, options) {
                 return `<span class="${color}">${arrow}${Math.abs(diff).toFixed(0)}%</span>`;
             }
 
-            const pendingTasks = appData.tasks.filter(t => !t.completions.some(c => new Date(c.date).toDateString() === today.toDateString()));
+            const rawPendingTasks = appData.tasks.filter(t => !t.completions.some(c => new Date(c.date).toDateString() === today.toDateString()));
+const pendingTasks = sortTasksForDisplay(rawPendingTasks);
 const _viewMenstrualHome = getActiveMenstrual();
 const menstrualRecords = _viewMenstrualHome.records || [];
 const activePeriod = [...menstrualRecords].filter(r => r.isActive === true).sort((a, b) => parseDate(b.startDate) - parseDate(a.startDate))[0];
@@ -991,22 +1030,19 @@ if (menstrualRecords.length === 0) {
     mainCardColor = colors[statusType] || colors['safe'];
 
     if (isWarning) {
-        mainCardColor = 'text-red-500';
-        tipIcon = '⏳';
-        tipText = '经期快到了，建议提前备好卫生用品，注意休息。';
-    } else if (statusType === 'ovulation') {
-        tipIcon = '💖';
-        tipText = '排卵期分泌物增多，注意个人卫生。如果有备孕计划，这几天是黄金期。';
-    } else if (statusType === 'luteal') {
-        tipIcon = '🧘‍♀️';
-        tipText = '黄体期受激素影响，容易情绪波动或长痘。建议少吃甜食，多做瑜伽等舒缓拉伸。';
-    } else if (statusType === 'follicular') {
-        tipIcon = '🏃‍♀️';
-        tipText = '大姨妈刚走，雌激素回升，精力最充沛。适合安排高强度的锻炼或攻克难题。';
-    } else {
-        tipIcon = '🌿';
-        tipText = '目前处于安全期，但安全期并非绝对安全，请注意个人防护。';
-    }
+    mainCardColor = 'text-red-500';
+    tipIcon = '⏳';
+} else if (statusType === 'ovulation') {
+    tipIcon = '💖';
+} else if (statusType === 'luteal') {
+    tipIcon = '🧘‍♀️';
+} else if (statusType === 'follicular') {
+    tipIcon = '🏃‍♀️';
+} else {
+    tipIcon = '🌿';
+}
+// 统一调用引擎层获取文案
+tipText = getDailyTip(statusType, isWarning);
 }
             const totalCompletions = appData.tasks.reduce((sum, t) => sum + t.completions.length, 0);
             const totalBills = appData.incomes.length + appData.expenses.length;
@@ -1290,6 +1326,31 @@ function calculateStreak(task) {
     return streak;
 }
 
+// 🌟 排序引擎：连续天数降序 -> 间隔天数升序 -> 都没打卡的沉底
+function sortTasksForDisplay(tasks) {
+    return [...tasks].sort((a, b) => {
+        const streakA = calculateStreak(a);
+        const streakB = calculateStreak(b);
+        
+        // 1. 连续天数越多的排越前
+        if (streakA !== streakB) {
+            return streakB - streakA; 
+        }
+        
+        // 2. 连续天数相同（比如都是 0），看间隔天数
+        const gapA = getDaysSinceLastComplete(a);
+        const gapB = getDaysSinceLastComplete(b);
+        
+        // 从未打卡的沉底
+        if (gapA === null && gapB !== null) return 1;
+        if (gapB === null && gapA !== null) return -1;
+        if (gapA === null && gapB === null) return 0;
+        
+        // 间隔天数小的（比如昨天刚打）排前面，间隔天数大的（比如两周没打了）排后面
+        return gapA - gapB;
+    });
+}
+
 function calculateMaxStreak(task) {
     if (!task.completions || !task.completions.length) return 0;
     const dateSet = new Set(task.completions.map(c => new Date(c.date).toDateString()));
@@ -1462,9 +1523,12 @@ function renderFinishView() {
     const today = new Date().toDateString();
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth();
-    let html = `
-        <div class="space-y-4 mt-2">
-            ${appData.tasks.length > 0 ? appData.tasks.map(task => {
+    // 调用 L2 引擎获取排序后的数组
+const sortedTasks = sortTasksForDisplay(appData.tasks);
+
+let html = `
+    <div class="space-y-4 mt-2">
+        ${sortedTasks.length > 0 ? sortedTasks.map(task => {
                 const isCompleted = task.completions.some(c => new Date(c.date).toDateString() === today);
                 const streak = calculateStreak(task);
                 const daysSinceLast = getDaysSinceLastComplete(task);
@@ -1546,6 +1610,7 @@ function showTaskStats(taskId, resetMonth = false) {
     const task = appData.tasks.find(t => t.id === taskId);
     if (!task) { showToast('任务不存在'); return; }
     if (resetMonth) taskStatsMonth = new Date();
+    
     const totalCompletions = task.completions.length;
     const maxStreak = calculateMaxStreak(task);
     const maxGap = calculateMaxGap(task);
@@ -1556,59 +1621,61 @@ function showTaskStats(taskId, resetMonth = false) {
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const today = new Date();
+    
     let calendarHtml = `
         <div class="flex justify-between items-center mb-3">
-            <button onclick="changeTaskStatsMonth(-1, '${task.id}')" class="p-1.5 rounded-lg bg-gray-100"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
-            <span class="font-semibold text-sm">${year}年${month + 1}月</span>
-            <button onclick="changeTaskStatsMonth(1, '${task.id}')" class="p-1.5 rounded-lg bg-gray-100"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+            <button onclick="changeTaskStatsMonth(-1, '${task.id}')" class="p-1.5 rounded-lg bg-gray-100 active:scale-90 transition-transform"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+            <span class="font-bold text-sm">${year}年${month + 1}月</span>
+            <button onclick="changeTaskStatsMonth(1, '${task.id}')" class="p-1.5 rounded-lg bg-gray-100 active:scale-90 transition-transform"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
         </div>
         <div class="habit-calendar-grid mb-1">
             ${['日','一','二','三','四','五','六'].map(d => `<div class="text-center text-[9px] text-gray-400 py-1">${d}</div>`).join('')}
         </div>
         <div class="habit-calendar-grid">
     `;
+    
+    // 首日占位
     for (let i = 0; i < firstDay; i++) calendarHtml += `<div></div>`;
+    
+    // 渲染日期
     for (let day = 1; day <= daysInMonth; day++) {
-        const dateStr = new Date(year, month, day).toDateString();
-        const isCompleted = task.completions.some(c => new Date(c.date).toDateString() === dateStr);
+        const dateStr = formatDateLocal(new Date(year, month, day));
+        const isCompleted = task.completions.some(c => new Date(c.date).toDateString() === new Date(year, month, day).toDateString());
         const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
-        calendarHtml += `<div class="habit-calendar-day ${isCompleted ? 'completed' : ''} ${isToday ? 'today' : ''}">${day}</div>`;
+        
+        // 🌟 加上点击事件
+        calendarHtml += `<div onclick="handleTaskCalendarClick('${task.id}', '${dateStr}', ${isCompleted})" class="habit-calendar-day ${isCompleted ? 'completed' : ''} ${isToday ? 'today' : ''} cursor-pointer active:scale-90 transition-transform">${day}</div>`;
     }
     calendarHtml += '</div>';
-    const sortedMonthCompletions = [...monthCompletions].sort((a, b) => b.date - a.date);
+
     const html = `
         <div class="p-5 max-h-[85vh] overflow-y-auto">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-base font-bold">${task.name}</h3>
                 <button onclick="closeModal()" class="p-2 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
             </div>
-            <div class="grid grid-cols-3 gap-2 mb-4">
-                <div class="stat-card"><p class="stat-number text-blue-500">${totalCompletions}</p><p class="stat-label">总打卡</p></div>
-                <div class="stat-card"><p class="stat-number text-green-500">${maxStreak}</p><p class="stat-label">最长连续</p></div>
-                <div class="stat-card"><p class="stat-number text-purple-500">${maxGap}</p><p class="stat-label">最长间隔</p></div>
+            
+            <!-- 🌟 顶部 4 格数据卡片（融合了本月打卡） -->
+            <div class="grid grid-cols-4 gap-1.5 mb-4">
+                <div class="stat-card py-2"><p class="stat-number text-blue-500 text-[18px]">${monthCount}</p><p class="stat-label text-[9px]">本月打卡</p></div>
+                <div class="stat-card py-2"><p class="stat-number text-indigo-500 text-[18px]">${totalCompletions}</p><p class="stat-label text-[9px]">累计打卡</p></div>
+                <div class="stat-card py-2"><p class="stat-number text-green-500 text-[18px]">${maxStreak}</p><p class="stat-label text-[9px]">最长连续</p></div>
+                <div class="stat-card py-2"><p class="stat-number text-purple-500 text-[18px]">${maxGap}</p><p class="stat-label text-[9px]">最长间隔</p></div>
             </div>
-            <div class="glass-card p-3 rounded-xl mb-4">
-                <div class="flex justify-between items-center">
-                    <span class="text-sm text-gray-600">${year}年${month + 1}月打卡</span>
-                    <span class="text-lg font-bold text-blue-500">${monthCount} 次</span>
+            
+            <!-- 日历区块（已加点击事件） -->
+            <div class="mb-4">
+                <div class="flex justify-between items-center mb-2">
+                    <p class="text-xs font-semibold text-gray-700">打卡日历</p>
+                    <p class="text-[10px] text-gray-400">点击日期可补卡/取消</p>
                 </div>
+                ${calendarHtml}
             </div>
-            <div class="mb-4"><p class="text-xs font-semibold text-gray-700 mb-2">打卡日历</p>${calendarHtml}</div>
-            <div><p class="text-xs font-semibold text-gray-700 mb-2">打卡记录</p>
-                <div class="space-y-1.5 max-h-48 overflow-y-auto">
-                    ${sortedMonthCompletions.length > 0 ? sortedMonthCompletions.map(c => `
-                        <div class="record-item">
-                            <i data-lucide="check-circle" class="w-3.5 h-3.5 text-green-500 mr-2"></i>
-                            <span class="text-xs text-gray-600 flex-1">${formatDateTime(c.date).split(' ')[0]}</span>
-                            <span class="text-[10px] text-gray-400 mr-3">${formatTime(c.date)}</span>
-                            <button onclick="deleteCompletion('${task.id}', '${c.id}')" class="p-1 text-gray-400 hover:text-red-500"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
-                        </div>
-                    `).join('') : '<p class="text-xs text-gray-400 text-center py-4">该月暂无记录</p>'}
-                </div>
-            </div>
-            <div class="flex gap-3 mt-4">
-                <button onclick="editTaskName('${task.id}')" class="flex-1 py-3 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium">修改名称</button>
-                <button onclick="deleteTask('${task.id}')" class="flex-1 py-3 rounded-xl bg-red-50 text-red-500 text-sm font-medium">删除此习惯</button>
+            
+            <!-- 底部操作按钮 -->
+            <div class="flex gap-3 mt-6">
+                <button onclick="editTaskName('${task.id}')" class="flex-1 py-3 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium active:scale-95 transition-transform">修改名称</button>
+                <button onclick="deleteTask('${task.id}')" class="flex-1 py-3 rounded-xl bg-red-50 text-red-500 text-sm font-medium active:scale-95 transition-transform">删除此习惯</button>
             </div>
         </div>
     `;
@@ -1618,6 +1685,46 @@ function showTaskStats(taskId, resetMonth = false) {
 function changeTaskStatsMonth(delta, taskId) {
     taskStatsMonth.setMonth(taskStatsMonth.getMonth() + delta);
     showTaskStats(taskId);
+}
+
+// 🌟 处理日历点击补卡 / 取消打卡
+async function handleTaskCalendarClick(taskId, dateStr, hasRecord) {
+    const task = appData.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    
+    const todayStr = formatDateLocal(new Date());
+    
+    // 防呆：今天和未来
+    if (dateStr === todayStr) { showToast('今天请在打卡列表操作哦'); return; }
+    if (dateStr > todayStr) { showToast('不能对未来的日期操作'); return; }
+
+    if (hasRecord) {
+        // 取消打卡：找出当天的那条记录，把时分显示出来
+        const targetTime = new Date(dateStr).toDateString();
+        const record = task.completions.find(c => new Date(c.date).toDateString() === targetTime);
+        const timeText = record && record.isMakeup ? '补卡' : (record ? formatTime(record.date) : '');
+        
+        const confirmed = await showCustomConfirm(`该日已在 ${timeText} 完成打卡，\n确定要取消吗？`);
+        if (confirmed) {
+            task.completions = task.completions.filter(c => new Date(c.date).toDateString() !== targetTime);
+            task.updatedAt = Date.now();
+            saveData(); logOp('取消补卡', dateStr);
+            showTaskStats(taskId); // 重新渲染当前弹窗
+            showToast('已取消打卡');
+        }
+    } else {
+        // 补卡
+        const confirmed = await showCustomConfirm(`确定要在 ${dateStr} 补打卡吗？`);
+        if (confirmed) {
+            const targetDate = new Date(dateStr);
+            targetDate.setHours(12, 0, 0, 0); // 补卡时间统一设为中午 12:00
+            task.completions.push({ id: Date.now().toString(), date: targetDate.getTime(), isMakeup: true });
+            task.updatedAt = Date.now();
+            saveData(); logOp('补打卡', dateStr);
+            showTaskStats(taskId); // 重新渲染当前弹窗
+            showToast('补卡成功');
+        }
+    }
 }
 
 async function deleteCompletion(taskId, completionId) {
@@ -1643,21 +1750,28 @@ async function deleteTask(taskId) {
 async function editTaskName(taskId) {
     const task = appData.tasks.find(t => t.id === taskId);
     if (!task) return;
+    
+    // 🌟 先关闭底部的详情页弹窗
+    closeModal(); 
+    
     const html = `
-        <div class="space-y-3">
-            <h3 class="text-lg font-bold mb-0">修改名称</h3>
-            <div>
-                <label class="text-xs text-gray-500 block mb-1">新名称</label>
-                <input type="text" id="edit-task-name-input" class="input-field text-sm" value="${escapeHtml(task.name)}" placeholder="输入新名称">
-            </div>
-            <div class="flex gap-3 mt-4">
-                <button onclick="closeModal()" class="flex-1 py-2 rounded-xl bg-gray-100 text-gray-600 text-sm">取消</button>
-                <button onclick="confirmEditTaskName('${task.id}')" class="flex-1 py-2 rounded-xl btn-primary text-sm">保存</button>
+        <div class="flex flex-col">
+            <p class="text-[15px] font-bold text-gray-800 mb-4 text-center">修改习惯名称</p>
+            <input type="text" id="edit-task-name-input" class="input-field mb-5" value="${escapeHtml(task.name)}" placeholder="输入新名称">
+            <div class="flex gap-2">
+                <button onclick="closeCenterModal()" class="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-medium text-sm">取消</button>
+                <button onclick="confirmEditTaskName('${task.id}')" class="flex-1 py-2.5 rounded-xl btn-primary font-medium text-sm">保存</button>
             </div>
         </div>
     `;
-    openModal(html);
-    setTimeout(() => { const input = document.getElementById('edit-task-name-input'); if (input) input.focus(); }, 100);
+    // 🌟 改用高级的居中弹窗
+    openCenterModal(html);
+    
+    // 自动聚焦并全选文本，方便用户直接覆盖修改
+    setTimeout(() => { 
+        const input = document.getElementById('edit-task-name-input'); 
+        if (input) { input.focus(); input.select(); } 
+    }, 100);
 }
 
 async function confirmEditTaskName(taskId) {
@@ -1670,7 +1784,11 @@ async function confirmEditTaskName(taskId) {
         task.name = newName;
         task.updatedAt = Date.now();
         saveData(); logOp('修改习惯名称', `${oldName} → ${newName}`);
-        showToast('名称已修改'); closeModal(); switchTab('finish');
+        showToast('名称已修改'); 
+        
+        // 🌟 关闭居中弹窗，并刷新打卡列表页
+        closeCenterModal(); 
+        switchTab('finish'); 
     }
 }
 
@@ -1725,19 +1843,16 @@ function showAddNoteModal() {
     const isPassword = noteType === 'password';
 const html = `
     <div class="flex flex-col">
-        <div class="flex justify-between items-center mb-3">
-            <h3 class="text-[15px] font-bold text-gray-800">新建${isPassword ? '密码记录' : '笔记'}</h3>
-            <button onclick="closeCenterModal()" class="p-1.5 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
+        <h3 class="text-[16px] font-bold text-gray-800 text-center mb-5">新建${isPassword ? '密码记录' : '笔记'}</h3>
+        <div class="space-y-3">
+            <div><label class="text-xs text-gray-500 mb-1.5 block">标题</label><input type="text" id="note-title" class="input-field" placeholder="${isPassword ? '如：微信密码' : '笔记标题'}"></div>
+            ${isPassword ? `
+                <div><label class="text-xs text-gray-500 mb-1.5 block">账号</label><input type="text" id="note-account" class="input-field" placeholder="可选"></div>
+                <div><label class="text-xs text-gray-500 mb-1.5 block">密码</label><input type="text" id="note-password" class="input-field" placeholder="输入密码"></div>
+            ` : `<div><label class="text-xs text-gray-500 mb-1.5 block">内容</label><textarea id="note-content" class="input-field" rows="4" placeholder="输入笔记内容..."></textarea></div>`}
+            <button onclick="addNote()" class="btn-primary w-full py-3.5 rounded-xl font-semibold text-sm shadow-md">保存</button>
         </div>
-            <div class="space-y-3">
-                <div><label class="text-xs text-gray-500 mb-1.5 block">标题</label><input type="text" id="note-title" class="input-field" placeholder="${isPassword ? '如：微信密码' : '笔记标题'}"></div>
-                ${isPassword ? `
-                    <div><label class="text-xs text-gray-500 mb-1.5 block">账号</label><input type="text" id="note-account" class="input-field" placeholder="可选"></div>
-                    <div><label class="text-xs text-gray-500 mb-1.5 block">密码</label><input type="text" id="note-password" class="input-field" placeholder="输入密码"></div>
-                ` : `<div><label class="text-xs text-gray-500 mb-1.5 block">内容</label><textarea id="note-content" class="input-field" rows="4" placeholder="输入笔记内容..."></textarea></div>`}
-                <button onclick="addNote()" class="btn-primary w-full py-3.5 rounded-xl font-semibold text-sm shadow-md">保存</button>
-            </div>
-        </div>
+    </div>
     `;
 openCenterModal(html);
 }
@@ -1868,7 +1983,56 @@ function updateNote(noteId) {
     showToast('修改成功'); closeCenterModal(); switchTab('note');
 }
 
-// [L2-L4] 经期：日期引擎 + 视图渲染
+// ==================== L2 心愿单引擎 ====================
+// 计算单条流水的总和
+function sumGoalRecords(records) {
+    if (!records || !Array.isArray(records)) return 0;
+    return records.reduce((sum, r) => sum + Number(r.amount), 0);
+}
+
+// 获取所有合并后的心愿列表（合并本地和远程）
+function getMergedGoals() {
+    const localGoals = appData.goals || [];
+    const remoteGoals = appData.goalsRemote || [];
+    
+    // 以本地心愿为基准，如果本地为空但远程有，也可以展示远程
+    // 为了数据一致，以 id 去重并合并 records
+    const mergedMap = new Map();
+    
+    localGoals.forEach(g => {
+        mergedMap.set(g.id, {
+            ...g,
+            localRecords: g.records || [],
+            remoteRecords: [],
+            myTotal: sumGoalRecords(g.records),
+            partnerTotal: 0,
+            total: sumGoalRecords(g.records)
+        });
+    });
+    
+    remoteGoals.forEach(rg => {
+        if (mergedMap.has(rg.id)) {
+            const existing = mergedMap.get(rg.id);
+            existing.remoteRecords = rg.records || [];
+            existing.partnerTotal = sumGoalRecords(rg.records);
+            existing.total = existing.myTotal + existing.partnerTotal;
+        } else {
+            // 如果只有对方的，没有自己的（比如对方新建的）
+            mergedMap.set(rg.id, {
+                ...rg,
+                localRecords: [],
+                remoteRecords: rg.records || [],
+                myTotal: 0,
+                partnerTotal: sumGoalRecords(rg.records),
+                total: sumGoalRecords(rg.records)
+            });
+        }
+    });
+    
+    return Array.from(mergedMap.values());
+}
+
+// ==================== [L2-L4] 经期：日期引擎 + 视图渲染 ====================
 function getCompletedPeriods() {
     const data = getActiveMenstrual();
     return data.records.filter(r => r.endDate);
@@ -2034,6 +2198,79 @@ function _computePredictNextPeriodStart() {
         confidence, 
         cycleLength: Math.round(bestCycle) 
     };
+}
+
+// 🌟 获取当天的健康贴士（智能匹配微观时间窗口）
+function getDailyTip(statusType, isWarning = false) {
+    let phaseKey = 'empty';
+    
+    const today = new Date(); 
+    today.setHours(0, 0, 0, 0);
+    const todayStr = formatDateLocal(today);
+    
+    const activePeriod = getActivePeriod();
+    const data = getActiveMenstrual();
+    
+    if (activePeriod) {
+        // 1. 正在经期
+        const start = parseDate(activePeriod.startDate);
+        const day = Math.floor((today - start) / (1000 * 60 * 60 * 24)) + 1;
+        if (day <= 2) phaseKey = 'menstruating_early';
+        else if (day <= 4) phaseKey = 'menstruating_mid';
+        else phaseKey = 'menstruating_late';
+    } else if (data.records.length > 0) {
+        // 2. 不在经期，先看是不是推迟了
+        const pred = predictNextPeriodStart();
+        let daysUntilNext = null;
+        if (pred && pred.best) {
+            const bestDate = parseDate(pred.best);
+            daysUntilNext = Math.round((bestDate - today) / (1000 * 60 * 60 * 24));
+        }
+
+        if (daysUntilNext !== null && daysUntilNext < 0) {
+            // 经期推迟
+            const delayDays = Math.abs(daysUntilNext);
+            phaseKey = (delayDays <= 3) ? 'delayed_short' : 'delayed_long';
+        } else {
+            // 没推迟，看排卵期
+            const isOvulatingToday = isDateInOvulation(todayStr);
+            
+            // 计算距离上次结束过了几天
+            let daysSinceEnd = null;
+            const completedRecords = data.records.filter(r => r.endDate).sort((a,b) => parseDate(b.endDate) - parseDate(a.endDate));
+            if (completedRecords.length > 0) {
+                const lastEnd = parseDate(completedRecords[0].endDate);
+                daysSinceEnd = Math.round((today - lastEnd) / (1000 * 60 * 60 * 24));
+            }
+
+            if (isOvulatingToday) {
+                // 是不是排卵日当天？（下一次经期 - 14天）
+                let isOvulationDay = false;
+                if (pred) {
+                    const ovDate = parseDate(pred.best);
+                    ovDate.setDate(ovDate.getDate() - 14);
+                    if (formatDateLocal(ovDate) === todayStr) isOvulationDay = true;
+                }
+                phaseKey = isOvulationDay ? 'ovulation_day' : 'ovulation_window';
+            } else if (daysUntilNext !== null && daysUntilNext <= 3) {
+                phaseKey = 'pms_late';
+            } else if (daysUntilNext !== null && daysUntilNext <= 7) {
+                phaseKey = 'pms_early';
+            } else if (daysSinceEnd !== null && daysSinceEnd <= 2) {
+                phaseKey = 'follicular_early';
+            } else if (daysSinceEnd !== null && daysSinceEnd <= 8) {
+                phaseKey = 'follicular_golden';
+            } else {
+                // 剩下的平缓期（黄体期前面几天）
+                phaseKey = 'luteal_early';
+            }
+        }
+    }
+
+    const tips = MENSTRUAL_TIPS[phaseKey] || MENSTRUAL_TIPS['empty'];
+    // 根据日期取模，保证同一天内多次刷新文案不变，第二天自动换
+    const dayIndex = new Date().getDate() % tips.length; 
+    return tips[dayIndex];
 }
 
 function predictPeriodEnd(startDate) {
@@ -2713,11 +2950,22 @@ if (earliestRecord && parseDate(dateStr) < earliestRecord) {
         const totalCells = firstDay + daysInMonth;
         const remaining = (7 - (totalCells % 7)) % 7;
         for (let i = 0; i < remaining; i++) calHtml += `<div class="menstrual-calendar-day other-month"></div>`;
-        const readOnlyHint = isReadOnly ? `
+        let readOnlyHint = '';
+if (isReadOnly) {
+    if (appData.settings.partnerShareMenstrual === false) {
+        readOnlyHint = `
+            <div class="flex items-center justify-center gap-1 text-xs text-red-400 py-1 bg-red-50/50 rounded-lg mb-2">
+                <span>对方已关闭经期共享</span>
+            </div>
+        `;
+    } else {
+        readOnlyHint = `
             <div class="flex items-center justify-center gap-1 text-xs text-blue-500 py-1">
                 <span>只读 · 正在查看 ${escapeHtml(appData.settings.syncMenstrualFrom.replace(/\.json$/i, ''))} 的经期数据</span>
             </div>
-        ` : '';
+        `;
+    }
+}
         // 🌟 合并状态与预测，做成粉色高光卡片
             const combinedHeaderHtml = `
 <div class="mb-3 rounded-2xl p-4 text-white relative overflow-hidden transition-all duration-500" style="background: ${theme.bg}; box-shadow: 0 8px 20px -6px ${theme.shadow};">
@@ -2804,12 +3052,7 @@ if (earliestRecord && parseDate(dateStr) < earliestRecord) {
                 <div>
                     <p class="text-xs font-bold text-gray-800 mb-1">今日健康贴士</p>
                     <p class="text-[11px] text-gray-500 leading-relaxed">
-    ${status.type === 'menstruating' ? '正处于经期，身体较虚弱。建议多喝温水，注意腹部保暖，避免剧烈运动和生冷食物。' : 
-      status.type === 'ovulation' ? '排卵期分泌物增多，注意个人卫生。如果有备孕计划，这几天是黄金期哦。' : 
-      status.type === 'luteal' ? '黄体期受激素影响，容易情绪波动或长痘。建议少吃甜食，多做瑜伽等舒缓拉伸。' : 
-      status.type === 'follicular' ? '大姨妈刚走，雌激素回升，精力最充沛。适合安排高强度的锻炼或攻克难题。' : 
-      status.type === 'safe' ? '目前处于安全期。但安全期并非绝对安全，请注意个人防护。' : // 🌟 新增安全期判断
-      '还没有记录足够的数据，点击日历记录你的周期，我会给你更贴心的建议哦。'}
+    ${getDailyTip(status.type, false)}
 </p>
                 </div>
             </div>
@@ -2893,9 +3136,17 @@ function selectCapsule(el) {
     if (type === 'category') {
         billDraft.category = val;
         billDraft.subCategory = '';
+        if (!appData.settings.categoryStats) appData.settings.categoryStats = {};
+        appData.settings.categoryStats[val] = (appData.settings.categoryStats[val] || 0) + 1;
+        saveData(true);
         showAddBillModal(true);
     } else if (type === 'pay') {
         billDraft.payMethod = (billDraft.payMethod === val) ? '' : val;
+        if (!appData.settings.payMethodStats) appData.settings.payMethodStats = {};
+        if (billDraft.payMethod) { // 只有选中时才加次数
+            appData.settings.payMethodStats[val] = (appData.settings.payMethodStats[val] || 0) + 1;
+            saveData(true);
+        }
         showAddBillModal(true);
     }
 }
@@ -2922,35 +3173,31 @@ function showMoreOptions(type) {
     const title = document.getElementById('more-title');
     if (!billDraft) return;
     
-    let items = [];
-let selectedVal = '';
-
-if (type === 'category') {
-    title.innerText = '全部分类';
-    items = EXPENSE_CATEGORIES.slice(5); 
-    selectedVal = billDraft.category;
-} else {
-    title.innerText = '全部支付方式';
-    items = PAY_METHODS.slice(5);
-    selectedVal = billDraft.payMethod;
-}
-
-layer.style.top = 'auto'; 
-layer.style.bottom = '0';
-layer.style.height = 'auto';
-grid.style.maxHeight = 'none';
+    let sortedItems = [];
+    let selectedVal = '';
 
     if (type === 'category') {
-        if (!appData.settings.categoryStats) appData.settings.categoryStats = {};
-        const stats = appData.settings.categoryStats;
-        items.sort((a, b) => {
-            const countA = stats[a.name] || 0;
-            const countB = stats[b.name] || 0;
-            return countB - countA; 
-        });
+        title.innerText = '全部分类';
+        const stats = appData.settings.categoryStats || {};
+        // 先排序，再取第 5 个及以后的（因为前 5 个已经在胶囊列表里了）
+        sortedItems = [...EXPENSE_CATEGORIES].sort((a, b) => (stats[b.name] || 0) - (stats[a.name] || 0));
+        selectedVal = billDraft.category;
+    } else {
+        title.innerText = '全部支付方式';
+        const stats = appData.settings.payMethodStats || {};
+        sortedItems = [...PAY_METHODS].sort((a, b) => (stats[b] || 0) - (stats[a] || 0));
+        selectedVal = billDraft.payMethod;
     }
 
-    grid.innerHTML = items.map(item => {
+    // 取排序后的第 5 个开始渲染
+    const moreItems = sortedItems.slice(5);
+
+    layer.style.top = 'auto'; 
+    layer.style.bottom = '0';
+    layer.style.height = 'auto';
+    grid.style.maxHeight = 'none';
+
+    grid.innerHTML = moreItems.map(item => {
         const val = item.name || item;
         const icon = item.icon ? `<span class="text-base mb-0.5">${item.icon}</span>` : ``;
         const isActive = selectedVal === val;
@@ -2973,12 +3220,16 @@ function selectFromMore(el) {
     if (type === 'category') {
         billDraft.category = val;
         billDraft.subCategory = '';
-        
         if (!appData.settings.categoryStats) appData.settings.categoryStats = {};
         appData.settings.categoryStats[val] = (appData.settings.categoryStats[val] || 0) + 1;
         saveData(true);
     } else if (type === 'pay') {
         billDraft.payMethod = (billDraft.payMethod === val) ? '' : val;
+        if (!appData.settings.payMethodStats) appData.settings.payMethodStats = {};
+        if (billDraft.payMethod) {
+            appData.settings.payMethodStats[val] = (appData.settings.payMethodStats[val] || 0) + 1;
+            saveData(true);
+        }
     }
     
     document.getElementById('more-options-layer').style.display = 'none';
@@ -3061,8 +3312,67 @@ const EXPENSE_CATEGORIES = [
 ];
 const PAY_METHODS = ['微信', '支付宝', '花呗', '信用卡', '现金', '抖音月付', '京东白条', '美团月付'];
 
+// 🌟 经期健康贴士库（按微观时间窗口精细分类）
+const MENSTRUAL_TIPS = {
+    // 经期中
+    'menstruating_early': [
+        "抱抱你，今天是流血又流泪的一天。把暖宝宝贴上，红糖姜茶喝起来。不想动就躺着，别勉强自己。",
+        "痛经不是你的错。今天允许自己发脾气，允许自己什么都不做。千万别碰冰水，点杯热奶茶犒劳一下自己吧。"
+    ],
+    'menstruating_mid': [
+        "量开始变少啦，但身体流失了铁元素，可能会觉得头晕没力气。多吃点红肉、菠菜，动作放慢一点哦。",
+        "这几天容易累，千万别为了减肥节食。吃点高蛋白的食物，晚上早点钻进被窝休息。"
+    ],
+    'menstruating_late': [
+        "胜利在望！虽然快干净了，但宫颈口还是微开的，每天记得用温水清洗外阴，勤换卫生巾。",
+        "大姨妈快走啦，这时候身体在努力‘大扫除’。保持私处干爽，再坚持两天就能彻底放松啦。"
+    ],
+    // 卵泡期
+    'follicular_early': [
+        "大姨妈终于走了，身体还在‘回血’阶段。先做点舒缓拉伸，让子宫好好恢复，别急着剧烈运动。",
+        "终于可以放飞自我啦！但今天先别急着洗头或做高强度运动，多吃点补血的食物，让气色更好看。"
+    ],
+    'follicular_golden': [
+        "身体进入黄金期！雌激素飙升，新陈代谢最快，精力最充沛。想去撸铁、去跑步、去攻克大难题吗？就趁现在！",
+        "现在的你充满力量！这段时间吃什么都不容易胖，非常适合安排减脂计划哦，去挥洒汗水吧！"
+    ],
+    // 排卵期
+    'ovulation_day': [
+        "高光时刻！你今天散发着最强的荷尔蒙，魅力满格。分泌物增多是正常的，穿纯棉内裤保持干爽哦。",
+        "今天是排卵日。如果有备孕计划，今晚抓紧黄金时间；如果没有，一定！一定！要做好防护措施哦。"
+    ],
+    'ovulation_window': [
+        "处于排卵期，分泌物增多，建议穿纯棉透气的内裤，注意个人卫生，保持干爽舒适。"
+    ],
+    // 黄体期
+    'luteal_early': [
+        "激素平稳过渡中，但皮肤可能容易出油或长小痘痘。少吃点甜食，多喝点水，做好清洁哦。",
+        "这段时间一切似乎都慢了下来。如果觉得精力不如前两周，不用焦虑，顺应身体的节奏就好。"
+    ],
+    // 经前综合征
+    'pms_early': [
+        "注意啦，黄体酮在悄悄作祟。可能会突然觉得emo、暴躁、嗜睡或者疯狂想吃碳水。这不是你的错，深呼吸，允许自己有情绪。",
+        "这几天是不是觉得很容易水肿？少吃点盐，多吃点香蕉补充钾，晚上泡个脚，帮身体排排水分。"
+    ],
+    'pms_late': [
+        "大姨妈即将到达战场！小腹是不是已经开始隐隐作痛了？记得包里备好卫生巾和止痛药，今晚早点睡。"
+    ],
+    // 推迟预警
+    'delayed_short': [
+        "大姨妈迟到了？别慌，压力大、熬夜、换季都会让它晚来几天。放松心情，静静等它。"
+    ],
+    'delayed_long': [
+        "已经推迟几天了。如果没有怀孕，可能是最近太累了。再等等看，如果推迟超过 7 天，建议去医院看看医生哦。"
+    ],
+    // 兜底
+    'empty': [
+        "点击日历记录你的周期，我会给你更贴心的建议哦。",
+        "记录第一次经期后，这里就会出现针对你的专属健康小贴士。"
+    ]
+};
+
 const SUBCATEGORY_MAP = {
-    '餐饮': ['早餐', '午餐', '晚餐', '外卖', '零食', '买菜', '夜宵'],
+    '餐饮': ['早餐', '午餐', '晚餐', '外卖', '零食', '买菜', '夜宵', '奶茶'],
     '日用': ['纸巾', '洗护', '清洁', '杂物'],
     '购物': ['服饰', '数码', '美妆', '家具', '网购'],
     '交通': ['打车', '公交地铁', '加油', '停车', '过路费'],
@@ -3079,6 +3389,7 @@ const SUBCATEGORY_MAP = {
 
 function openCenterModal(html, isNarrow = false, skipIcons = false, onRendered = null) {
     const content = document.querySelector('.center-modal-content');
+    _closeCenterReturnAction = null; // 每次打开新弹窗默认清空，防止串台
     if (isNarrow) {
         content.style.width = '65%';
         content.style.maxWidth = '220px';
@@ -3103,6 +3414,13 @@ function closeCenterModal(e) {
     if(!e || e.target === document.getElementById('center-modal-overlay')) {
         document.getElementById('center-modal-overlay').classList.remove('active'); 
         resetDraft();
+        
+        // 🌟 核心修复：如果有关联的返回动作，则延迟触发（比如返回心愿列表）
+        if (_closeCenterReturnAction) {
+            const action = _closeCenterReturnAction;
+            _closeCenterReturnAction = null;
+            setTimeout(action, 100); // 延迟一点等关闭动画播完
+        }
     }
 }
 
@@ -3281,13 +3599,13 @@ return `
 <button onclick="changeBillMonth(1)" class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-white/80 bg-white/5 hover:bg-white/10 rounded-full active:scale-75 transition-all z-20"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
         </div>
 
-        <!-- 卡片2：融合收支与统计的白色大卡片（紧凑+大圆角版） -->
-<div class="bg-white rounded-[16px] p-2 mt-2 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.04)] border border-gray-100/50">
+                <!-- 卡片2：融合收支与统计的白色大卡片（底部收窄版） -->
+<div class="bg-white rounded-[16px] p-2 pb-1.5 mt-2 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.04)] border border-gray-100/50">
     
     <!-- 上半部：总收入/总支出 -->
-    <div class="flex justify-between items-center mb-1.5">
+    <div class="flex justify-between items-center mb-1.5 pt-0.5">
         <div class="flex-1 text-center">
-    <p class="text-[11px] text-gray-400 mb-0.5">总收入</p>
+            <p class="text-[11px] text-gray-400 mb-0.5">总收入</p>
             <p class="text-[14px] font-bold text-gray-700">+¥${toPlainNumber(totalIn)}</p>
         </div>
         <div class="flex-1 text-center">
@@ -3296,21 +3614,22 @@ return `
         </div>
     </div>
     
-    <!-- 下半部：统计按钮（恢复圆角，减小上下 padding） -->
-    <div class="flex gap-2">
-        <div onclick="showStatsModal('category')" class="flex-1 bg-blue-50/80 rounded-xl py-1 text-center cursor-pointer active:scale-95 transition-all border border-blue-100/50">
-            <span class="text-[11px] font-bold text-blue-600 flex items-center justify-center gap-1">
-                <i data-lucide="pie-chart" class="w-3.5 h-3.5"></i> 分类统计
+    <!-- 下半部：统计按钮 -->
+    <div class="px-0.5 flex gap-2">
+        <div onclick="showStatsModal('category')" class="flex-1 bg-gradient-to-b from-blue-50 to-blue-100/80 rounded-xl py-1.5 text-center cursor-pointer active:scale-95 transition-all shadow-sm border border-blue-200/60">
+            <span class="text-xs font-bold text-blue-600 flex items-center justify-center gap-1.5">
+                <i data-lucide="bar-chart-3" class="w-3.5 h-3.5"></i> 数据统计
             </span>
         </div>
-        <div onclick="showStatsModal('payMethod')" class="flex-1 bg-orange-50/80 rounded-xl py-1 text-center cursor-pointer active:scale-95 transition-all border border-orange-100/50">
-            <span class="text-[11px] font-bold text-orange-600 flex items-center justify-center gap-1">
-                <i data-lucide="credit-card" class="w-3.5 h-3.5"></i> 支付统计
+        <div onclick="showGoalsPage()" class="flex-1 bg-gradient-to-b from-purple-50 to-purple-100/80 rounded-xl py-1.5 text-center cursor-pointer active:scale-95 transition-all shadow-sm border border-purple-200/60">
+            <span class="text-xs font-bold text-purple-600 flex items-center justify-center gap-1.5">
+                <i data-lucide="target" class="w-3.5 h-3.5"></i> 心愿储蓄
             </span>
         </div>
     </div>
 
 </div>
+
 </div>
            
 <!-- 🌟 筛选状态提示栏 -->
@@ -3345,6 +3664,355 @@ ${!(billFilter.category || billFilter.payMethod) ? `
 }
 
 // ==================== 分类与支付方式统计 ====================
+function showGoalsPage(expandedId = null) {
+    const mergedGoals = getMergedGoals();
+    
+    let goalsHtml = '';
+    if (mergedGoals.length === 0) {
+        goalsHtml = `<div class="text-center text-gray-400 text-xs py-10">还没有心愿，点击右上角 + 创建一个吧</div>`;
+    } else {
+        goalsHtml = mergedGoals.map(g => {
+            const percent = Math.min(100, (g.total / g.target) * 100);
+            const isExpanded = g.id === expandedId;
+            const toggleParam = isExpanded ? 'null' : "'" + g.id + "'";
+            const safeName = g.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            
+            let allRecords = [];
+            if (g.localRecords) allRecords = allRecords.concat(g.localRecords.map(r => ({...r, user: 'me'})));
+            if (g.remoteRecords) allRecords = allRecords.concat(g.remoteRecords.map(r => ({...r, user: 'partner'})));
+            allRecords.sort((a, b) => b.date - a.date);
+
+            let recordsHtml = '';
+if (allRecords.length > 0) {
+    recordsHtml = `
+    <div class="mt-3 mb-2">
+        <p class="text-[10px] font-bold text-gray-400 mb-1">存取明细（点击修改）</p>
+        <div class="max-h-[140px] overflow-y-auto pr-1" style="scrollbar-width: none;">
+            ${allRecords.map(r => {
+                const safeNote = r.note ? r.note.replace(/\\/g, '\\\\').replace(/'/g, "\\'") : '';
+                return `
+                <div onclick="event.stopPropagation(); showGoalRecordActions('${g.id}', '${r.id}', '${r.user}', ${r.amount}, '${safeNote}')" class="flex items-center justify-between py-1.5 border-b border-dashed border-gray-200/60 last:border-0 active:bg-gray-50/50 transition-colors cursor-pointer">
+                    <div class="flex items-center gap-2 min-w-0 flex-1">
+                        <!-- 🌟 纯文字标识，用颜色区分 -->
+                        <span class="text-[10px] font-bold ${r.user === 'me' ? 'text-blue-500' : 'text-pink-500'} flex-shrink-0">${r.user === 'me' ? '我' : '她'}</span>
+                        
+                        <!-- 备注（占主要空间） -->
+                        <span class="text-[11px] text-gray-700 truncate">${r.note ? escapeHtml(r.note) : '存入一笔'}</span>
+                        
+                        <!-- 日期（极简灰） -->
+                        <span class="text-[9px] text-gray-400 flex-shrink-0">${formatDateLocal(new Date(r.date)).slice(5)}</span>
+                    </div>
+                    
+                    <!-- 金额（加粗黑） -->
+                    <div class="flex-shrink-0 ml-2">
+                        <span class="text-[13px] font-bold text-gray-800 tracking-tight">+¥${toPlainNumber(r.amount)}</span>
+                    </div>
+                </div>
+                `;
+            }).join('')}
+        </div>
+    </div>
+    `;
+}
+            
+            return `
+            <!-- 🌟 情侣微光渐变背景卡片 -->
+            <div class="relative overflow-hidden rounded-[20px] transition-all duration-300 border border-white/60 shadow-sm ${isExpanded ? 'shadow-md ring-1 ring-blue-100/50' : ''}" style="background: linear-gradient(135deg, rgba(239, 246, 255, 0.9) 0%, rgba(255, 255, 255, 0.95) 50%, rgba(253, 242, 248, 0.9) 100%);">
+                
+                <!-- 左上角模糊光晕装饰 -->
+                <div class="absolute -top-10 -left-10 w-24 h-24 bg-blue-300/20 rounded-full filter blur-[30px] pointer-events-none"></div>
+
+                <div class="p-4 cursor-pointer active:opacity-80 relative z-10" onclick="showGoalsPage(${toggleParam})">
+                    <div class="flex justify-between items-center mb-3">
+                        <span class="text-[16px] font-bold text-gray-800 truncate pr-2">${g.name}</span>
+                        <span class="text-[18px] font-black text-blue-600 leading-none">¥${toPlainNumber(g.total)}</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="flex-1 h-2 bg-white/60 rounded-full overflow-hidden border border-gray-100">
+                            <div class="h-full bg-gradient-to-r from-blue-400 to-pink-400 rounded-full transition-all duration-700" style="width: ${percent}%"></div>
+                        </div>
+                        <span class="text-[11px] font-bold ${percent >= 100 ? 'text-green-500' : 'text-gray-500'}">${percent.toFixed(0)}%</span>
+                    </div>
+                    <div class="flex justify-between items-center mt-3">
+                        <span class="text-[11px] text-gray-500">目标: ¥${toPlainNumber(g.target)}</span>
+                        <span class="text-[11px] text-blue-600 font-bold flex items-center">
+                            ${isExpanded ? '收起' : '查看详情'} <i data-lucide="chevron-${isExpanded ? 'up' : 'down'}" class="w-3.5 h-3.5 ml-0.5"></i>
+                        </span>
+                    </div>
+                </div>
+                
+                ${isExpanded ? `
+                <div class="px-4 pb-4 relative z-10">
+                    <div class="flex justify-between items-center py-2 border-t border-gray-200/50 mb-2">
+                        <div class="flex items-baseline gap-1">
+                            <span class="text-[11px] text-gray-500">我存了</span>
+                            <span class="text-[14px] font-bold text-blue-600">¥${toPlainNumber(g.myTotal)}</span>
+                        </div>
+                        <div class="flex items-baseline gap-1">
+                            <span class="text-[11px] text-gray-500">她存了</span>
+                            <span class="text-[14px] font-bold text-pink-500">¥${toPlainNumber(g.partnerTotal)}</span>
+                        </div>
+                    </div>
+                    
+                    ${recordsHtml}
+
+                    <button onclick="event.stopPropagation(); showDepositGoalModal('${g.id}', '${safeName}', ${g.total})" class="w-full py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl text-[13px] font-bold shadow-md shadow-blue-500/20 active:scale-[0.98] transition-transform mt-2">存入一笔</button>
+                    
+                    <!-- 🌟 新增：编辑/删除心愿 -->
+                    <div class="flex gap-2 mt-2">
+                        <button onclick="event.stopPropagation(); showEditGoalModal('${g.id}')" class="flex-1 py-2 bg-white/50 border border-gray-200 text-gray-600 rounded-xl text-[12px] font-medium active:scale-95 transition-transform">编辑目标</button>
+                        <button onclick="event.stopPropagation(); deleteGoal('${g.id}')" class="flex-1 py-2 bg-red-50/50 border border-red-100 text-red-500 rounded-xl text-[12px] font-medium active:scale-95 transition-transform">删除心愿</button>
+                    </div>
+                </div>
+                ` : ''}
+            </div>
+            `;
+        }).join('');
+    }
+
+    const html = `
+        <div class="flex flex-col max-h-[75vh] p-1">
+            <div class="flex justify-between items-center mb-5">
+                <div>
+                    <h3 class="text-[17px] font-bold text-gray-800">我们的心愿罐</h3>
+                    <p class="text-[10px] text-gray-400 mt-1">为了共同的小目标一起努力</p>
+                </div>
+                <button onclick="showCreateGoalModal()" class="px-3.5 py-1.5 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center active:scale-90 transition-transform shadow-sm text-[12px] font-bold">
+                    <i data-lucide="plus" class="w-3.5 h-3.5 mr-1"></i>新建
+                </button>
+            </div>
+            
+            <div class="overflow-y-auto pr-1 pb-2 space-y-3" style="scrollbar-width: none;">
+                ${goalsHtml}
+            </div>
+        </div>
+    `;
+    
+    openCenterModal(html, false, false, () => {
+        const content = document.querySelector('.center-modal-content');
+        content.style.width = '88%';
+        content.style.maxWidth = '360px';
+        content.style.borderRadius = '24px';
+        content.style.padding = '20px';
+    });
+}
+
+// 🌟 弹出记录操作
+function showGoalRecordActions(goalId, recordId, user, amount, note) {
+    if (user !== 'me') {
+        showToast('无法修改对方存入的记录');
+        return;
+    }
+    
+    const html = `
+        <div class="flex flex-col">
+            <div class="text-center mb-4">
+                <p class="text-[15px] font-bold text-gray-800 mb-1">${note ? escapeHtml(note) : '存入一笔'}</p>
+                <p class="text-2xl font-bold text-blue-500 mb-1">¥${toPlainNumber(amount)}</p>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="_closeCenterReturnAction=null; closeCenterModal(); showEditGoalRecordModal('${goalId}', '${recordId}')" class="flex-1 py-2.5 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium">修改</button>
+                <button onclick="_closeCenterReturnAction=null; closeCenterModal(); deleteGoalRecord('${goalId}', '${recordId}')" class="flex-1 py-2.5 rounded-xl bg-red-50 text-red-500 text-sm font-medium">删除</button>
+            </div>
+        </div>
+    `;
+    openCenterModal(html);
+    // 🌟 核心：打开记录面板后，绑定关闭返回动作
+    _closeCenterReturnAction = () => showGoalsPage(goalId);
+}
+
+// 🌟 修改流水记录弹窗
+function showEditGoalRecordModal(goalId, recordId) {
+    const goal = appData.goals.find(g => g.id === goalId);
+    if (!goal) return;
+    const record = goal.records.find(r => r.id === recordId);
+    if (!record) return;
+
+    const html = `
+        <div class="flex flex-col">
+            <h3 class="text-[15px] font-bold text-gray-800 text-center mb-4">修改记录</h3>
+            <div class="space-y-3">
+                <div><label class="text-xs text-gray-500 mb-1 block">金额</label><input type="number" id="edit-goal-record-amount" class="input-field text-lg font-bold" value="${record.amount}"></div>
+                <div><label class="text-xs text-gray-500 mb-1 block">备注</label><input type="text" id="edit-goal-record-note" class="input-field" value="${escapeHtml(record.note || '')}"></div>
+                <div class="flex gap-2 mt-4">
+                    <button onclick="closeCenterModal()" class="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium">取消</button>
+                    <button onclick="saveEditGoalRecord('${goalId}', '${recordId}')" class="flex-1 py-2.5 rounded-xl btn-primary text-sm font-medium">保存</button>
+                </div>
+            </div>
+        </div>
+    `;
+    openCenterModal(html);
+}
+
+// 🌟 保存流水记录修改
+function saveEditGoalRecord(goalId, recordId) {
+    const amount = parseFloat(document.getElementById('edit-goal-record-amount').value);
+    const note = document.getElementById('edit-goal-record-note').value.trim();
+    if (!amount || amount <= 0) { showToast('请输入正确金额'); return; }
+
+    const goal = appData.goals.find(g => g.id === goalId);
+    if (!goal) return;
+    const record = goal.records.find(r => r.id === recordId);
+    if (!record) return;
+
+    record.amount = amount;
+    record.note = note;
+    saveData();
+    closeCenterModal();
+    setTimeout(() => showGoalsPage(goalId), 150);
+    showToast('记录已修改');
+}
+
+// 🌟 删除流水记录
+async function deleteGoalRecord(goalId, recordId) {
+    _closeCenterReturnAction = null; // 清空返回动作，防止二次弹窗
+    const confirmed = await showCustomConfirm('确定要删除这条存入记录吗？');
+    if (!confirmed) return;
+    
+    const goal = appData.goals.find(g => g.id === goalId);
+    if (!goal) return;
+    
+    goal.records = goal.records.filter(r => r.id !== recordId);
+    saveData();
+    logOp('删除心愿存入', goalId);
+    closeCenterModal();
+    setTimeout(() => showGoalsPage(goalId), 150);
+    showToast('已删除记录');
+}
+
+// 🌟 删除整个心愿
+async function deleteGoal(goalId) {
+    const confirmed = await showCustomConfirm('确定要彻底删除这个心愿吗？\n所有的存取记录都将丢失！');
+    if (!confirmed) return;
+
+    appData.goals = appData.goals.filter(g => g.id !== goalId);
+    saveData();
+    logOp('删除心愿', goalId);
+    showToast('心愿已删除');
+    setTimeout(() => showGoalsPage(), 150);
+}
+
+// 🌟 编辑心愿目标弹窗
+function showEditGoalModal(goalId) {
+    const goal = appData.goals.find(g => g.id === goalId);
+    if (!goal) return;
+    
+    const html = `
+        <div class="flex flex-col">
+            <h3 class="text-[15px] font-bold text-gray-800 text-center mb-4">编辑心愿</h3>
+            <div class="space-y-3">
+                <div><label class="text-xs text-gray-500 mb-1 block">心愿名称</label><input type="text" id="edit-goal-name" class="input-field" value="${escapeHtml(goal.name)}"></div>
+                <div><label class="text-xs text-gray-500 mb-1 block">目标金额</label><input type="number" id="edit-goal-target" class="input-field" value="${goal.target}"></div>
+                <div class="flex gap-2 mt-4">
+                    <button onclick="closeCenterModal()" class="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium">取消</button>
+                    <button onclick="saveEditGoal('${goalId}')" class="flex-1 py-2.5 rounded-xl btn-primary text-sm font-medium">保存</button>
+                </div>
+            </div>
+        </div>
+    `;
+    openCenterModal(html);
+}
+
+// 🌟 保存心愿编辑
+function saveEditGoal(goalId) {
+    const newName = document.getElementById('edit-goal-name').value.trim();
+    const newTarget = parseFloat(document.getElementById('edit-goal-target').value);
+    if (!newName) { showToast('名称不能为空'); return; }
+    if (!newTarget || newTarget <= 0) { showToast('目标金额不正确'); return; }
+
+    const goal = appData.goals.find(g => g.id === goalId);
+    if (!goal) return;
+
+    goal.name = newName;
+    goal.target = newTarget;
+    saveData();
+    closeCenterModal();
+    setTimeout(() => showGoalsPage(goalId), 150);
+    showToast('修改成功');
+}
+
+// 🌟 新建心愿弹窗
+function showCreateGoalModal() {
+    const html = `
+        <div class="flex flex-col">
+            <h3 class="text-[15px] font-bold text-gray-800 text-center mb-4">新建心愿</h3>
+            <div class="space-y-3">
+                <div><label class="text-xs text-gray-500 mb-1 block">心愿名称</label><input type="text" id="goal-name" class="input-field" placeholder="如：三亚旅行基金"></div>
+                <div><label class="text-xs text-gray-500 mb-1 block">目标金额 (元)</label><input type="number" id="goal-target" class="input-field" placeholder="5000"></div>
+                <div class="flex gap-2 mt-4">
+                    <button onclick="closeCenterModal()" class="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium">取消</button>
+                    <button onclick="saveNewGoal()" class="flex-1 py-2.5 rounded-xl btn-primary text-sm font-medium">创建</button>
+                </div>
+            </div>
+        </div>
+    `;
+    openCenterModal(html);
+}
+
+// 🌟 保存新建的心愿
+function saveNewGoal() {
+    const name = document.getElementById('goal-name').value.trim();
+    const target = parseFloat(document.getElementById('goal-target').value);
+    if (!name) { showToast('请输入名称'); return; }
+    if (!target || target <= 0) { showToast('请输入正确的目标金额'); return; }
+    
+    const newId = 'goal_' + Date.now().toString();
+    appData.goals.push({ id: newId, name, target, records: [], updatedAt: Date.now() });
+    saveData(); 
+    showToast('创建成功');
+    closeCenterModal(); 
+    setTimeout(() => showGoalsPage(newId), 100); // 重新打开并展开新卡片
+}
+
+// 🌟 存钱弹窗
+function showDepositGoalModal(goalId, goalName, currentTotal) {
+    let localGoal = appData.goals.find(g => g.id === goalId);
+    if (!localGoal) {
+        const remoteGoal = appData.goalsRemote.find(g => g.id === goalId);
+        if (remoteGoal) {
+            appData.goals.push({ id: goalId, name: goalName, target: remoteGoal.target, records: [] });
+            saveData(true);
+        }
+    }
+
+    const html = `
+        <div class="flex flex-col">
+            <h3 class="text-[15px] font-bold text-gray-800 text-center mb-1">存入心愿</h3>
+            <p class="text-xs text-gray-400 text-center mb-4">${goalName} (已攒 ¥${currentTotal})</p>
+            <div class="space-y-3">
+                <div><label class="text-xs text-gray-500 mb-1 block">存入金额</label><input type="number" id="deposit-amount" class="input-field text-lg font-bold" placeholder="输入金额"></div>
+                <div><label class="text-xs text-gray-500 mb-1 block">备注 (可选)</label><input type="text" id="deposit-note" class="input-field" placeholder="如：发工资啦"></div>
+                <div class="flex gap-2 mt-4">
+                    <button onclick="closeCenterModal()" class="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium">取消</button>
+                    <button onclick="confirmDepositGoal('${goalId}')" class="flex-1 py-2.5 rounded-xl btn-primary text-sm font-medium">确认存入</button>
+                </div>
+            </div>
+        </div>
+    `;
+    openCenterModal(html);
+}
+
+// 🌟 处理存入逻辑
+function confirmDepositGoal(goalId) {
+    const amount = parseFloat(document.getElementById('deposit-amount').value);
+    const note = document.getElementById('deposit-note').value.trim();
+    if (!amount || amount <= 0) { showToast('请输入正确金额'); return; }
+    
+    const localGoal = appData.goals.find(g => g.id === goalId);
+    if (!localGoal) return;
+    
+    if (!localGoal.records) localGoal.records = [];
+    localGoal.records.push({ id: Date.now().toString(), amount, note, date: Date.now() });
+    saveData();
+    
+    vibrate(15);
+    playSuccessSound();
+    showToast('存入成功！');
+    
+    closeCenterModal();
+    setTimeout(() => showGoalsPage(goalId), 100); // 刷新并保持展开
+}
+
 async function showStatsModal(type = 'category') {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
@@ -3477,14 +4145,19 @@ const listHtml = statsArray.map((item, index) => {
 }).join('');
 
     const html = `
-        <div class="flex flex-col max-h-[75vh]">
-            <div class="flex justify-between items-center mb-3">
-                <div>
-                    <h3 class="text-[15px] font-bold text-gray-800">${title}</h3>
-                    <p class="text-[11px] text-gray-400 mt-0.5">总支出 <span class="font-bold text-gray-700">¥${toPlainNumber(totalAmount)}</span></p>
-                </div>
-                <button onclick="closeCenterModal()" class="p-1.5 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
+    <div class="flex flex-col max-h-[75vh]">
+        <div class="flex justify-between items-center mb-2">
+            <div>
+                <h3 class="text-[15px] font-bold text-gray-800">数据统计</h3>
+                <p class="text-[11px] text-gray-400 mt-0.5">总支出 <span class="font-bold text-gray-700">¥${toPlainNumber(totalAmount)}</span></p>
             </div>
+        </div>
+        
+        <!-- 🌟 新增 Tabs 切换 -->
+        <div class="flex bg-gray-100/80 p-0.5 rounded-xl mb-4 mt-1">
+            <button onclick="showStatsModal('category')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${type === 'category' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-500 font-medium'}">按分类</button>
+            <button onclick="showStatsModal('payMethod')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${type === 'payMethod' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-500 font-medium'}">按支付</button>
+        </div>
 
             <!-- 进度条 -->
             <div class="w-full h-2.5 rounded-full overflow-hidden flex bg-gray-100">
@@ -3681,7 +4354,16 @@ function showAddBillModal(isRefreshing = false) {
         }
     }
 
-    const typeTabHtml = `
+    
+    
+    // 🌟 核心修复：在渲染前，根据点击次数对分类和支付方式动态排序
+const catStats = appData.settings.categoryStats || {};
+const sortedCategories = [...EXPENSE_CATEGORIES].sort((a, b) => (catStats[b.name] || 0) - (catStats[a.name] || 0));
+
+const payStats = appData.settings.payMethodStats || {};
+const sortedPayMethods = [...PAY_METHODS].sort((a, b) => (payStats[b] || 0) - (payStats[a] || 0));
+
+const typeTabHtml = `
     <div class="flex bg-gray-100/70 p-0.5 rounded-xl mb-3">
         <button id="type-btn-expense" onclick="switchRecordType('expense')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${billDraft.type === 'expense' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-400 font-medium'}">支出</button>
         <button id="type-btn-daily" onclick="switchRecordType('daily')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${billDraft.type === 'daily' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-400 font-medium'}">日结</button>
@@ -3744,7 +4426,7 @@ const buildCapsuleList = (items, selectedVal, type, showMore = true) => {
                 
 <div id="expense-category-wrap" style="display: ${billDraft.type === 'expense' ? 'block' : 'none'};" class="mt-2">
     <p class="text-[11px] text-gray-500 mb-1">支出分类</p>
-    ${buildCapsuleList(EXPENSE_CATEGORIES, billDraft.category, 'category')}
+    ${buildCapsuleList(sortedCategories, billDraft.category, 'category')}
     
     <div id="sub-category-wrap" style="display: ${SUBCATEGORY_MAP[billDraft.category] ? 'block' : 'none'};">
         <p class="text-[11px] text-gray-500 mb-1 mt-1.5">细分标签 <span class="text-gray-400 font-normal">(可选)</span></p>
@@ -3753,12 +4435,12 @@ const buildCapsuleList = (items, selectedVal, type, showMore = true) => {
     </div>
 
     <p class="text-[11px] text-gray-500 mb-1 mt-2">支付方式 <span class="text-gray-400 font-normal">(可选)</span></p>
-    ${buildCapsuleList(PAY_METHODS, billDraft.payMethod, 'pay')}
+    ${buildCapsuleList(sortedPayMethods, billDraft.payMethod, 'pay')}
 </div>
 
 <div id="income-account-wrap" style="display: ${billDraft.type !== 'expense' ? 'block' : 'none'};" class="mt-3">
     <p class="text-[11px] text-gray-500 mb-1.5">入账账户 <span class="text-gray-400 font-normal">(可选)</span></p>
-    ${buildCapsuleList(['微信', '支付宝', '银行卡', '现金'], billDraft.payMethod, 'pay', false)}
+    ${buildCapsuleList(['微信', '支付宝', '银行卡', '现金'].sort((a, b) => (payStats[b] || 0) - (payStats[a] || 0)), billDraft.payMethod, 'pay', false)}
 </div>
 
                 <input type="text" id="bill-note" class="finance-input mt-2" placeholder="添加备注..." value="${noteVal}" style="font-size: 12px; font-weight: normal; text-align: left; padding: 6px 8px;">
@@ -3936,6 +4618,55 @@ async function deleteBillRecord(id, isIncome) {
 }
 
 // ==================== 设置页 ====================
+// 🌟 展开共享控制台（极简无按钮版）
+function showShareSettingsModal() {
+    const share = appData.settings.shareModules || { menstrual: true };
+    
+    const html = `
+        <div class="flex flex-col px-1 pb-1">
+            <h3 class="text-[16px] font-bold text-gray-800 text-center mb-1">共享空间设置</h3>
+            <p class="text-[11px] text-gray-400 text-center mb-5">控制对方能查看你的哪些数据，修改即生效</p>
+            
+            <div class="space-y-3">
+                <!-- 经期开关 -->
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-pink-100 flex items-center justify-center text-pink-500"><i data-lucide="heart" class="w-4 h-4"></i></div>
+                        <span class="text-[14px] font-medium text-gray-700">共享经期状态</span>
+                    </div>
+                    <div class="toggle ${share.menstrual ? 'active' : ''}" onclick="toggleShareModule('menstrual')"></div>
+                </div>
+
+                <!-- 心愿开关 -->
+<div class="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+    <div class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-500"><i data-lucide="target" class="w-4 h-4"></i></div>
+        <span class="text-[14px] font-medium text-gray-700">共享心愿储蓄罐</span>
+    </div>
+    <div class="toggle ${share.goals !== false ? 'active' : ''}" onclick="toggleShareModule('goals')"></div>
+</div>
+            </div>
+        </div>
+    `;
+    openCenterModal(html);
+}
+
+// 🌟 切换开关并同步到云端
+function toggleShareModule(moduleKey) {
+    if (!appData.settings.shareModules) appData.settings.shareModules = { menstrual: true };
+    
+    // 翻转状态
+    appData.settings.shareModules[moduleKey] = !appData.settings.shareModules[moduleKey];
+    
+    // 写入本地并触发云同步（这步非常重要，保证换设备能拉下来）
+    saveData(); 
+    logOp(appData.settings.shareModules[moduleKey] ? '开启共享' : '关闭共享', moduleKey);
+    
+    // 关掉旧弹窗，重新打开新弹窗以实现“原地无感刷新”
+    closeCenterModal();
+    setTimeout(() => showShareSettingsModal(), 100); 
+}
+
 function renderMeView() {
     const logCount = getOpLogs().length;
     const html = `
@@ -3968,10 +4699,14 @@ function renderMeView() {
                     <div class="flex items-center gap-2.5"><i data-lucide="wand-2" class="w-4 h-4 text-purple-500"></i><span class="text-sm font-medium">一键填充</span></div>
                     <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-gray-400"></i>
                 </div>
-                <div class="setting-item" onclick="showAbout()">
-                    <div class="flex items-center gap-2.5"><i data-lucide="info" class="w-4 h-4 text-blue-500"></i><span class="text-sm font-medium">关于</span></div>
-                    <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-gray-400"></i>
-                </div>
+                <!-- 🌟 共享控制台入口 -->
+<div class="setting-item" onclick="showShareSettingsModal()" style="margin-bottom: 0; border-radius: 0; border-top: 1px solid rgba(0,0,0,0.05);">
+    <div class="flex items-center gap-2.5">
+        <i data-lucide="share-2" class="w-4 h-4 text-pink-500"></i>
+        <span class="text-sm font-medium">共享空间设置</span>
+    </div>
+    <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-gray-400"></i>
+</div>
             </div>
 
             <div class="pt-2">
@@ -4156,6 +4891,70 @@ function mergeArrayById(localArray, remoteArray, deletedIdSet) {
     return Array.from(map.values()).map(({ _source, ...rest }) => rest);
 }
 
+// 🌟 深层合并心愿（支持双方同时存钱、支持删记录）
+function mergeGoals(localGoals, remoteGoals, deletedIdSet) {
+    const mergedMap = new Map();
+    
+    // 1. 放入本地的 goals
+    (localGoals || []).forEach(g => {
+        if (deletedIdSet.has(g.id)) return; // 本地删除了这个心愿
+        mergedMap.set(g.id, {
+            ...g,
+            records: (g.records || []).filter(r => !deletedIdSet.has(r.id)), // 过滤掉本地删除的流水
+            _localUpdatedAt: g.updatedAt || 0,
+            _remoteUpdatedAt: 0
+        });
+    });
+    
+    // 2. 合并远端的 goals
+    (remoteGoals || []).forEach(rg => {
+        if (deletedIdSet.has(rg.id)) return; // 本地删除了，就不要远端的
+        
+        if (mergedMap.has(rg.id)) {
+            const existing = mergedMap.get(rg.id);
+            existing._remoteUpdatedAt = rg.updatedAt || 0;
+            
+            // 🌟 核心：合并两个人的存钱流水
+            const recordMap = new Map();
+            existing.records.forEach(r => recordMap.set(r.id, r));
+            
+            (rg.records || []).forEach(rr => {
+                if (deletedIdSet.has(rr.id)) return;
+                if (!recordMap.has(rr.id)) {
+                    recordMap.set(rr.id, rr); // 对方新存的
+                } else {
+                    // 都有的话比时间（防覆盖）
+                    const lr = recordMap.get(rr.id);
+                    const lrTime = lr.updatedAt || lr.date || 0;
+                    const rrTime = rr.updatedAt || rr.date || 0;
+                    if (rrTime > lrTime) recordMap.set(rr.id, rr);
+                }
+            });
+            
+            existing.records = Array.from(recordMap.values());
+            
+            // 如果对方的名称或目标改了，以最新的为准
+            if (existing._remoteUpdatedAt > existing._localUpdatedAt) {
+                existing.name = rg.name;
+                existing.target = rg.target;
+                existing.updatedAt = rg.updatedAt;
+            }
+        } else {
+            // 只有远端有（对方新建的）
+            mergedMap.set(rg.id, {
+                ...rg,
+                records: (rg.records || []).filter(r => !deletedIdSet.has(r.id))
+            });
+        }
+    });
+    
+    return Array.from(mergedMap.values()).map(g => {
+        delete g._localUpdatedAt;
+        delete g._remoteUpdatedAt;
+        return g;
+    });
+}
+
 function mergeAppData(localData, remoteData, deletedIdSet) {
     if (!remoteData) return { merged: localData };
     if (!remoteData.menstrual) remoteData.menstrual = { records: [], loveDates: [] };
@@ -4217,11 +5016,15 @@ function mergeAppData(localData, remoteData, deletedIdSet) {
         mergedMenstrualRecords = mergeArrayById(localData.menstrual.records || [], remoteData.menstrual.records || [], deletedIdSet);
         mergedLoveDates = mergeArrayById(localData.menstrual.loveDates || [], remoteData.menstrual.loveDates || [], deletedIdSet);
     }
-    const merged = {
-        tasks: mergedTasks, incomes: mergedIncomes, expenses: mergedExpenses, notes: mergedNotes,
-        menstrual: { records: mergedMenstrualRecords, loveDates: mergedLoveDates },
-        settings: { ...localData.settings, lastSyncTime: Date.now(), lastSyncType: 'merge' }
-    };
+// 🌟 使用全新深层合并逻辑
+const mergedGoals = mergeGoals(localData.goals || [], remoteData.goals || [], deletedIdSet);
+
+const merged = {
+    tasks: mergedTasks, incomes: mergedIncomes, expenses: mergedExpenses, notes: mergedNotes,
+    menstrual: { records: mergedMenstrualRecords, loveDates: mergedLoveDates },
+    goals: mergedGoals,
+    settings: { ...localData.settings, lastSyncTime: Date.now(), lastSyncType: 'merge' }
+};
     return { merged };
 }
 
@@ -4267,7 +5070,7 @@ async function smartSync(showResult = true, isAuto = false) {
     _syncInProgress = true;
     showSyncProgress(true);
     let syncSuccess = false;
-    const SYNCABLE_FIELDS = ['tasks', 'incomes', 'expenses', 'notes', 'menstrual'];
+    const SYNCABLE_FIELDS = ['tasks', 'incomes', 'expenses', 'notes', 'menstrual', 'goals'];
     // 注：settings 是本地专属（含 token），不参与同步；menstrualRemote 仅展示，不参与同步
 
     const globalIndicator = document.getElementById('global-sync-indicator');
@@ -4331,7 +5134,15 @@ let syncLocalData = JSON.parse(JSON.stringify(appData));
                     compareArrays(previousData.incomes || [], syncLocalData.incomes || []);
                     compareArrays(previousData.expenses || [], syncLocalData.expenses || []);
                     compareArrays(previousData.notes || [], syncLocalData.notes || []);
-                    if (!syncMenstrualFrom) {
+
+// 🌟 核心补漏：对比心愿和心愿里的记录
+compareArrays(previousData.goals || [], syncLocalData.goals || []);
+previousData.goals?.forEach(pg => {
+    const cg = syncLocalData.goals?.find(g => g.id === pg.id);
+    if (cg) compareArrays(pg.records || [], cg.records || []);
+});
+
+if (!syncMenstrualFrom) {
                         compareArrays(previousData.menstrual?.records || [], syncLocalData.menstrual?.records || []);
                         compareArrays(previousData.menstrual?.loveDates || [], syncLocalData.menstrual?.loveDates || []);
                     }
@@ -5006,8 +5817,10 @@ async function executeSelectiveClear() {
     if (clearMenstrual) {
         const count = appData.menstrual.records.length + appData.menstrual.loveDates.length;
         appData.menstrual = { records: [], loveDates: [] };
-        appData.menstrualRemote = { records: [], loveDates: [] };
-        appData.settings.syncMenstrualFrom = '';
+appData.menstrualRemote = { records: [], loveDates: [] };
+appData.goals = [];
+appData.goalsRemote = [];
+appData.settings.syncMenstrualFrom = '';
         
         details.push(`经期 ${count} 条`);
     }
@@ -5039,7 +5852,9 @@ appData = {
     tasks: [], incomes: [], expenses: [], notes: [],
     menstrual: { records: [], loveDates: [] },
     menstrualRemote: { records: [], loveDates: [] },
-    settings: { autoSync: false, giteeToken: '', giteeRepo: '', giteeFilename: '', syncMenstrualFrom: '', cloudConfigValid: false, lastSyncTime: null, lastSyncType: null }
+    goals: [],
+    goalsRemote: [],
+    settings: { autoSync: false, giteeToken: '', giteeRepo: '', giteeFilename: '', syncMenstrualFrom: '', shareModules: { menstrual: true }, cloudConfigValid: false, lastSyncTime: null, lastSyncType: null }
 };
 lastSyncData = null;
 localStorage.removeItem('life_manager_last_sync_data_' + _oldAccountKey);
