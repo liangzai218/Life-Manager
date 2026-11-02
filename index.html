@@ -397,12 +397,13 @@ async function fetchWithTimeout(resource, options = {}) {
         const LAST_SYNC_ACCOUNT_KEY = 'life_manager_last_sync_account';
         const OP_LOG_MAX = 200;
 
-            let appData = {
+                        let appData = {
 tasks: [], incomes: [], expenses: [], notes: [],
 menstrual: { records: [], loveDates: [] },
 menstrualRemote: { records: [], loveDates: [] },
 goals: [],          // 自己的心愿单
 goalsRemote: [],    // 拉取到的对方心愿单（隔离存放）
+installments: [],   // 👈 新增这一行：分期还款台账
         settings: { autoSync: true, giteeToken: '', giteeRepo: '', giteeFilename: '', syncMenstrualFrom: '', shareModules: { menstrual: true }, cloudConfigValid: false, lastSyncTime: null, lastSyncType: null }
     };
         let lastSyncData = null;
@@ -510,6 +511,7 @@ function loadData() {
            if (!appData.settings.shareModules) appData.settings.shareModules = { menstrual: true };
 if (!appData.goals) appData.goals = [];
 if (!appData.goalsRemote) appData.goalsRemote = [];
+if (!appData.installments) appData.installments = [];   // 👈 新增这一行
              // 旧 backup key 迁移到 menstrualRemote，然后删除
             const legacyBackup = localStorage.getItem(LOCAL_MENSTRUAL_BACKUP_KEY);
             if (legacyBackup) {
@@ -616,7 +618,44 @@ function normalizeFilename(name) {
             return { id: String(l.id || 'ld_' + Date.now() + '_' + Math.random().toString(36).slice(2,8)), date, updatedAt: Number(l.updatedAt) || Date.now() };
         }
 
-        
+        function sanitizeInstallment(item) {
+    if (!item || typeof item !== 'object') return null;
+    
+    const validRateTypes = ['total_amount', 'monthly', 'daily', 'apr'];
+    const validRepaymentTypes = ['equal_installment', 'equal_principal', 'interest_first'];
+
+    const principal = Number(item.principal);
+    const periods = Number(item.periods);
+    const rate = Number(item.rate);
+    const startDate = String(item.startDate || '').trim();
+    const borrowDate = String(item.borrowDate || '').trim() || startDate;
+    const paidPeriodsHistory = Number(item.paidPeriodsHistory) || 0; // 🌟 新增：已还期数
+
+    if (!isFinite(principal) || principal <= 0) return null;
+    if (!isFinite(periods) || periods < 1 || periods > 120) return null;
+    if (!isFinite(rate) || rate < 0) return null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(borrowDate)) return null;
+
+    return {
+        id: String(item.id || 'inst_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)),
+        name: String(item.name || '').trim() || '未命名分期',
+        principal, periods, rate,
+        rateType: validRateTypes.includes(item.rateType) ? item.rateType : 'monthly',
+        repaymentType: validRepaymentTypes.includes(item.repaymentType) ? item.repaymentType : 'equal_installment',
+        actualDaysFirstMonth: item.actualDaysFirstMonth === true,
+        prepayWaiveFee: item.prepayWaiveFee !== false,
+        prepayPenaltyRate: isFinite(Number(item.prepayPenaltyRate)) ? Math.max(0, Number(item.prepayPenaltyRate)) : 0,
+        paidPeriodsHistory: Math.max(0, Math.min(paidPeriodsHistory, periods)), // 🌟 限制不能超过总期数
+        borrowDate, startDate,
+        prepaid: item.prepaid === true,
+        prepaidDate: item.prepaidDate && /^\d{4}-\d{2}-\d{2}$/.test(item.prepaidDate) ? item.prepaidDate : null,
+        note: String(item.note || ''),
+        createdAt: Number(item.createdAt) || Date.now(),
+        updatedAt: Number(item.updatedAt) || Date.now()
+    };
+}
+
 
 // 🌟 L2 引擎：判断我是否允许对方看经期
 function canIShareMenstrual() {
@@ -1983,11 +2022,61 @@ function updateNote(noteId) {
     showToast('修改成功'); closeCenterModal(); switchTab('note');
 }
 
-// ==================== L2 心愿单引擎 ====================
+
 // 计算单条流水的总和
+// 🌟 L2 通用聚合引擎：累加记录数组的金额
+// 输入：records 数组，field 默认 'amount'
+// 输出：求和结果（非法值 / 空数组 → 0）
+// 说明：非数值项跳过，不抛错、不污染结果
+function sumRecordsAmount(records, field = 'amount') {
+    if (!Array.isArray(records) || records.length === 0) return 0;
+    let total = 0;
+    for (let i = 0; i < records.length; i++) {
+        const v = Number(records[i] && records[i][field]);
+        if (isFinite(v)) total += v;
+    }
+    return total;
+}
+
+// 旧的 sumGoalRecords 保留为薄壳，内部委托给通用引擎
+// 好处：老调用点零改动，逻辑只有一份
 function sumGoalRecords(records) {
     if (!records || !Array.isArray(records)) return 0;
     return records.reduce((sum, r) => sum + Number(r.amount), 0);
+}
+
+
+// 🌟 L2 通用聚合引擎：给定记录数组，返回最早/最晚日期 + 跨度天数
+// 输入：records（已按业务筛选好的数组），field 默认 'date'
+// 输出：{ earliest, latest, spanDays } | null
+//    spanDays = 含首尾的自然日数（11/03 ~ 11/20 = 18 天；同一天 = 1 天）
+function getRecordsDateRange(records, field = 'date') {
+    if (!Array.isArray(records) || records.length === 0) return null;
+    let earliest = null;
+    let latest = null;
+    for (let i = 0; i < records.length; i++) {
+        const d = records[i] && records[i][field];
+        if (!d || typeof d !== 'string') continue;
+        if (earliest === null || d < earliest) earliest = d;
+        if (latest === null || d > latest) latest = d;
+    }
+    if (earliest === null) return null;
+
+    // 🌟 跨度天数：用 Date.UTC 解析 YYYY-MM-DD，避开夏令时/时区跨日风险
+    const [ey, em, ed] = earliest.split('-').map(Number);
+    const [ly, lm, ld] = latest.split('-').map(Number);
+    const eUtc = Date.UTC(ey, em - 1, ed);
+    const lUtc = Date.UTC(ly, lm - 1, ld);
+    const spanDays = Math.round((lUtc - eUtc) / 86400000) + 1;
+
+    return { earliest, latest, spanDays };
+}
+
+// 🌟 L2 聚合引擎：计算日均值
+// 分母为 0 / 非法值 → 返回 0（调用方决定是否显示）
+function calcDailyAverage(totalAmount, spanDays) {
+    if (!isFinite(totalAmount) || !isFinite(spanDays) || spanDays <= 0) return 0;
+    return totalAmount / spanDays;
 }
 
 // 获取所有合并后的心愿列表（合并本地和远程）
@@ -2803,8 +2892,7 @@ predictBadge = daysLeft === 0 ? '就是今天' : `还有 ${daysLeft} 天`;
     const confidenceMap = { '高': '可靠性高', '中': '可靠性一般', '低': '数据较少，仅供参考' };
     confidenceText = confidenceMap[confidence] || confidenceMap['中'];
     
-    // 🌟 将周期天数合并到 sourceText 里
-    if (pred.cycleLength) sourceText = `周期 ${pred.cycleLength} 天 · ${sourceText}`;
+    
 } else {
     predictMainText = '数据不足，无法预测';
     confidenceText = '请记录至少2次完整的经期';
@@ -3250,7 +3338,7 @@ function updateBillDate(val) {
     if (display) display.textContent = val.replace(/-/g, '/');
 }
 // 账单页筛选状态（不属于弹窗草稿）
-let billFilter = { category: null, payMethod: null };
+let billFilter = { category: null, payMethod: null, recordType: null };
 let currentBillWeek = 1;
 
 // 记账弹窗草稿：null 表示未打开
@@ -3441,30 +3529,42 @@ function renderBillView() {
     
     const recordsInWeek = {};
 
-// 🌟 核心：如果有筛选，就不看周，直接扫描全月
-appData.incomes.filter(i => i.date.startsWith(monthStr)).forEach(i => {
-    const d = parseInt(i.date.split('-')[2]);
-    const inRange = (billFilter.category || billFilter.payMethod) ? true : (d >= startDay && d <= endDay);
-    const isMatchCat = billFilter.category ? (i.category === billFilter.category) : true;
-    const isMatchPay = billFilter.payMethod ? (i.payMethod === billFilter.payMethod) : true;
-    
-    if (inRange && isMatchCat && isMatchPay) {
-        if (!recordsInWeek[i.date]) recordsInWeek[i.date] = { in: [], out: [] };
-        recordsInWeek[i.date].in.push(i);
-    }
-});
+    // 🌟 三态筛选：category / payMethod / recordType，任一有值 → 全月扫描，忽略周范围
+    const hasFilter = !!(billFilter.category || billFilter.payMethod || billFilter.recordType);
 
-appData.expenses.filter(e => e.date.startsWith(monthStr)).forEach(e => {
-    const d = parseInt(e.date.split('-')[2]);
-    const inRange = (billFilter.category || billFilter.payMethod) ? true : (d >= startDay && d <= endDay);
-    const isMatchCat = billFilter.category ? (e.category === billFilter.category) : true;
-    const isMatchPay = billFilter.payMethod ? (e.payMethod === billFilter.payMethod) : true;
-    
-    if (inRange && isMatchCat && isMatchPay) {
-        if (!recordsInWeek[e.date]) recordsInWeek[e.date] = { in: [], out: [] };
-        recordsInWeek[e.date].out.push(e);
-    }
-});
+    // ---- 收入段：支持 recordType 筛选 ----
+    appData.incomes.filter(i => i.date.startsWith(monthStr)).forEach(i => {
+        const d = parseInt(i.date.split('-')[2]);
+        const inRange = hasFilter ? true : (d >= startDay && d <= endDay);
+        const isMatchCat = billFilter.category ? (i.category === billFilter.category) : true;
+        const isMatchPay = billFilter.payMethod ? (i.payMethod === billFilter.payMethod) : true;
+        let isMatchType = true;
+        if (billFilter.recordType) {
+            if (billFilter.recordType === '__other__') {
+                isMatchType = !['monthly', 'work', 'daily'].includes(i.recordType);
+            } else {
+                isMatchType = i.recordType === billFilter.recordType;
+            }
+        }
+        if (inRange && isMatchCat && isMatchPay && isMatchType) {
+            if (!recordsInWeek[i.date]) recordsInWeek[i.date] = { in: [], out: [] };
+            recordsInWeek[i.date].in.push(i);
+        }
+    });
+
+    // ---- 支出段：recordType 有值时支出全隐藏（收入筛选模式下不混支） ----
+    appData.expenses.filter(e => e.date.startsWith(monthStr)).forEach(e => {
+        if (billFilter.recordType) return;
+        const d = parseInt(e.date.split('-')[2]);
+        const inRange = hasFilter ? true : (d >= startDay && d <= endDay);
+        const isMatchCat = billFilter.category ? (e.category === billFilter.category) : true;
+        const isMatchPay = billFilter.payMethod ? (e.payMethod === billFilter.payMethod) : true;
+        
+        if (inRange && isMatchCat && isMatchPay) {
+            if (!recordsInWeek[e.date]) recordsInWeek[e.date] = { in: [], out: [] };
+            recordsInWeek[e.date].out.push(e);
+        }
+    });
 
     const sortedDates = Object.keys(recordsInWeek).sort((a,b) => b.localeCompare(a)); 
 
@@ -3480,13 +3580,13 @@ appData.expenses.filter(e => e.date.startsWith(monthStr)).forEach(e => {
             const weekStr = ['周日','周一','周二','周三','周四','周五','周六'][dateObj.getDay()];
             
             const allRecords = [...data.in.map(i=>({...i, isIncome:true})), ...data.out.map(e=>({...e, isIncome:false}))].sort((a, b) => {
-    const timeA = a.updatedAt || Number(a.id) || 0;
-    const timeB = b.updatedAt || Number(b.id) || 0;
-    return timeB - timeA;
-});
+                const timeA = a.updatedAt || Number(a.id) || 0;
+                const timeB = b.updatedAt || Number(b.id) || 0;
+                return timeB - timeA;
+            });
             
-const isToday = dateStr === formatDateLocal(new Date());   // 👈 新增这一行
-return `
+            const isToday = dateStr === formatDateLocal(new Date());
+            return `
     <!-- 🌟 按天分组的无边框包裹层 -->
     <div class="mb-5">
         
@@ -3571,6 +3671,15 @@ return `
         }).join('');
     }
 
+    // 🌟 筛选提示标签：三态归一化（含收入 recordType 的中文映射）
+    const _filterLabel = billFilter.category 
+        || billFilter.payMethod 
+        || (billFilter.recordType === 'monthly' ? '月薪'
+          : billFilter.recordType === 'work'  ? '工时'
+          : billFilter.recordType === 'daily' ? '日结'
+          : billFilter.recordType === '__other__' ? '其他收入'
+          : null);
+
     return `
         <div class="space-y-4 mt-2 pb-6">
             <!-- 🌟 拆分为两张独立卡片 -->
@@ -3599,45 +3708,35 @@ return `
 <button onclick="changeBillMonth(1)" class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-white/80 bg-white/5 hover:bg-white/10 rounded-full active:scale-75 transition-all z-20"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
         </div>
 
-                <!-- 卡片2：融合收支与统计的白色大卡片（底部收窄版） -->
-<div class="bg-white rounded-[16px] p-2 pb-1.5 mt-2 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.04)] border border-gray-100/50">
-    
-    <!-- 上半部：总收入/总支出 -->
-    <div class="flex justify-between items-center mb-1.5 pt-0.5">
-        <div class="flex-1 text-center">
-            <p class="text-[11px] text-gray-400 mb-0.5">总收入</p>
-            <p class="text-[14px] font-bold text-gray-700">+¥${toPlainNumber(totalIn)}</p>
-        </div>
-        <div class="flex-1 text-center">
-            <p class="text-[11px] text-gray-400 mb-0.5">总支出</p>
-            <p class="text-[14px] font-bold text-red-500">-¥${toPlainNumber(totalOut)}</p>
-        </div>
-    </div>
-    
-    <!-- 下半部：统计按钮 -->
-    <div class="px-0.5 flex gap-2">
-        <div onclick="showStatsModal('category')" class="flex-1 bg-gradient-to-b from-blue-50 to-blue-100/80 rounded-xl py-1.5 text-center cursor-pointer active:scale-95 transition-all shadow-sm border border-blue-200/60">
-            <span class="text-xs font-bold text-blue-600 flex items-center justify-center gap-1.5">
+        <!-- 卡片2：统计按钮卡片 -->
+<div class="bg-white rounded-[16px] p-2 mt-2 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.04)] border border-gray-100/50">
+    <div class="grid grid-cols-3 gap-1.5"> <!-- 🌟 改为 grid-cols-3 -->
+        <div onclick="showStatsModal('category')" class="bg-gradient-to-b from-blue-50 to-blue-100/80 rounded-xl py-1.5 text-center cursor-pointer active:scale-95 transition-all shadow-sm border border-blue-200/60">
+            <span class="text-[11px] font-bold text-blue-600 flex items-center justify-center gap-1">
                 <i data-lucide="bar-chart-3" class="w-3.5 h-3.5"></i> 数据统计
             </span>
         </div>
-        <div onclick="showGoalsPage()" class="flex-1 bg-gradient-to-b from-purple-50 to-purple-100/80 rounded-xl py-1.5 text-center cursor-pointer active:scale-95 transition-all shadow-sm border border-purple-200/60">
-            <span class="text-xs font-bold text-purple-600 flex items-center justify-center gap-1.5">
+        <div onclick="showGoalsPage()" class="bg-gradient-to-b from-purple-50 to-purple-100/80 rounded-xl py-1.5 text-center cursor-pointer active:scale-95 transition-all shadow-sm border border-purple-200/60">
+            <span class="text-[11px] font-bold text-purple-600 flex items-center justify-center gap-1">
                 <i data-lucide="target" class="w-3.5 h-3.5"></i> 心愿储蓄
             </span>
         </div>
+        <div onclick="switchTab('installments')" class="bg-gradient-to-b from-orange-50 to-orange-100/80 rounded-xl py-1.5 text-center cursor-pointer active:scale-95 transition-all shadow-sm border border-orange-200/60">
+            <span class="text-[11px] font-bold text-orange-600 flex items-center justify-center gap-1">
+                <i data-lucide="credit-card" class="w-3.5 h-3.5"></i> 分期还款
+            </span>
+        </div>
     </div>
-
 </div>
 
 </div>
            
-<!-- 🌟 筛选状态提示栏 -->
-${(billFilter.category || billFilter.payMethod) ? `
+<!-- 🌟 筛选状态提示栏（三态统一） -->
+${_filterLabel ? `
 <div class="flex justify-between items-center bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 animate-fade-in" style="margin-top: -8px; margin-bottom: -8px;">
     <div class="flex items-center gap-2 text-blue-600 text-xs font-medium">
         <i data-lucide="filter" class="w-3.5 h-3.5"></i>
-        <span>正在查看全月「${billFilter.category ? billFilter.category : billFilter.payMethod}」</span>
+        <span>正在查看全月「${_filterLabel}」</span>
     </div>
     <button onclick="clearBillFilter()" class="text-gray-400 hover:text-red-500 p-1 bg-white rounded-md shadow-sm">
         <i data-lucide="x" class="w-3.5 h-3.5"></i>
@@ -3645,7 +3744,7 @@ ${(billFilter.category || billFilter.payMethod) ? `
 </div>
 ` : ''}
 
-${!(billFilter.category || billFilter.payMethod) ? `
+${!_filterLabel ? `
 <div class="flex bg-gray-200/60 p-0.5 rounded-xl" style="margin-top: -8px; margin-bottom: -8px;">
     ${[1,2,3,4,5].map(w => {
         if (w === 5 && daysInMonth <= 28) return ''; 
@@ -4019,22 +4118,49 @@ async function showStatsModal(type = 'category') {
     const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
 
     // ==========================================
-    // 底层数据计算（保持原有逻辑，绝不修改）
+    // L2 引擎：数据源 + 聚合（唯一计算出口）
     // ==========================================
+    const monthExpenses = appData.expenses.filter(e => e.date.startsWith(monthStr));
+    const monthIncomes  = appData.incomes.filter(i => i.date.startsWith(monthStr));
+    const totalAmount = sumRecordsAmount(monthExpenses);
+    const totalIncome = sumRecordsAmount(monthIncomes);
+    const dateRange = getRecordsDateRange(monthExpenses);
+
+    // tab 归一化：income 是新增第三态
+    const activeTab = (type === 'payMethod' || type === 'income') ? type : 'category';
+    const isIncomeView = activeTab === 'income';
+
+    // statsMap 构建：支出 / 收入两条分支，绝不混淆
     const statsMap = {};
-    appData.expenses.filter(e => e.date.startsWith(monthStr)).forEach(e => {
-        let key = '';
-        if (type === 'category') {
-            key = e.category || '其他';
-        } else {
-            key = e.payMethod || '未记录方式';
-        }
-        statsMap[key] = (statsMap[key] || 0) + e.amount;
-    });
+    if (isIncomeView) {
+        monthIncomes.forEach(i => {
+            const key = i.recordType === 'monthly' ? '月薪'
+                      : i.recordType === 'work'    ? '工时'
+                      : i.recordType === 'daily'   ? '日结'
+                      : '其他';
+            statsMap[key] = (statsMap[key] || 0) + i.amount;
+        });
+    } else {
+        monthExpenses.forEach(e => {
+            const key = activeTab === 'category' ? (e.category || '其他') : (e.payMethod || '未记录方式');
+            statsMap[key] = (statsMap[key] || 0) + e.amount;
+        });
+    }
+
+    // 修复：收支都为空才 return
+    if (Object.keys(statsMap).length === 0 && totalIncome === 0) {
+        showToast('本月暂无收支记录');
+        return;
+    }
 
     let statsArray = Object.keys(statsMap).map(key => {
         let icon = '⭕';
-        if (type === 'category') {
+        if (isIncomeView) {
+            if (key === '月薪') icon = '💼';
+            else if (key === '工时') icon = '🔧';
+            else if (key === '日结') icon = '🦺';
+            else icon = '💰';
+        } else if (activeTab === 'category') {
             icon = EXPENSE_CATEGORIES.find(c => c.name === key)?.icon || '⭕';
         } else {
             if (key === '微信') icon = '💬';
@@ -4045,42 +4171,26 @@ async function showStatsModal(type = 'category') {
             else if (key === '未记录方式') icon = '❓';
         }
         return { name: key, amount: statsMap[key], icon };
-    }).sort((a, b) => b.amount - a.amount); // 这里依然保证降序排列
+    }).sort((a, b) => b.amount - a.amount);
 
-    if (statsArray.length === 0) {
-        showToast('本月暂无支出记录');
-        return;
-    }
-
-    const totalAmount = statsArray.reduce((sum, item) => sum + item.amount, 0);
-    const title = type === 'category' ? '本月分类统计' : '本月支付方式';
-
-    // ==========================================
-    // UI 逻辑与样式重构（Top 4 + 杂项）
-    // ==========================================
-
-    // 1. 高对比度色板 + 分类专属色映射字典（确保颜色认知固定）
+    // 颜色字典：支出彩色 + 收入绿色系
     const colorMap = {
-        '餐饮': '#3B82F6', // 蓝
-        '购物': '#10B981', // 绿
-        '交通': '#F59E0B', // 橙
-        '娱乐': '#8B5CF6', // 紫
-        '居住': '#EF4444', // 红
-        '医疗': '#F97316', // 橘
-        '日用': '#06B6D4', // 青
-        '人情': '#EC4899', // 粉
-        '微信': '#10B981', '支付宝': '#3B82F6', '花呗': '#38BDF8', 
+        '餐饮': '#3B82F6', '购物': '#10B981', '交通': '#F59E0B', '娱乐': '#8B5CF6',
+        '居住': '#EF4444', '医疗': '#F97316', '日用': '#06B6D4', '人情': '#EC4899',
+        '微信': '#10B981', '支付宝': '#3B82F6', '花呗': '#38BDF8',
         '信用卡': '#EAB308', '现金': '#22C55E', '未记录方式': '#9CA3AF'
     };
-    // 如果某个分类不在字典里，给个默认的高对比色轮换
+    const incomeColorMap = { '月薪': '#10B981', '工时': '#34D399', '日结': '#6EE7B7', '其他': '#9CA3AF' };
     const fallbackColors = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444'];
-    const getColor = (name, index) => colorMap[name] || fallbackColors[index % fallbackColors.length];
-    const GRAY_COLOR = '#9CA3AF'; // 杂项统一灰色
+    const GRAY_COLOR = '#9CA3AF';
+    const getColor = (name, index) => {
+        if (isIncomeView) return incomeColorMap[name] || GRAY_COLOR;
+        return colorMap[name] || fallbackColors[index % fallbackColors.length];
+    };
 
-    // 2. 分离前 4 名和 杂项
+    // Top 4 + 杂项
     let top4Array = [];
     let otherItem = null;
-
     if (statsArray.length > 4) {
         top4Array = statsArray.slice(0, 4);
         const restArray = statsArray.slice(4);
@@ -4089,108 +4199,139 @@ async function showStatsModal(type = 'category') {
     } else {
         top4Array = statsArray;
     }
-
-    // 用于顶部进度条渲染的数组（最多5项）
     const chartArray = otherItem ? [...top4Array, otherItem] : top4Array;
 
-    // 3. 构建进度条与百分比
-    const progressBarHtml = chartArray.map((item, index) => {
-        const percent = (item.amount / totalAmount) * 100;
-        const color = item.isOther ? GRAY_COLOR : getColor(item.name, index);
-        return `<div style="width: ${percent}%; background-color: ${color};" class="h-full transition-all duration-500"></div>`;
-    }).join('');
+    // 当前 tab 对应的总额（百分比的分母）
+    const currentTotal = isIncomeView ? totalIncome : totalAmount;
 
-    const percentLabelsHtml = chartArray.map((item) => {
-    const percent = (item.amount / totalAmount) * 100;
-    // 处理 <1% 的情况
-    const displayPercent = (percent > 0 && percent < 1) ? '<1' : percent.toFixed(0);
-    
-    return `
-        <div style="width: ${percent}%; position: relative;">
-            <!-- 🌟 使用 calc 让整体向右偏移 1px，抵消 % 符号右侧自带的空白，实现视觉绝对居中 -->
-            <div class="absolute left-1/2 -translate-x-[calc(50%-1.5px)] top-1 flex items-baseline whitespace-nowrap text-gray-500">
-                <span class="text-[9px] font-bold tracking-tighter">${displayPercent}</span>
-                <span class="text-[7px] font-medium ml-[0.5px]">%</span>
-            </div>
-        </div>
-    `;
-}).join('');
+    // 进度条 + 百分比 + 列表（含空态兜底）
+    let progressBarHtml, percentLabelsHtml, listHtml;
+    if (statsArray.length === 0) {
+        progressBarHtml = `<div class="h-full w-full bg-gray-100"></div>`;
+        percentLabelsHtml = '';
+        listHtml = `<div class="col-span-2 text-center text-gray-400 text-xs py-8">本月暂无${isIncomeView ? '收入' : '支出'}记录</div>`;
+    } else {
+        progressBarHtml = chartArray.map((item, index) => {
+            const percent = (item.amount / currentTotal) * 100;
+            const color = item.isOther ? GRAY_COLOR : getColor(item.name, index);
+            return `<div style="width: ${percent}%; background-color: ${color};" class="h-full transition-all duration-500"></div>`;
+        }).join('');
 
-    // 4. 构建底部网格列表（前4名彩色，第5名及以后灰色）
-const listHtml = statsArray.map((item, index) => {
-    const isTop4 = index < 4;
-    const color = isTop4 ? getColor(item.name, index) : GRAY_COLOR;
-    const rawPercent = (item.amount / totalAmount) * 100;
-    const percent = (rawPercent > 0 && rawPercent < 1) ? '<1' : rawPercent.toFixed(0);
-    
-    // 杂项卡片排版：去掉多余的顶部边距，缩短上下行间距
-    const amountHtml = isTop4 
-        ? `<p class="text-xs font-bold text-gray-800 tracking-tight ml-1 flex-shrink-0">¥${toPlainNumber(item.amount)}</p>`
-        : `
-            <div class="flex flex-col items-end flex-shrink-0 text-right">
-                <p class="text-xs font-bold text-gray-800 tracking-tight leading-none">¥${toPlainNumber(item.amount)}</p>
-                <p class="text-[9px] text-gray-400 font-medium mt-0.5 leading-none -mr-[2px]">${percent}%</p>
-            </div>
-          `;
-    
-    return `
-        <div onclick="applyBillFilter(this)" data-name="${escapeHtml(item.name)}" data-type="${type}" class="flex items-center justify-between py-1.5 px-2.5 bg-gray-50 rounded-xl border border-gray-100 active:scale-95 transition-transform cursor-pointer">
-            <div class="flex items-center gap-1.5 min-w-0">
-                <span class="w-2 h-2 rounded-full flex-shrink-0" style="background-color: ${color}; box-shadow: 0 0 5px ${color}40;"></span>
-                <p class="text-[11px] font-bold text-gray-700 truncate">${item.name}</p>
-            </div>
-            ${amountHtml}
-        </div>
-    `;
-}).join('');
+        percentLabelsHtml = chartArray.map((item) => {
+            const percent = (item.amount / currentTotal) * 100;
+            const displayPercent = (percent > 0 && percent < 1) ? '<1' : percent.toFixed(0);
+            return `
+                <div style="width: ${percent}%; position: relative;">
+                    <div class="absolute left-1/2 -translate-x-[calc(50%-1.5px)] top-1 flex items-baseline whitespace-nowrap text-gray-500">
+                        <span class="text-[9px] font-bold tracking-tighter">${displayPercent}</span>
+                        <span class="text-[7px] font-medium ml-[0.5px]">%</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        listHtml = statsArray.map((item, index) => {
+            const isTop4 = index < 4;
+            const color = isTop4 ? getColor(item.name, index) : GRAY_COLOR;
+            const rawPercent = (item.amount / currentTotal) * 100;
+            const percent = (rawPercent > 0 && rawPercent < 1) ? '<1' : rawPercent.toFixed(0);
+
+            const amountHtml = isTop4
+                ? `<p class="text-xs font-bold text-gray-800 tracking-tight ml-1 flex-shrink-0">¥${toPlainNumber(item.amount)}</p>`
+                : `
+                    <div class="flex flex-col items-end flex-shrink-0 text-right">
+                        <p class="text-xs font-bold text-gray-800 tracking-tight leading-none">¥${toPlainNumber(item.amount)}</p>
+                        <p class="text-[9px] text-gray-400 font-medium mt-0.5 leading-none -mr-[2px]">${percent}%</p>
+                    </div>
+                  `;
+
+            // 收入卡片不加点击（billFilter 目前不支持收入筛选，避免误触）
+            const clickAttr = `onclick="applyBillFilter(this)" data-name="${escapeHtml(item.name)}" data-type="${isIncomeView ? 'income' : activeTab}"`;
+
+return `
+    <div ${clickAttr} class="flex items-center justify-between py-1.5 px-2.5 bg-gray-50 rounded-xl border border-gray-100 active:scale-95 transition-transform cursor-pointer">
+                    <div class="flex items-center gap-1.5 min-w-0">
+                        <span class="w-2 h-2 rounded-full flex-shrink-0" style="background-color: ${color}; box-shadow: 0 0 5px ${color}40;"></span>
+                        <p class="text-[11px] font-bold text-gray-700 truncate">${item.name}</p>
+                    </div>
+                    ${amountHtml}
+                </div>
+            `;
+        }).join('');
+    }
+
+    // 日期范围 / 天数 / 日均（只服务支出，收入不展示）
+    let rangeHtml = '';
+    if (dateRange) {
+        const fmt = (s) => s.slice(5).replace('-', '/');
+        const rangeStr = dateRange.earliest === dateRange.latest
+            ? fmt(dateRange.earliest)
+            : `${fmt(dateRange.earliest)} ~ ${fmt(dateRange.latest)}`;
+        const dailyAvg = calcDailyAverage(totalAmount, dateRange.spanDays);
+        rangeHtml = `<span class="block text-[10px] text-gray-400 font-normal mt-0.5">${rangeStr} · ${dateRange.spanDays}天 · 日均 ¥${toPlainNumber(dailyAvg)}</span>`;
+    }
 
     const html = `
     <div class="flex flex-col max-h-[75vh]">
-        <div class="flex justify-between items-center mb-2">
-            <div>
-                <h3 class="text-[15px] font-bold text-gray-800">数据统计</h3>
-                <p class="text-[11px] text-gray-400 mt-0.5">总支出 <span class="font-bold text-gray-700">¥${toPlainNumber(totalAmount)}</span></p>
-            </div>
-        </div>
-        
-        <!-- 🌟 新增 Tabs 切换 -->
-        <div class="flex bg-gray-100/80 p-0.5 rounded-xl mb-4 mt-1">
-            <button onclick="showStatsModal('category')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${type === 'category' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-500 font-medium'}">按分类</button>
-            <button onclick="showStatsModal('payMethod')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${type === 'payMethod' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-500 font-medium'}">按支付</button>
-        </div>
-
-            <!-- 进度条 -->
-            <div class="w-full h-2.5 rounded-full overflow-hidden flex bg-gray-100">
-                ${progressBarHtml}
-            </div>
-
-            <!-- 百分比 -->
-            <div class="flex w-full mb-4 h-3">
-                ${percentLabelsHtml}
-            </div>
-            
-            <!-- 紧凑双列网格 (稍微拉高一点，p-2.5) -->
-            <div class="overflow-y-auto pr-1 pb-2" style="scrollbar-width: none;">
-                <div class="grid grid-cols-2 gap-1.5">
-                    ${listHtml}
+        <div class="mb-2">
+            <h3 class="text-[15px] font-bold text-gray-800 mb-2">数据统计</h3>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <p class="text-[11px] text-gray-400">总收入</p>
+                    <p class="text-[15px] font-bold text-emerald-500 mt-0.5">+¥${toPlainNumber(totalIncome)}</p>
+                </div>
+                <div>
+                    <p class="text-[11px] text-gray-400">总支出</p>
+                    <p class="text-[15px] font-bold text-red-500 mt-0.5">-¥${toPlainNumber(totalAmount)}</p>
+                    ${rangeHtml}
                 </div>
             </div>
         </div>
+
+        <div class="flex bg-gray-100/80 p-0.5 rounded-xl mb-3 mt-1">
+            <button onclick="showStatsModal('category')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${activeTab === 'category' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-500 font-medium'}">分类</button>
+            <button onclick="showStatsModal('payMethod')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${activeTab === 'payMethod' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-500 font-medium'}">支付</button>
+            <button onclick="showStatsModal('income')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${activeTab === 'income' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-500 font-medium'}">收入</button>
+        </div>
+
+        <div class="w-full h-2.5 rounded-full overflow-hidden flex bg-gray-100">
+            ${progressBarHtml}
+        </div>
+
+        <div class="flex w-full mb-4 h-3">
+            ${percentLabelsHtml}
+        </div>
+
+        <div class="overflow-y-auto pr-1 pb-2" style="scrollbar-width: none;">
+            <div class="grid grid-cols-2 gap-1.5">
+                ${listHtml}
+            </div>
+        </div>
+    </div>
     `;
-    
+
     openCenterModal(html);
 }
 
 function applyBillFilter(el) {
     const target = el.dataset.name;
     const type = el.dataset.type;
+
     if (type === 'category') {
         billFilter.category = target;
         billFilter.payMethod = null;
-    } else {
+        billFilter.recordType = null;
+    } else if (type === 'payMethod') {
         billFilter.payMethod = target;
         billFilter.category = null;
+        billFilter.recordType = null;
+    } else if (type === 'income') {
+        const map = { '月薪': 'monthly', '工时': 'work', '日结': 'daily', '其他': '__other__' };
+        billFilter.recordType = map[target] || null;
+        billFilter.category = null;
+        billFilter.payMethod = null;
     }
+
     closeCenterModal();
     switchTab('bill', true);
     showToast(`已筛选「${target}」`);
@@ -4199,6 +4340,7 @@ function applyBillFilter(el) {
 function clearBillFilter() {
     billFilter.category = null;
     billFilter.payMethod = null;
+    billFilter.recordType = null;
     switchTab('bill', true);
     showToast('已清除筛选');
 }
@@ -4213,6 +4355,7 @@ function changeBillMonth(delta) {
     }
     billFilter.category = null;
     billFilter.payMethod = null;
+    billFilter.recordType = null;
     currentMonth = targetMonth;
     switchTab('bill', true);
 }
@@ -4711,7 +4854,6 @@ function renderMeView() {
 
             <div class="pt-2">
     <div class="text-center text-[10px] text-gray-400 mb-2">危险操作</div>
-    <!-- 🌟 新增：选择性清除 -->
     <div class="setting-item" style="border: 1px solid rgba(239,68,68,0.2); margin-bottom: 8px;" onclick="showSelectiveClearModal()">
         <div class="flex items-center gap-2.5">
             <i data-lucide="eraser" class="w-4 h-4 text-orange-500"></i>
@@ -4719,7 +4861,6 @@ function renderMeView() {
         </div>
         <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-orange-400"></i>
     </div>
-    <!-- 原来的全部清除 -->
     <div class="setting-item" style="border: 1px solid rgba(239,68,68,0.4);" onclick="clearAllData()">
         <div class="flex items-center gap-2.5">
             <i data-lucide="alert-triangle" class="w-4 h-4 text-red-500"></i>
@@ -5018,11 +5159,13 @@ function mergeAppData(localData, remoteData, deletedIdSet) {
     }
 // 🌟 使用全新深层合并逻辑
 const mergedGoals = mergeGoals(localData.goals || [], remoteData.goals || [], deletedIdSet);
+const mergedInstallments = mergeArrayById(localData.installments || [], remoteData.installments || [], deletedIdSet); // 补上这句防止报错
 
 const merged = {
     tasks: mergedTasks, incomes: mergedIncomes, expenses: mergedExpenses, notes: mergedNotes,
     menstrual: { records: mergedMenstrualRecords, loveDates: mergedLoveDates },
     goals: mergedGoals,
+    installments: mergedInstallments,
     settings: { ...localData.settings, lastSyncTime: Date.now(), lastSyncType: 'merge' }
 };
     return { merged };
@@ -5070,7 +5213,7 @@ async function smartSync(showResult = true, isAuto = false) {
     _syncInProgress = true;
     showSyncProgress(true);
     let syncSuccess = false;
-    const SYNCABLE_FIELDS = ['tasks', 'incomes', 'expenses', 'notes', 'menstrual', 'goals'];
+    const SYNCABLE_FIELDS = ['tasks', 'incomes', 'expenses', 'notes', 'menstrual', 'goals', 'installments'];
     // 注：settings 是本地专属（含 token），不参与同步；menstrualRemote 仅展示，不参与同步
 
     const globalIndicator = document.getElementById('global-sync-indicator');
@@ -5087,7 +5230,6 @@ updateIcons(globalIndicator);
         let fileSha = null;
         let fileExists = false;
         try {
-            // 🌟 核心修复：去掉自动加后缀，填什么用什么
             const fetchFilename = giteeFilename;
             const getRes = await fetchWithTimeout(`https://gitee.com/api/v5/repos/${giteeRepo}/contents/${encodeURIComponent(fetchFilename)}?access_token=${giteeToken}`, { timeout: 8000 });
             if (getRes.ok) {
@@ -5118,7 +5260,6 @@ updateIcons(globalIndicator);
         };
 
 let syncLocalData = JSON.parse(JSON.stringify(appData));
-// 双字段后：appData.menstrual 永远就是本地数据，无需剥离
 
         if (fileExists && remoteData) {
             const deletedIdSet = new Set();
@@ -5135,8 +5276,8 @@ let syncLocalData = JSON.parse(JSON.stringify(appData));
                     compareArrays(previousData.expenses || [], syncLocalData.expenses || []);
                     compareArrays(previousData.notes || [], syncLocalData.notes || []);
 
-// 🌟 核心补漏：对比心愿和心愿里的记录
 compareArrays(previousData.goals || [], syncLocalData.goals || []);
+compareArrays(previousData.installments || [], syncLocalData.installments || []);
 previousData.goals?.forEach(pg => {
     const cg = syncLocalData.goals?.find(g => g.id === pg.id);
     if (cg) compareArrays(pg.records || [], cg.records || []);
@@ -5149,14 +5290,13 @@ if (!syncMenstrualFrom) {
                 } catch(e) {}
             }
             const remoteStripBeforeMerge = _strip(remoteData);
-            // 🌟 合并时使用纯净的数据
             const result = mergeAppData(syncLocalData, remoteData, deletedIdSet);
             mergedData = result.merged;
             uploadData = mergedData;
 
             if (_strip(uploadData) === remoteStripBeforeMerge) {
                 if (!_pendingSync) {
-                    appData = mergedData; // 恢复UI展示的对方数据
+                    appData = mergedData; 
                     lastSyncData = JSON.stringify(appData);
                     saveLastSyncData();
                 }
@@ -5181,7 +5321,6 @@ if (!syncMenstrualFrom) {
         const content = await encryptData(uploadData);
         const message = `智能合并同步 - ${new Date().toLocaleString()}`;
         
-        // 🌟 核心修复：上传时去掉加后缀逻辑
         const uploadFilename = giteeFilename;
         const url = `https://gitee.com/api/v5/repos/${giteeRepo}/contents/${encodeURIComponent(uploadFilename)}`;
         
@@ -5193,7 +5332,7 @@ if (!syncMenstrualFrom) {
         
         if (response.ok) {
             if (!_pendingSync) {
-                appData = mergedData; // 恢复UI展示的对方数据
+                appData = mergedData;
                 lastSyncData = JSON.stringify(appData);
                 saveLastSyncData();
             }
@@ -5425,11 +5564,9 @@ updateIcons(globalIndicator);
         appData.settings.lastSyncType = executeAction;
         
         if (finalLocalData) {
-            // 保留 settings，替换业务数据
             const keepSettings = appData.settings;
             appData = finalLocalData;
             appData.settings = keepSettings;
-            // 确保 menstrualRemote 等字段存在
             if (!appData.menstrualRemote) appData.menstrualRemote = { records: [], loveDates: [] };
         }
 
@@ -5479,6 +5616,894 @@ function showSyncProgress(show) {
 function reconfigureCloud() {
     _syncConfigEditing = true;
     switchTab('home');
+}
+
+// ==================== L2 分期还款引擎 (自定义版) ====================
+
+// 日期加月，处理月末边界
+function addMonthKeepDay(date, months) {
+    const d = new Date(date.getTime());
+    const origDay = d.getDate();
+    d.setMonth(d.getMonth() + months);
+    if (d.getDate() !== origDay) d.setDate(0);
+    return d;
+}
+
+// 两日期之间的天数（算头不算尾）
+function daysBetween(startStr, endStr) {
+    const [sy, sm, sd] = startStr.split('-').map(Number);
+    const [ey, em, ed] = endStr.split('-').map(Number);
+    return Math.round((Date.UTC(ey, em - 1, ed) - Date.UTC(sy, sm - 1, sd)) / 86400000);
+}
+
+// 获取归一化的月利率
+function getMonthlyRate(c) {
+    if (c.rateType === 'monthly') return c.rate;
+    if (c.rateType === 'apr') return c.rate / 12;
+    if (c.rateType === 'daily') return c.rate * 30;
+    return 0; // total_amount 不参与月利率计算
+}
+
+// 获取每期固定手续费（固定金额或总费率转化）
+function getFixedFeePerPeriod(c) {
+    if (c.rateType === 'total_amount') {
+        return c.periods > 0 ? c.rate / c.periods : 0;
+    }
+    const monthlyRate = getMonthlyRate(c);
+    return c.principal * monthlyRate;
+}
+
+// 获取真实的日利率
+function getDailyRate(c) {
+    if (c.rateType === 'daily') return c.rate;
+    const mr = getMonthlyRate(c);
+    return mr > 0 ? mr / 30 : 0;
+}
+
+// ---- 统一的 schedule 生成器 ----
+// ---- 精确计算按天计息的等额本息月供（利用二分法求 IRR 现金流） ----
+function calcDailyEqualInstallmentPayment(principal, dailyRate, scheduleDates, borrowDate) {
+    if (dailyRate <= 0) return principal / scheduleDates.length;
+    
+    // 1. 计算每期真实天数
+    let daysArr = [];
+    let prevDate = borrowDate;
+    for (let d of scheduleDates) {
+        daysArr.push(Math.max(1, daysBetween(prevDate, d)));
+        prevDate = d;
+    }
+
+    // 2. 模拟系统还款，算最后剩余本金
+    const calcEndBalance = (payment) => {
+        let bal = principal;
+        for (let i = 0; i < daysArr.length; i++) {
+            let interest = bal * dailyRate * daysArr[i];
+            // 🌟 核心破案：借呗的利息是直接向下取整（抹掉零头）
+            interest = Math.floor(interest * 100) / 100;
+            let principalPart = payment - interest;
+            bal -= principalPart;
+        }
+        return bal;
+    };
+
+    // 3. 二分法寻找最精准的月供
+    let lo = 0;
+    let hi = principal * 2; 
+    for (let i = 0; i < 100; i++) {
+        const mid = (lo + hi) / 2;
+        if (calcEndBalance(mid) > 0) lo = mid;
+        else hi = mid;
+    }
+    return (lo + hi) / 2;
+}
+
+function calcImpliedMonthlyRate(principal, totalInterest, periods, fixedPayment) {
+    if (principal <= 0 || periods <= 0) return 0;
+    // 🌟 核心修复：直接使用外部传入的已取整月供，避免无限小数导致利率偏大
+    const payment = fixedPayment || ((principal + totalInterest) / periods); 
+    
+    const npv = (r) => {
+        let sum = 0;
+        for (let i = 1; i <= periods; i++) {
+            sum += payment / Math.pow(1 + r, i);
+        }
+        return sum - principal;
+    };
+    
+    let lo = 0, hi = 1;
+    for (let i = 0; i < 100; i++) {
+        const mid = (lo + hi) / 2;
+        if (npv(mid) > 0) lo = mid; else hi = mid;
+    }
+    return (lo + hi) / 2;
+}
+
+// ---- 统一的 schedule 生成器 (终极平账版) ----
+function buildSchedule(c) {
+    const isFixedTotal = c.rateType === 'total_amount';
+    let monthlyRate = getMonthlyRate(c);
+    const dailyRate = getDailyRate(c);
+    const fixedFee = isFixedTotal ? getFixedFeePerPeriod(c) : 0;
+    const totalInterest = isFixedTotal ? c.rate : 0;
+    
+    let currentDate = parseDate(c.startDate);
+    let scheduleDates = [];
+    for (let i = 1; i <= c.periods; i++) {
+        scheduleDates.push(formatDateLocal(currentDate));
+        currentDate = addMonthKeepDay(currentDate, 1);
+    }
+
+    const useRealDays = !isFixedTotal && c.actualDaysFirstMonth;
+
+    let fixedMonthlyPayment = 0;
+    if (c.repaymentType === 'equal_installment') {
+        if (isFixedTotal) {
+            fixedMonthlyPayment = Math.round(((c.principal + totalInterest) / c.periods) * 100) / 100;
+            // 🌟 核心修复：把算好的 517.74 传进去反推利率
+            monthlyRate = calcImpliedMonthlyRate(c.principal, totalInterest, c.periods, fixedMonthlyPayment);
+        } else if (useRealDays) {
+            fixedMonthlyPayment = calcDailyEqualInstallmentPayment(c.principal, dailyRate, scheduleDates, c.borrowDate || c.startDate);
+            fixedMonthlyPayment = Math.round(fixedMonthlyPayment * 100) / 100;
+        } else if (monthlyRate === 0) {
+            fixedMonthlyPayment = c.principal / c.periods;
+        } else {
+            const factor = Math.pow(1 + monthlyRate, c.periods);
+            fixedMonthlyPayment = c.principal * monthlyRate * factor / (factor - 1);
+            fixedMonthlyPayment = Math.round(fixedMonthlyPayment * 100) / 100;
+        }
+    }
+
+    const schedule = [];
+    let remaining = c.principal;
+    let prevDateStr = c.borrowDate || c.startDate;
+    let accumulatedInterest = 0;
+
+    for (let i = 1; i <= c.periods; i++) {
+        const thisDateStr = scheduleDates[i - 1];
+        let interest = 0;
+        let principalPart = 0;
+
+        if (isFixedTotal) {
+            if (c.repaymentType === 'equal_installment') {
+                if (i === c.periods) {
+                    interest = totalInterest - accumulatedInterest;
+                } else {
+                    interest = remaining * monthlyRate;
+                    // 强制抹去 8.3056 这种尾数
+                    interest = Math.floor(interest * 100 + 0.4) / 100; 
+                }
+            } else {
+                interest = fixedFee;
+            }
+        } else if (useRealDays) {
+            const days = Math.max(1, daysBetween(prevDateStr, thisDateStr));
+            interest = remaining * dailyRate * days;
+            interest = Math.floor(interest * 100) / 100;
+        } else {
+            interest = remaining * monthlyRate;
+            interest = Math.round(interest * 100) / 100; 
+        }
+
+        accumulatedInterest += interest;
+
+        if (c.repaymentType === 'equal_principal') {
+            principalPart = c.principal / c.periods;
+            principalPart = Math.round(principalPart * 100) / 100;
+            if (i === c.periods) principalPart = remaining;
+        } else if (c.repaymentType === 'equal_installment') {
+            principalPart = fixedMonthlyPayment - interest;
+            principalPart = Math.round(principalPart * 100) / 100; 
+            if (i === c.periods) principalPart = remaining; 
+        } else if (c.repaymentType === 'interest_first') {
+            principalPart = (i === c.periods) ? remaining : 0;
+        }
+
+        schedule.push({
+            period: i,
+            date: thisDateStr,
+            principal: principalPart,
+            interest: interest,
+            total: principalPart + interest
+        });
+        
+        remaining -= principalPart;
+        remaining = Math.round(remaining * 100) / 100;
+        prevDateStr = thisDateStr;
+    }
+    return schedule;
+}
+
+// ---- 标记每期状态 ----
+function markScheduleStatus(schedule, asOfDate, contract) {
+    const todayStr = formatDateLocal(asOfDate);
+    const prepaidStr = (contract.prepaid && contract.prepaidDate) ? contract.prepaidDate : null;
+    const historyPaid = Number(contract.paidPeriodsHistory) || 0; // 🌟 读取历史已还期数
+
+    for (const p of schedule) {
+        if (prepaidStr && p.date > prepaidStr) {
+            p.status = 'settled';
+        } 
+        // 🌟 核心：优先强制标记历史已还期数
+        else if (p.period <= historyPaid) {
+            p.status = 'paid';
+        } 
+        else if (p.date < todayStr) {
+            p.status = 'paid';
+        } 
+        else if (p.date === todayStr) {
+            p.status = 'due';
+        } 
+        else {
+            p.status = 'upcoming';
+        }
+    }
+}
+
+// ---- 提前结清金额计算 ----
+function calcPrepaySettlement(contract, schedule, prepaidDate) {
+    // 🌟 核心修复：不再依赖状态，直接用日期切分。
+    // 日期大于结清日的，就是未来要被免掉的期数。
+    const futureSchedule = schedule.filter(s => s.date > prepaidDate);
+    // 日期小于等于结清日的，就是已经到期、需要结清的本金部分。
+    const pastAndDueSchedule = schedule.filter(s => s.date <= prepaidDate);
+    
+    const paidPeriods = pastAndDueSchedule.length;
+    const paidPrincipal = pastAndDueSchedule.reduce((sum, s) => sum + s.principal, 0);
+    const remainingPrincipal = Math.max(0, contract.principal - paidPrincipal);
+
+    // 上一期还款日，用于计算这一段实际用了几天
+    const lastPaymentDate = paidPeriods > 0 ? pastAndDueSchedule[paidPeriods - 1].date : (contract.borrowDate || contract.startDate);
+
+    const settlement = {
+        paidPeriods,
+        remainingPeriods: futureSchedule.length,
+        remainingPrincipal,
+        accruedFee: 0,
+        penalty: 0,
+        savedFee: 0,
+        total: 0
+    };
+
+    // 1. 违约金
+    if (contract.prepayPenaltyRate > 0) {
+        settlement.penalty = remainingPrincipal * contract.prepayPenaltyRate;
+    }
+
+    // 2. 已产生利息（从上一期还款日 到 结清日，这一段占用的利息）
+    if (contract.rateType !== 'total_amount') {
+        const days = Math.max(1, daysBetween(lastPaymentDate, prepaidDate));
+        settlement.accruedFee = remainingPrincipal * getDailyRate(contract) * days;
+    }
+
+    // 3. 未来利息/手续费（未来还没到期的期数的利息总和）
+    const remainingFutureInterest = futureSchedule.reduce((sum, s) => sum + s.interest, 0);
+    
+    if (contract.prepayWaiveFee) {
+        // 减免未来利息，只付已产生的
+        settlement.savedFee = Math.max(0, remainingFutureInterest - settlement.accruedFee);
+        settlement.total = remainingPrincipal + settlement.accruedFee + settlement.penalty;
+    } else {
+        // 不减免，剩余利息全收
+        settlement.savedFee = 0;
+        settlement.total = remainingPrincipal + remainingFutureInterest + settlement.penalty;
+    }
+
+    return settlement;
+}
+
+// ---- 汇总指标 ----
+function buildInstallmentSummary(schedule, settlement, contract, asOfDate) {
+    // 🌟 直接读取状态，确保剩余本金、进度条完美对应历史已还期数
+    const paidSchedule = schedule.filter(s => s.status === 'paid');
+    const paidPeriods = paidSchedule.length;
+    
+    const totalPaid = paidSchedule.reduce((sum, s) => sum + s.total, 0);
+    const totalPrincipalPaid = paidSchedule.reduce((sum, s) => sum + s.principal, 0);
+    
+    const remainingPrincipal = contract.prepaid ? 0 : Math.max(0, contract.principal - totalPrincipalPaid);
+
+    const totalInterest = schedule.reduce((sum, s) => sum + s.interest, 0);
+    const totalRepay = contract.principal + totalInterest;
+
+    let monthlyPayment = 0;
+    if (schedule.length > 0) {
+        monthlyPayment = contract.repaymentType === 'interest_first' ? schedule[0].interest : schedule[0].total;
+    }
+
+    return {
+        totalRepay,
+        totalInterest,
+        monthlyPayment,
+        paidPeriods,
+        totalPeriods: contract.periods,
+        totalPaid,
+        remainingPrincipal,
+        remainingAmount: contract.prepaid ? 0 : Math.max(0, totalRepay - totalPaid),
+        remainingPeriods: contract.periods - paidPeriods,
+        progress: Math.min(100, (paidPeriods / contract.periods) * 100),
+        settlement
+    };
+}
+
+// ---- IRR 计算 ----
+function calcIRR(schedule, principal) {
+    if (!schedule || schedule.length === 0 || principal <= 0) return null;
+    const npv = (r) => {
+        let sum = 0;
+        for (let i = 0; i < schedule.length; i++) sum += schedule[i].total / Math.pow(1 + r, i + 1);
+        return sum - principal;
+    };
+    if (npv(0) <= 0) return 0; 
+    let lo = 0, hi = 1;
+    for (let iter = 0; iter < 100; iter++) {
+        const mid = (lo + hi) / 2;
+        if (npv(mid) > 0) lo = mid; else hi = mid;
+    }
+    return Number((((lo + hi) / 2) * 12 * 100).toFixed(2));
+}
+
+// ---- 主入口 ----
+function calcInstallmentPlan(contract, asOfDate = new Date()) {
+    const schedule = buildSchedule(contract);
+    markScheduleStatus(schedule, asOfDate, contract);
+
+    const settlement = (contract.prepaid && contract.prepaidDate)
+        ? calcPrepaySettlement(contract, schedule, contract.prepaidDate)
+        : null;
+
+    const summary = buildInstallmentSummary(schedule, settlement, contract, asOfDate);
+
+    let irr = null;
+    try { irr = calcIRR(schedule, contract.principal); } catch (e) { irr = null; }
+
+    return { schedule, ...summary, irr };
+}
+
+// ---- 顶部卡片总览 ----
+function calcInstallmentsSummary(contracts, asOfDate = new Date()) {
+    let totalPrincipal = 0, totalRepay = 0, totalPaid = 0, totalRemaining = 0, totalRemainingAmount = 0;
+    let totalNextPrincipal = 0, totalNextInterest = 0, totalNextPayment = 0; 
+    let activeCount = 0, finishedCount = 0;
+
+    for (const c of (contracts || [])) {
+        const plan = calcInstallmentPlan(c, asOfDate);
+        totalPrincipal += c.principal;
+        totalRepay += plan.totalRepay;
+        totalPaid += plan.totalPaid;
+        totalRemaining += plan.remainingPrincipal;
+        totalRemainingAmount += plan.remainingAmount;
+        
+        if (plan.remainingPeriods === 0 || c.prepaid) {
+            finishedCount++;
+        } else {
+            activeCount++;
+            const nextPeriod = plan.schedule.find(s => s.status === 'due' || s.status === 'upcoming');
+            if (nextPeriod) {
+                totalNextPrincipal += nextPeriod.principal;
+                totalNextInterest += nextPeriod.interest;
+                totalNextPayment += nextPeriod.total;
+            }
+        }
+    }
+
+    return { 
+        totalPrincipal, totalRepay, totalPaid, totalRemaining, totalRemainingAmount, 
+        totalNextPrincipal, totalNextInterest, totalNextPayment,
+        activeCount, finishedCount 
+    };
+}
+
+// ==================== L4/L5 分期还款视图与交互 ====================
+
+function renderInstallmentsView() {
+    const summary = calcInstallmentsSummary(appData.installments);
+    const contracts = [...appData.installments].sort((a, b) => (a.prepaid === b.prepaid) ? b.createdAt - a.createdAt : (a.prepaid ? 1 : -1));
+
+    let listHtml = '';
+    if (contracts.length === 0) {
+        listHtml = `
+            <div class="glass-card p-10 rounded-3xl flex flex-col items-center text-center mt-4">
+                <div class="bg-gray-100 p-5 rounded-full mb-4">
+                    <i data-lucide="credit-card" class="w-8 h-8 text-gray-400"></i>
+                </div>
+                <p class="text-gray-500 text-sm">还没有分期记录</p>
+                <p class="text-gray-400 text-xs mt-1">点击右下角 + 添加</p>
+            </div>
+        `;
+    } else {
+        listHtml = contracts.map(c => {
+            const plan = calcInstallmentPlan(c);
+            // 删掉 preset 那行，并把下面用到 preset.label 的地方改为显示还款方式
+const repLabels = { equal_installment: '等额本息', equal_principal: '等额本金', interest_first: '先息后本' };
+const repName = repLabels[c.repaymentType] || '自定义';
+            const isFinished = plan.remainingPeriods === 0 || c.prepaid;
+            const badgeText = isFinished ? '已结清' : (plan.paidPeriods > 0 ? '还款中' : '未开始');
+            const badgeColor = isFinished ? 'text-green-600 bg-green-50' : (plan.paidPeriods > 0 ? 'text-blue-600 bg-blue-50' : 'text-orange-500 bg-orange-50');
+
+            return `
+            <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 active:scale-[0.98] transition-transform cursor-pointer mb-3" onclick="showInstallmentDetail('${c.id}')">
+                <div class="flex justify-between items-start mb-2">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-500">
+                            <i data-lucide="credit-card" class="w-4 h-4"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm font-bold text-gray-800">${escapeHtml(c.name)}</p>
+                            <p class="text-[10px] text-gray-400">${repName} · ${c.periods}期</p>
+                        </div>
+                    </div>
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${badgeColor}">${badgeText}</span>
+                </div>
+                
+<div class="flex justify-between items-end mt-3 mb-2">
+    <!-- 左侧：下期需还 -->
+    <div>
+        <p class="text-[10px] text-gray-400 mb-0.5">${isFinished ? '已还总额' : '下期需还'}</p>
+        <p class="text-[17px] font-bold text-gray-800">¥${toPlainNumber(isFinished ? plan.totalPaid : (plan.schedule.find(s => s.status === 'due' || s.status === 'upcoming')?.total || plan.monthlyPayment))}</p>
+        ${!isFinished ? (() => {
+            const next = plan.schedule.find(s => s.status === 'due' || s.status === 'upcoming');
+            return next ? `<p class="text-[9px] text-gray-400 mt-0.5 whitespace-nowrap">本 ¥${toPlainNumber(next.principal)} + 息 ¥${toPlainNumber(next.interest)}</p>` : '';
+        })() : ''}
+    </div>
+    
+    <!-- 右侧：总待还本息 -->
+    <div class="text-right">
+        ${isFinished ? `
+            <p class="text-[10px] text-gray-400 mb-0.5">状态</p>
+            <p class="text-[13px] font-bold text-green-500">已全部结清</p>
+        ` : `
+            <p class="text-[10px] text-gray-400 mb-0.5">待还本息</p>
+            <p class="text-[15px] font-bold text-red-500">¥${toPlainNumber(plan.remainingAmount)}</p>
+            <p class="text-[9px] text-gray-400 mt-0.5">本 ¥${toPlainNumber(plan.remainingPrincipal)} + 息 ¥${toPlainNumber(plan.remainingAmount - plan.remainingPrincipal)}</p>
+        `}
+    </div>
+</div>
+
+                <div class="flex items-center gap-2 mt-3">
+                    <div class="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div class="h-full bg-blue-400 rounded-full" style="width: ${plan.progress}%"></div>
+                    </div>
+                    <span class="text-[10px] font-bold text-gray-500">已还 ${plan.paidPeriods}/${plan.totalPeriods} 期</span>
+                </div>
+            </div>
+            `;
+        }).join('');
+    }
+
+    return `
+        <div class="space-y-3 mt-1 pb-6">
+            <!-- 顶部汇总卡片 -->
+<div class="bg-gradient-to-r from-orange-400 to-orange-500 rounded-2xl p-4 text-white shadow-md shadow-orange-500/20">
+    <div class="grid grid-cols-2 gap-2">
+        <!-- 左侧：总待还 -->
+        <div>
+            <p class="text-[11px] text-orange-100 mb-0.5">总待还金额</p>
+            <p class="text-[22px] font-bold tracking-tight mb-1">¥${toPlainNumber(summary.totalRemainingAmount)}</p>
+            <p class="text-[10px] text-orange-200">
+                本金 ¥${toPlainNumber(summary.totalRemaining)} + 利息 ¥${toPlainNumber(summary.totalRemainingAmount - summary.totalRemaining)}
+            </p>
+        </div>
+        
+        <!-- 右侧：下期月供 -->
+        <div class="text-right">
+            <p class="text-[11px] text-orange-100 mb-0.5">下期需还</p>
+            <p class="text-[22px] font-bold tracking-tight mb-1">¥${toPlainNumber(summary.totalNextPayment)}</p>
+            <p class="text-[10px] text-orange-200">
+                本金 ¥${toPlainNumber(summary.totalNextPrincipal)} + 利息 ¥${toPlainNumber(summary.totalNextInterest)}
+            </p>
+        </div>
+    </div>
+    
+    <div class="flex justify-between items-center mt-3 pt-3 border-t border-white/20 text-[11px] text-orange-100">
+        <span>进行中 ${summary.activeCount} 笔</span>
+        <span>已结清 ${summary.finishedCount} 笔</span>
+    </div>
+</div>
+            
+            <div class="mt-4">${listHtml}</div>
+        </div>
+    `;
+}
+
+function showInstallmentDetail(id) {
+    const c = appData.installments.find(x => x.id === id);
+    if (!c) return;
+    const plan = calcInstallmentPlan(c);
+    // 删掉 preset 那行，并把下面用到 preset.label 的地方改为显示还款方式
+const repLabels = { equal_installment: '等额本息', equal_principal: '等额本金', interest_first: '先息后本' };
+const repName = repLabels[c.repaymentType] || '自定义';
+    
+    let scheduleHtml = plan.schedule.map(s => {
+        let statusText = '', statusColor = '';
+        if (s.status === 'paid') { statusText = '已还'; statusColor = 'text-green-500'; }
+        else if (s.status === 'due') { statusText = '本期'; statusColor = 'text-orange-500 font-bold'; }
+        else if (s.status === 'settled') { statusText = '已免'; statusColor = 'text-gray-400'; }
+        else { statusText = '待还'; statusColor = 'text-gray-500'; }
+
+        return `
+            <div class="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
+                <div class="w-8 text-xs text-gray-400 text-center">${s.period}</div>
+                <div class="flex-1">
+                    <p class="text-xs text-gray-800 font-medium">${s.date}</p>
+                    <p class="text-[10px] text-gray-400">本金 ¥${toPlainNumber(s.principal)} + 利息 ¥${toPlainNumber(s.interest)}</p>
+                </div>
+                <div class="text-right w-16">
+                    <p class="text-xs font-bold text-gray-800">¥${toPlainNumber(s.total)}</p>
+                    <p class="text-[10px] ${statusColor}">${statusText}</p>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+let settlementHtml = '';
+if (c.prepaid && plan.settlement) {
+    const st = plan.settlement;
+    let extra = '';
+    if (st.penalty > 0) extra += `<span>违约金：¥${toPlainNumber(st.penalty)}</span>`;
+    if (st.accruedFee > 0) extra += `<span>已产生利息：¥${toPlainNumber(st.accruedFee)}</span>`;
+    
+    settlementHtml = `
+        <div class="mt-4 p-3 bg-red-50 rounded-xl border border-red-100">
+            <p class="text-xs font-bold text-red-600 mb-1">已于 ${c.prepaidDate} 提前结清</p>
+            <div class="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-red-500 mt-1">
+                <span>结清金额：¥${toPlainNumber(st.total)}</span>
+                <span>省去利息：¥${toPlainNumber(st.savedFee)}</span>
+                ${extra}
+            </div>
+        </div>
+    `;
+}
+    const html = `
+        <div class="p-5 max-h-[85vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-800">${escapeHtml(c.name)}</h3>
+                    <p class="text-xs text-gray-500">${repName} · ${c.periods}期</p>
+                </div>
+                <button onclick="closeModal()" class="p-2 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 mb-4">
+                <div class="bg-gray-50 p-2.5 rounded-xl border border-gray-100">
+                    <p class="text-[10px] text-gray-500 mb-0.5">每月还款 / 首月</p>
+                    <p class="text-sm font-bold text-gray-800">¥${toPlainNumber(plan.monthlyPayment)}</p>
+                </div>
+                <div class="bg-gray-50 p-2.5 rounded-xl border border-gray-100">
+                    <p class="text-[10px] text-gray-500 mb-0.5">真实年化 (IRR)</p>
+                    <p class="text-sm font-bold text-blue-600">${plan.irr !== null ? plan.irr + '%' : '--'}</p>
+                </div>
+                <div class="bg-gray-50 p-2.5 rounded-xl border border-gray-100">
+                    <p class="text-[10px] text-gray-500 mb-0.5">总利息 / 手续费</p>
+                    <p class="text-sm font-bold text-orange-500">¥${toPlainNumber(plan.totalInterest)}</p>
+                </div>
+                <div class="bg-gray-50 p-2.5 rounded-xl border border-gray-100">
+    <p class="text-[10px] text-gray-500 mb-0.5">待还本息</p>
+    <p class="text-sm font-bold text-red-500">¥${toPlainNumber(plan.remainingAmount)}</p>
+    <p class="text-[9px] text-gray-400 mt-0.5">本金 ¥${toPlainNumber(plan.remainingPrincipal)} + 利息 ¥${toPlainNumber(plan.remainingAmount - plan.remainingPrincipal)}</p>
+</div>
+            </div>
+
+            ${settlementHtml}
+
+            <div class="mt-5 mb-2 flex justify-between items-center">
+                <p class="text-xs font-bold text-gray-800">还款计划表</p>
+                <p class="text-[10px] text-gray-400">已还 ${plan.paidPeriods} 期</p>
+            </div>
+            <div class="bg-white border border-gray-100 rounded-xl px-3 py-1">
+                ${scheduleHtml}
+            </div>
+
+            <div class="flex gap-2 mt-6">
+                <button onclick="closeModal(); showAddInstallmentModal('${c.id}')" class="flex-1 py-2.5 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium active:scale-95 transition-transform">修改</button>
+                ${!c.prepaid && plan.remainingPeriods > 0 ? `
+                <button onclick="closeModal(); showPrepayInstallmentModal('${c.id}')" class="flex-1 py-2.5 rounded-xl bg-orange-50 text-orange-600 text-sm font-medium active:scale-95 transition-transform">提前结清</button>
+                ` : ''}
+                <button onclick="closeModal(); deleteInstallment('${c.id}')" class="flex-1 py-2.5 rounded-xl bg-red-50 text-red-500 text-sm font-medium active:scale-95 transition-transform">删除</button>
+            </div>
+        </div>
+    `;
+    openModal(html);
+}
+
+function showAddInstallmentModal(editId = null) {
+    const isEdit = !!editId;
+    const c = isEdit ? appData.installments.find(x => x.id === editId) : {
+        name: '', principal: '', periods: 12, rate: '',
+        rateType: 'monthly', repaymentType: 'equal_installment',
+        actualDaysFirstMonth: false, prepayWaiveFee: true, prepayPenaltyRate: 0,
+        startDate: formatDateLocal(new Date()), borrowDate: formatDateLocal(new Date()), note: ''
+    };
+
+    if (isEdit && !c) return;
+
+    const repTypes = [
+        { k: 'equal_installment', l: '等额本息' },
+        { k: 'equal_principal', l: '等额本金' },
+        { k: 'interest_first', l: '先息后本' }
+    ];
+    const repBtns = repTypes.map(t => {
+        const active = c.repaymentType === t.k ? 'bg-blue-500 text-white shadow-md border-blue-500 font-bold' : 'bg-gray-50 text-gray-600 border-gray-200';
+        return `<div onclick="window._tempRepType='${t.k}';document.querySelectorAll('.rep-btn').forEach(el=>el.className=el.className.replace(/bg-blue-500|text-white|shadow-md|border-blue-500|font-bold/g,'').trim());this.className='rep-btn flex-shrink-0 px-3 py-1.5 rounded-full text-xs border transition-all cursor-pointer bg-blue-500 text-white shadow-md border-blue-500 font-bold'" class="rep-btn flex-shrink-0 px-3 py-1.5 rounded-full text-xs border transition-all cursor-pointer ${active}">${t.l}</div>`;
+    }).join('');
+
+    const html = `
+        <div class="p-5 max-h-[85vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-base font-bold">${isEdit ? '编辑分期' : '新建分期'}</h3>
+                <button onclick="closeModal()" class="p-2 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            
+            <div class="space-y-4">
+                <div><label class="text-[11px] text-gray-500 mb-1 block">名称 (如: 招行信用卡)</label><input type="text" id="inst-name" class="input-field" value="${escapeHtml(c.name)}" placeholder="给这笔分期起个名字"></div>
+                
+                <div class="flex gap-2">
+    <div class="flex-1"><label class="text-[11px] text-gray-500 mb-1 block">总本金 (元)</label><input type="number" id="inst-principal" class="input-field font-bold" value="${c.principal}" placeholder="如: 12000"></div>
+    <div class="flex-1"><label class="text-[11px] text-gray-500 mb-1 block">总期数 (期)</label><input type="number" id="inst-periods" class="input-field font-bold" value="${c.periods}" placeholder="如: 12"></div>
+</div>
+
+<!-- 🌟 新增：已还期数 -->
+<div>
+    <label class="text-[11px] text-gray-500 mb-1 block">已还期数 (填 0 表示刚开始)</label>
+    <input type="number" id="inst-paid-history" class="input-field font-bold" value="${c.paidPeriodsHistory || 0}" placeholder="之前已经还了几期">
+</div>
+
+<div class="flex gap-2">
+    <div class="flex-1">
+        <label class="text-[11px] text-gray-500 mb-1 block">还款方式</label>
+                        <div class="flex gap-1.5 overflow-x-auto pb-1" style="scrollbar-width: none;">${repBtns}</div>
+                    </div>
+                </div>
+
+                <div class="p-3 bg-gray-50 border border-gray-100 rounded-xl space-y-3">
+                    <div class="flex gap-2">
+                        <div class="flex-1">
+                            <label class="text-[11px] text-gray-500 mb-1 block">计息方式</label>
+                            <select id="inst-rateType" class="input-field text-xs bg-white font-medium">
+                                <option value="monthly" ${c.rateType==='monthly'?'selected':''}>按月利率 (%)</option>
+                                <option value="total_amount" ${c.rateType==='total_amount'?'selected':''}>固定总利息 (元)</option>
+                                <option value="daily" ${c.rateType==='daily'?'selected':''}>按日利率 (%)</option>
+                                <option value="apr" ${c.rateType==='apr'?'selected':''}>按年化 (%)</option>
+                            </select>
+                        </div>
+                        <div class="flex-1">
+                            <label class="text-[11px] text-gray-500 mb-1 block">费率 / 金额</label>
+                            <input type="number" id="inst-rate" class="input-field font-bold bg-white" value="${c.rate ? (c.rateType === 'total_amount' ? c.rate : c.rate * 100) : ''}" placeholder="${c.rateType === 'total_amount' ? '如: 135' : '如: 0.6'}" step="0.01">
+                        </div>
+                    </div>
+                    
+                    <div id="actual-days-box" style="display: ${['daily','apr','monthly'].includes(c.rateType) ? 'flex' : 'none'}" class="items-center justify-between">
+                        <span class="text-[11px] text-gray-600">按真实日历天数计息</span>
+                        <div class="toggle ${c.actualDaysFirstMonth ? 'active' : ''}" onclick="this.classList.toggle('active'); window._tempActualDays = this.classList.contains('active');"></div>
+                    </div>
+                </div>
+
+                <div class="flex gap-2">
+                    <div class="flex-1"><label class="text-[11px] text-gray-500 mb-1 block">首期还款日</label><input type="date" id="inst-startDate" class="input-field text-xs" value="${c.startDate}"></div>
+                    <div class="flex-1"><label class="text-[11px] text-gray-500 mb-1 block">借款日 (选填)</label><input type="date" id="inst-borrowDate" class="input-field text-xs" value="${c.borrowDate}"></div>
+                </div>
+
+                <div class="p-3 bg-orange-50 border border-orange-100 rounded-xl space-y-3">
+                    <p class="text-[11px] font-bold text-orange-800">提前结清规则</p>
+                    <div class="flex items-center justify-between">
+                        <span class="text-[11px] text-gray-600">免去后续手续费/利息</span>
+                        <div class="toggle ${c.prepayWaiveFee ? 'active' : ''}" onclick="this.classList.toggle('active'); window._tempWaiveFee = this.classList.contains('active');"></div>
+                    </div>
+                    <div>
+                        <label class="text-[11px] text-gray-500 mb-1 block">违约金比例 (%)</label>
+                        <input type="number" id="inst-penalty" class="input-field text-xs bg-white" value="${c.prepayPenaltyRate ? c.prepayPenaltyRate * 100 : ''}" placeholder="填 0 或留空表示无违约金">
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="saveInstallment('${editId || ''}')" class="w-full mt-6 py-3 rounded-xl btn-primary font-bold text-sm shadow-md active:scale-95 transition-transform">保存</button>
+        </div>
+    `;
+    
+    window._tempRepType = c.repaymentType;
+    window._tempActualDays = c.actualDaysFirstMonth;
+    window._tempWaiveFee = c.prepayWaiveFee;
+
+    openModal(html);
+    
+    // 当计息方式改变时，控制“按真实日历天数计息”的显示，并更新 placeholder
+    document.getElementById('inst-rateType').addEventListener('change', function(e) {
+        const val = e.target.value;
+        const rateInput = document.getElementById('inst-rate');
+        const box = document.getElementById('actual-days-box');
+        if (val === 'total_amount') {
+            rateInput.placeholder = '如: 135';
+            box.style.display = 'none';
+        } else {
+            rateInput.placeholder = val === 'daily' ? '如: 0.033' : '如: 0.6';
+            box.style.display = 'flex';
+        }
+    });
+}
+
+// 辅助：切换渠道时自动更新预设参数
+function changeInstallmentChannel(channel) {
+    document.querySelectorAll('[data-channel]').forEach(el => {
+        el.classList.remove('bg-orange-500', 'text-white', 'shadow-md', 'border-orange-500', 'font-bold');
+        el.classList.add('bg-white', 'text-gray-600', 'border-gray-200');
+    });
+    const target = document.querySelector(`[data-channel="${channel}"]`);
+    if (target) {
+        target.classList.remove('bg-white', 'text-gray-600', 'border-gray-200');
+        target.classList.add('bg-orange-500', 'text-white', 'shadow-md', 'border-orange-500', 'font-bold');
+    }
+    
+    const preset = INSTALLMENT_PRESETS[channel];
+    if (preset) {
+        document.getElementById('inst-interestMode').value = preset.interestMode;
+        document.getElementById('inst-prepayPolicy').value = preset.prepayPolicy;
+        document.getElementById('inst-penaltyRate').value = preset.penaltyRate;
+        
+        // 自动切 rateType
+        const rateTypeSelect = document.getElementById('inst-rateType');
+        if (rateTypeSelect) rateTypeSelect.value = preset.rateType;
+        
+        // 自动切还款方式
+        window._tempRepType = preset.repaymentType;
+        document.querySelectorAll('.rep-btn').forEach(el => el.classList.remove('bg-blue-500', 'text-white', 'border-blue-500', 'font-bold'));
+        const repBtns = Array.from(document.querySelectorAll('.rep-btn'));
+        const targetRep = repBtns.find(b => b.textContent.includes(preset.repaymentType === 'equal_installment' ? '等额本息' : preset.repaymentType === 'equal_principal' ? '等额本金' : '先息后本'));
+        if (targetRep) targetRep.classList.add('bg-blue-500', 'text-white', 'border-blue-500', 'font-bold');
+    }
+}
+
+function saveInstallment(editId) {
+    const name = document.getElementById('inst-name').value.trim() || '未命名分期';
+    const principal = parseFloat(document.getElementById('inst-principal').value);
+    const periods = parseInt(document.getElementById('inst-periods').value);
+    const paidPeriodsHistory = parseInt(document.getElementById('inst-paid-history').value) || 0; // 🌟 新增读取
+    const rateType = document.getElementById('inst-rateType').value;
+    const rateInput = parseFloat(document.getElementById('inst-rate').value);
+    const startDate = document.getElementById('inst-startDate').value;
+    const borrowDate = document.getElementById('inst-borrowDate').value || startDate;
+    const penaltyInput = parseFloat(document.getElementById('inst-penalty').value) || 0;
+
+    if (!principal || principal <= 0) { showToast('请输入正确的本金'); return; }
+    if (!periods || periods < 1) { showToast('期数至少为 1'); return; }
+    if (paidPeriodsHistory < 0 || paidPeriodsHistory > periods) { showToast('已还期数不能超过总期数'); return; } // 🌟 校验
+    if (isNaN(rateInput) || rateInput < 0) { showToast('请输入正确的费率/金额'); return; }
+    if (!startDate) { showToast('请选择首期还款日'); return; }
+
+    const rate = (rateType === 'total_amount') ? rateInput : (rateInput / 100);
+    const prepayPenaltyRate = penaltyInput / 100;
+
+    const data = {
+        id: editId || 'inst_' + Date.now(),
+        name, principal, periods, rate, rateType,
+        repaymentType: window._tempRepType || 'equal_installment',
+        actualDaysFirstMonth: window._tempActualDays === true,
+        prepayWaiveFee: window._tempWaiveFee !== false,
+        prepayPenaltyRate,
+        paidPeriodsHistory, // 🌟 存入对象
+        startDate, borrowDate, note: '',
+        prepaid: false, prepaidDate: null,
+        createdAt: Date.now(), updatedAt: Date.now()
+    };
+
+    if (editId) {
+        const idx = appData.installments.findIndex(x => x.id === editId);
+        if (idx >= 0) {
+            data.prepaid = appData.installments[idx].prepaid;
+            data.prepaidDate = appData.installments[idx].prepaidDate;
+            data.createdAt = appData.installments[idx].createdAt;
+            appData.installments[idx] = sanitizeInstallment(data);
+        }
+    } else {
+        appData.installments.push(sanitizeInstallment(data));
+    }
+
+    saveData();
+    logOp(editId ? '修改分期' : '新建分期', name);
+    closeModal();
+    switchTab('installments', true);
+    showToast('保存成功');
+}
+
+function showPrepayInstallmentModal(id) {
+    const c = appData.installments.find(x => x.id === id);
+    if (!c) return;
+    const todayStr = formatDateLocal(new Date());
+    
+    const html = `
+        <div class="p-5">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-base font-bold">提前结清</h3>
+                <button onclick="closeModal()" class="p-2 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            <div class="mb-4">
+                <label class="text-[11px] text-gray-500 mb-1 block">结清日期</label>
+                <input type="date" id="prepay-date" class="input-field" value="${todayStr}" onchange="updatePrepayPreview('${id}')">
+            </div>
+            
+            <div id="prepay-preview" class="bg-gray-50 rounded-xl p-4 mb-4 border border-gray-100">
+                <!-- 动态渲染 -->
+            </div>
+
+            <div class="flex gap-2">
+                <button onclick="closeModal()" class="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium">取消</button>
+                <button onclick="markInstallmentPrepaid('${id}')" class="flex-1 py-2.5 rounded-xl bg-orange-500 text-white font-medium text-sm shadow-md">确认结清</button>
+            </div>
+        </div>
+    `;
+    openModal(html);
+    updatePrepayPreview(id);
+}
+
+function updatePrepayPreview(id) {
+    const c = appData.installments.find(x => x.id === id);
+    const dateInput = document.getElementById('prepay-date');
+    if (!c || !dateInput) return;
+    
+    const prepaidDate = dateInput.value;
+    const today = formatDateLocal(new Date());
+    if (prepaidDate < today) {
+        document.getElementById('prepay-preview').innerHTML = `<p class="text-xs text-red-500 text-center">结清日期不能早于今天</p>`;
+        return;
+    }
+
+    // 复制一份临时的合约，标记为已结清，调引擎算预览
+    const previewContract = { ...c, prepaid: true, prepaidDate };
+    const plan = calcInstallmentPlan(previewContract);
+    const st = plan.settlement;
+
+    if (!st) return;
+
+    let extraHtml = '';
+    if (st.penalty > 0) extraHtml += `<div class="flex justify-between text-xs text-red-500 mt-1"><span>违约金</span><span>+ ¥${toPlainNumber(st.penalty)}</span></div>`;
+    if (st.accruedFee > 0) extraHtml += `<div class="flex justify-between text-xs text-orange-500 mt-1"><span>已产生利息</span><span>+ ¥${toPlainNumber(st.accruedFee)}</span></div>`;
+
+    document.getElementById('prepay-preview').innerHTML = `
+        <div class="flex justify-between items-center mb-2 pb-2 border-b border-gray-200">
+            <span class="text-sm font-bold text-gray-800">结清金额合计</span>
+            <span class="text-lg font-bold text-red-500">¥${toPlainNumber(st.total)}</span>
+        </div>
+        <div class="flex justify-between text-xs text-gray-600">
+            <span>剩余本金</span><span>¥${toPlainNumber(st.remainingPrincipal)}</span>
+        </div>
+        ${extraHtml}
+        <div class="flex justify-between text-xs text-green-600 mt-2 bg-green-50 p-1.5 rounded">
+            <span>省去未来利息</span><span>- ¥${toPlainNumber(st.savedFee)}</span>
+        </div>
+    `;
+}
+
+async function markInstallmentPrepaid(id) {
+    const c = appData.installments.find(x => x.id === id);
+    const dateInput = document.getElementById('prepay-date');
+    if (!c || !dateInput) return;
+    
+    const prepaidDate = dateInput.value;
+    const today = formatDateLocal(new Date());
+    if (prepaidDate < today) { showToast('结清日期不能早于今天'); return; }
+
+    const confirmed = await showCustomConfirm(`确认于 ${prepaidDate} 结清该笔分期吗？`);
+    if (!confirmed) return;
+
+    c.prepaid = true;
+    c.prepaidDate = prepaidDate;
+    c.updatedAt = Date.now();
+
+    saveData();
+    logOp('提前结清', c.name);
+    closeModal();
+    switchTab('installments', true);
+    showToast('分期已结清');
+    playSuccessSound();
+}
+
+async function deleteInstallment(id) {
+    const confirmed = await showCustomConfirm('确定要删除此分期记录吗？');
+    if (!confirmed) return;
+    
+    appData.installments = appData.installments.filter(x => x.id !== id);
+    saveData();
+    logOp('删除分期', id);
+    switchTab('installments', true);
+    showToast('已删除');
 }
 
 // ==================== 导出菜单 ====================
@@ -5542,7 +6567,7 @@ function doExport(module, method) {
     let filename = `life-manager-${module}-${new Date().toISOString().split('T')[0]}.json`;
     if (module === 'all') exportData = appData;
     else if (module === 'tasks') exportData = { tasks: appData.tasks };
-    else if (module === 'bill') exportData = { incomes: appData.incomes, expenses: appData.expenses };
+    else if (module === 'bill') exportData = { incomes: appData.incomes, expenses: appData.expenses, installments: appData.installments }; // 👈 加上 installments
     else if (module === 'notes') exportData = { notes: appData.notes };
     else if (module === 'menstrual') exportData = { menstrual: appData.menstrual };
     const jsonStr = JSON.stringify(exportData, null, 2);
@@ -5601,6 +6626,8 @@ function analyzeImportData() {
     if (Array.isArray(data.expenses)) detectedModules.push({ key: 'expenses', label: '支出记录', count: data.expenses.length });
     if (Array.isArray(data.notes)) detectedModules.push({ key: 'notes', label: '记事数据', count: data.notes.length });
     if (data.menstrual) detectedModules.push({ key: 'menstrual', label: '经期数据', count: (data.menstrual.records || []).length });
+if (Array.isArray(data.installments)) detectedModules.push({ key: 'installments', label: '分期数据', count: data.installments.length }); // 👈 新增
+if (Array.isArray(data.goals)) detectedModules.push({ key: 'goals', label: '心愿储蓄', count: data.goals.length }); // 👈 新增
     if (detectedModules.length === 0) { showToast('未识别到有效数据'); return; }
     const moduleListHtml = detectedModules.map(m =>
         `<div class="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-50 mb-1.5">
@@ -5638,6 +6665,8 @@ async function confirmImport() {
     if (document.getElementById('import-module-expenses')?.checked) selectedModules.push('expenses');
     if (document.getElementById('import-module-notes')?.checked) selectedModules.push('notes');
     if (document.getElementById('import-module-menstrual')?.checked) selectedModules.push('menstrual');
+if (document.getElementById('import-module-installments')?.checked) selectedModules.push('installments'); // 👈 新增
+if (document.getElementById('import-module-goals')?.checked) selectedModules.push('goals'); // 👈 新增
     if (selectedModules.length === 0) { showToast('请至少选择一个模块'); return; }
     const confirmed = await showCustomConfirm('确定导入选中的模块吗？对应模块的现有数据将被覆盖。');
     if (!confirmed) return;
@@ -5652,6 +6681,15 @@ async function confirmImport() {
         appData.incomes = cleaned;
         details.push(`收入 ${cleaned.length} 条`);
     }
+    if (selectedModules.includes('installments') && Array.isArray(data.installments)) { // 👈 新增分期
+    const cleaned = data.installments.map(sanitizeInstallment).filter(Boolean);
+    appData.installments = cleaned;
+    details.push(`分期 ${cleaned.length} 条`);
+}
+if (selectedModules.includes('goals') && Array.isArray(data.goals)) { // 👈 新增心愿
+    appData.goals = data.goals; // 心愿单直接赋值即可
+    details.push(`心愿 ${data.goals.length} 条`);
+}
     if (selectedModules.includes('expenses') && Array.isArray(data.expenses)) {
         const cleaned = data.expenses.map(sanitizeExpense).filter(Boolean);
         cleaned.forEach(e => {
@@ -5870,6 +6908,7 @@ const views = {
     finish: { title: '打卡', subtitle: '完成每一件事', render: renderFinishView },
     menstrual: { title: '经期追踪', subtitle: '记录和预测经期周期', render: renderMenstrualView },
     bill: { title: '记账', subtitle: '记录每一笔收支', render: renderBillView },
+    installments: { title: '分期还款', subtitle: '管理分期台账', render: renderInstallmentsView }, // 👈 新增
     note: { title: '记事', subtitle: '好记性不如烂笔头', render: renderNoteView },
     me: { title: '设置', subtitle: '数据及账户管理', render: renderMeView }
 };
@@ -5947,12 +6986,13 @@ updateIcons(document.getElementById('fab-add-btn'));
 
     // 右下角 FAB 按钮
     const fabBtn = document.getElementById('fab-add-btn');
-    if (tab === 'finish' || tab === 'note' || tab === 'bill') {
-        fabBtn.style.display = 'flex';
-        if (tab === 'finish') fabBtn.onclick = showAddTaskModal;
-        else if (tab === 'note') fabBtn.onclick = showAddNoteModal;
-        else if (tab === 'bill') fabBtn.onclick = () => { resetDraft(); openDraft(); showAddBillModal(); };
-    } else {
+    if (tab === 'finish' || tab === 'note' || tab === 'bill' || tab === 'installments') {
+    fabBtn.style.display = 'flex';
+    if (tab === 'finish') fabBtn.onclick = showAddTaskModal;
+    else if (tab === 'note') fabBtn.onclick = showAddNoteModal;
+    else if (tab === 'bill') fabBtn.onclick = () => { resetDraft(); openDraft(); showAddBillModal(); };
+    else if (tab === 'installments') fabBtn.onclick = () => showAddInstallmentModal(); // 👈 新增
+} else {
         fabBtn.style.display = 'none';
     }
 
