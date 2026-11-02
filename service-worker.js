@@ -1,5 +1,5 @@
 // 🌟 每次发版，只需修改这里的版本号！
-const CACHE_NAME = 'life-manager-v5.3.0'; 
+const CACHE_NAME = 'life-manager-v5.3.1'; 
 
 const ASSETS_TO_CACHE = [
   './',
