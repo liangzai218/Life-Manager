@@ -2714,22 +2714,24 @@ function applyDiaryThemeUI() {
 
     const themeObj = DIARY_THEMES.find(t => t.id === window._tempThemeId) || DIARY_THEMES[0];
     
-    // 1. 强制唤醒 GPU 硬件加速，切断卡顿
     wrapper.style.transform = 'translateZ(0)';
-    wrapper.style.transition = 'none'; // 瞬间取消动画，防止冲突
+    wrapper.style.transition = 'none'; 
 
-    // 2. 拆分属性更新背景
     if (themeObj.type === 'color') {
         wrapper.style.backgroundColor = themeObj.bg;
         wrapper.style.backgroundImage = 'none';
+        wrapper.style.backgroundSize = 'auto'; // 🌟 修复：纯色重置
     } else if (themeObj.type === 'gradient') {
         wrapper.style.backgroundColor = '';
         wrapper.style.backgroundImage = themeObj.bg;
+        wrapper.style.backgroundSize = 'auto'; // 🌟 修复：渐变重置
     } else if (themeObj.type === 'image') {
         wrapper.style.backgroundColor = '#111';
         wrapper.style.backgroundImage = `linear-gradient(rgba(0,0,0,0.2), rgba(0,0,0,0.2)), url('${themeObj.url}')`;
+        wrapper.style.backgroundSize = 'cover'; // 🌟 核心修复：让图片以覆盖模式等比缩放
+        wrapper.style.backgroundPosition = 'center'; // 🌟 核心修复：居中显示
     }
-
+ 
     // 3. 更新文字颜色逻辑（保持原样不变）
     const currentMode = window._tempTextColor === 'auto' ? (themeObj.isDark ? 'white' : 'black') : window._tempTextColor;
     const colorObj = DIARY_TEXT_COLORS.find(c => c.id === currentMode) || DIARY_TEXT_COLORS[1];
