@@ -1145,9 +1145,9 @@ function openModal(html) {
         const modal = document.getElementById('fullscreen-modal');
         if (modal.classList.contains('active')) {
             modal.classList.remove('active'); 
-            // 🌟 新增：同步退栈
+            // 🌟 修复：静默替换历史栈
             if (history.state && history.state.modal) {
-                try { history.back(); } catch(err) {}
+                try { history.replaceState({ page: currentTab }, '', ''); } catch(err) {}
             }
         }
     }
@@ -1219,9 +1219,9 @@ function hideCustomConfirm() {
     const modal = document.getElementById('custom-confirm');
     if (modal.classList.contains('active')) {
         modal.classList.remove('active'); 
-        // 🌟 新增：同步退栈
+        // 🌟 修复：静默替换历史栈
         if (history.state && history.state.modal) {
-            try { history.back(); } catch(err) {}
+            try { history.replaceState({ page: currentTab }, '', ''); } catch(err) {}
         }
     }
 }
@@ -2714,24 +2714,26 @@ function applyDiaryThemeUI() {
 
     const themeObj = DIARY_THEMES.find(t => t.id === window._tempThemeId) || DIARY_THEMES[0];
     
-   // 1. 更新背景（瞬间去除 transition，防止 WebView 渲染卡死）
-wrapper.style.transition = 'none';
-if (themeObj.type === 'color') {
-    wrapper.style.background = themeObj.bg;
-} else if (themeObj.type === 'gradient') {
-    wrapper.style.background = themeObj.bg;
-} else if (themeObj.type === 'image') {
-    wrapper.style.background = `#111 linear-gradient(rgba(0,0,0,0.2), rgba(0,0,0,0.2)) center/cover no-repeat url('${themeObj.url}')`;
-}
-// 强制重绘后，恢复过渡动画
-void wrapper.offsetWidth;
-wrapper.style.transition = 'background-color 0.3s';
+    // 1. 强制唤醒 GPU 硬件加速，切断卡顿
+    wrapper.style.transform = 'translateZ(0)';
+    wrapper.style.transition = 'none'; // 瞬间取消动画，防止冲突
 
-    // 🌟 2. 从全局字典获取当前颜色
+    // 2. 拆分属性更新背景
+    if (themeObj.type === 'color') {
+        wrapper.style.backgroundColor = themeObj.bg;
+        wrapper.style.backgroundImage = 'none';
+    } else if (themeObj.type === 'gradient') {
+        wrapper.style.backgroundColor = '';
+        wrapper.style.backgroundImage = themeObj.bg;
+    } else if (themeObj.type === 'image') {
+        wrapper.style.backgroundColor = '#111';
+        wrapper.style.backgroundImage = `linear-gradient(rgba(0,0,0,0.2), rgba(0,0,0,0.2)), url('${themeObj.url}')`;
+    }
+
+    // 3. 更新文字颜色逻辑（保持原样不变）
     const currentMode = window._tempTextColor === 'auto' ? (themeObj.isDark ? 'white' : 'black') : window._tempTextColor;
-    const colorObj = DIARY_TEXT_COLORS.find(c => c.id === currentMode) || DIARY_TEXT_COLORS[1]; // 兜底用黑色
+    const colorObj = DIARY_TEXT_COLORS.find(c => c.id === currentMode) || DIARY_TEXT_COLORS[1];
 
-    // 🌟 3. 精准染色：只染正文 textarea 和带 .diary-theme-subtext 类的元素
     const textarea = document.getElementById('diary-content');
     if (textarea) textarea.style.color = colorObj.hex;
 
@@ -4800,16 +4802,15 @@ function openCenterModal(html, isNarrow = false, skipIcons = false, onRendered =
 
 
 function closeCenterModal(e) { 
-    // 只有在弹窗处于 active 状态，且是点击蒙层或触发关闭时
     if(!e || e.target === document.getElementById('center-modal-overlay')) {
         const overlay = document.getElementById('center-modal-overlay');
         if (overlay.classList.contains('active')) {
             overlay.classList.remove('active'); 
             resetDraft();
             
-            // 🌟 新增：如果历史栈顶层是我们压入的弹窗状态，则同步后退
+            // 🌟 修复：静默替换历史栈，不触发 popstate
             if (history.state && history.state.modal) {
-                try { history.back(); } catch(err) {}
+                try { history.replaceState({ page: currentTab }, '', ''); } catch(err) {}
             }
 
             if (_closeCenterReturnAction) {
@@ -9336,29 +9337,14 @@ window.addEventListener('popstate', (e) => {
         return;
     }
 
-    // 2. 拦截弹窗的物理返回
+        // 2. 拦截弹窗的物理返回
 const activeOverlays = document.querySelectorAll('.fullscreen-modal.active, .center-modal-overlay.active, .date-picker-modal.active');
 if (activeOverlays.length > 0) {
-    // 🌟 日记确认弹窗特殊处理：用户必须按钮选择，物理返回键只补栈不关弹窗
-    // 避免 closeCenterModal 直接关闭导致 Promise 悬空 + overlay.onclick 不恢复
-    if (document.querySelector('#center-modal-body [data-diary-confirm]')) {
+    // 🌟 强阻断弹窗特殊处理（日记未保存、应用更新）：物理返回键无效，只补栈不关弹窗
+    if (document.querySelector('#center-modal-body [data-diary-confirm]') || document.querySelector('#center-modal-body [data-update-confirm]')) {
         try { history.pushState({ page: currentTab }, '', ''); } catch(err) {}
         return;
     }
-    activeOverlays.forEach(overlay => {
-        if (overlay.id === 'center-modal-overlay') {
-            closeCenterModal({ target: overlay });
-        } else if (overlay.id === 'fullscreen-modal') {
-            closeModal({ target: overlay });
-        } else if (overlay.id === 'custom-date-picker') {
-            closeCustomDatePicker({ target: overlay });
-        } else {
-            overlay.classList.remove('active');
-        }
-    });
-    try { history.pushState({ page: currentTab }, '', ''); } catch(err) {}
-    return;
-}
 
     // 3. 🌟 日记编辑页：物理返回已退了一层栈，必须先补回再决策
 // 补栈后三种选择的栈状态全部正确：
@@ -9532,7 +9518,7 @@ async function showVersionLog() {
 
 // 更新弹窗（复用已有的 showChoiceConfirm 组件）
 async function showUpdatePrompt(worker) {
-    if (_isUpdatePromptActive) return; // 弹窗锁：防止刚进App时多次触发
+    if (_isUpdatePromptActive) return;
     _isUpdatePromptActive = true;
     _waitingWorker = worker;
 
@@ -9542,32 +9528,56 @@ async function showUpdatePrompt(worker) {
         const res = await fetch('./version.json?t=' + Date.now());
         if (res.ok) {
             const data = await res.json();
-    const latest = data[0]; // 取最新版本
-    versionStr = 'v' + latest.version;
-    if (latest.logs && latest.logs.length > 0) {
-        logsStr = latest.logs.map(l => '· ' + l).join('\n');
-    }
+            const latest = data[0];
+            versionStr = 'v' + latest.version;
+            if (latest.logs && latest.logs.length > 0) {
+                logsStr = latest.logs.map(l => '· ' + l).join('\n');
+            }
         }
     } catch(e) { console.warn('获取版本信息失败', e); }
 
-    const choice = await showChoiceConfirm(
-        '发现新版本 ' + versionStr,
-        logsStr,
-        [
-            { label: '立即更新', value: 'update', primary: true },
-            { label: '稍后更新', value: 'cancel' }
-        ]
-    );
+    return new Promise((resolve) => {
+        const html = `
+            <div class="flex flex-col" data-update-confirm="true">
+                <h3 class="text-[15px] font-bold text-gray-800 text-center mb-2">发现新版本 ${versionStr}</h3>
+                <p class="text-[13px] text-gray-600 text-center mb-5 whitespace-pre-line leading-relaxed max-h-[30vh] overflow-y-auto">${logsStr}</p>
+                <div class="flex flex-col gap-2">
+                    <button id="update-now-btn" class="w-full py-2.5 rounded-xl font-medium text-sm btn-primary">立即更新</button>
+                    <button id="update-later-btn" class="w-full py-2.5 rounded-xl font-medium text-sm bg-gray-100 text-gray-600">稍后更新</button>
+                </div>
+            </div>
+        `;
+        openCenterModal(html);
 
-    if (choice === 'update') {
-        if (_waitingWorker) {
-            _waitingWorker.postMessage({ action: 'skipWaiting' });
-        } else {
-            window.location.reload();
-        }
-    } else {
-        _isUpdatePromptActive = false; // 用户选稍后，释放锁
-    }
+        // 🌟 核心：禁用蒙层关闭
+        const overlay = document.getElementById('center-modal-overlay');
+        const originalOnclick = overlay.onclick;
+        overlay.onclick = (e) => { if (e.target === overlay) return; };
+
+        setTimeout(() => {
+            const cleanup = () => { 
+                overlay.onclick = originalOnclick; 
+                // 使用 back 关闭，会触发我们修改过的 popstate，但由于有 data-update-confirm 拦截，这里其实是在做退栈清理
+                closeCenterModal(); 
+                _isUpdatePromptActive = false;
+            };
+            
+            document.getElementById('update-now-btn').onclick = () => {
+                cleanup();
+                if (_waitingWorker) {
+                    _waitingWorker.postMessage({ action: 'skipWaiting' });
+                } else {
+                    window.location.reload();
+                }
+                resolve('update');
+            };
+            
+            document.getElementById('update-later-btn').onclick = () => {
+                cleanup();
+                resolve('cancel');
+            };
+        }, 50);
+    });
 }
 
 // 手动检查更新（供设置页调用）
