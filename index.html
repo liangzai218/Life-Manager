@@ -2896,6 +2896,7 @@ if (themeObj.type === 'color') {
     </div>
 </div>
         </div>
+    </div>
     `;
 }
 
@@ -5703,8 +5704,15 @@ function openDatePickerEngine(initialDate, options) {
 
 function closeCustomDatePicker(e) {
     if (!e || e.target.id === 'custom-date-picker') {
-        document.getElementById('custom-date-picker').classList.remove('active');
-        _pickerCallback = null;
+        const picker = document.getElementById('custom-date-picker');
+        if (picker.classList.contains('active')) {
+            picker.classList.remove('active');
+            _pickerCallback = null;
+            // 🌟 退出时同步清理历史栈
+            if (history.state && history.state.modal) {
+                try { history.replaceState({ page: currentTab }, '', ''); } catch(err) {}
+            }
+        }
     }
 }
 
@@ -9331,30 +9339,43 @@ window.addEventListener('popstate', (e) => {
     if (imgLightbox && imgLightbox.style.display === 'flex') {
         if (window._isPoppingImage) return;
         window._isPoppingImage = true;
-        hideImagePreview(true); // 传入 true，防止再次调用 history.back()
-        try { history.pushState({ page: currentTab }, '', ''); } catch(err) {} // 补回状态
+        hideImagePreview(true); 
+        try { history.pushState({ page: currentTab }, '', ''); } catch(err) {} 
         setTimeout(() => { window._isPoppingImage = false; }, 400);
         return;
     }
 
-        // 2. 拦截弹窗的物理返回
-const activeOverlays = document.querySelectorAll('.fullscreen-modal.active, .center-modal-overlay.active, .date-picker-modal.active');
-if (activeOverlays.length > 0) {
-    // 🌟 强阻断弹窗特殊处理（日记未保存、应用更新）：物理返回键无效，只补栈不关弹窗
-    if (document.querySelector('#center-modal-body [data-diary-confirm]') || document.querySelector('#center-modal-body [data-update-confirm]')) {
+    // 2. 拦截弹窗的物理返回
+    const activeOverlays = document.querySelectorAll('.fullscreen-modal.active, .center-modal-overlay.active, .date-picker-modal.active');
+    if (activeOverlays.length > 0) {
+        // 🌟 强阻断弹窗特殊处理
+        if (document.querySelector('#center-modal-body [data-diary-confirm]') || document.querySelector('#center-modal-body [data-update-confirm]')) {
+            try { history.pushState({ page: currentTab }, '', ''); } catch(err) {}
+            return;
+        }
+
+        // 🌟 正常关闭弹窗
+        activeOverlays.forEach(overlay => {
+            if (overlay.id === 'center-modal-overlay') {
+                closeCenterModal({ target: overlay });
+            } else if (overlay.id === 'fullscreen-modal') {
+                closeModal({ target: overlay });
+            } else if (overlay.id === 'custom-date-picker') {
+                closeCustomDatePicker({ target: overlay });
+            } else {
+                overlay.classList.remove('active');
+            }
+        });
         try { history.pushState({ page: currentTab }, '', ''); } catch(err) {}
         return;
     }
 
-    // 3. 🌟 日记编辑页：物理返回已退了一层栈，必须先补回再决策
-// 补栈后三种选择的栈状态全部正确：
-//   保存/不保存 → doDiaryExit 里 replaceState 修正到上一级
-//   继续编辑   → 栈保持 [..., {diary_detail}, {diary_edit}]，下次返回可再次触发
-if (currentTab === 'diary_edit') {
-    try { history.pushState({ page: 'diary_edit' }, '', ''); } catch(err) {}
-    handleDiaryBack();
-    return;
-}
+    // 3. 🌟 日记编辑页决策
+    if (currentTab === 'diary_edit') {
+        try { history.pushState({ page: 'diary_edit' }, '', ''); } catch(err) {}
+        handleDiaryBack();
+        return;
+    }
 
     // 4. 原有的页面路由拦截
     if (SUB_PAGE_ROUTES[currentTab]) {
@@ -9362,10 +9383,7 @@ if (currentTab === 'diary_edit') {
     } else if (currentTab === 'me') {
         switchTab('home');
     }
-});
-
-loadData();
-switchTab('home');
+}); // <-- 这个闭合括号必须要有
 
 // L0 层防御：向系统申请持久化存储（防止 iOS 7天不活跃清理）
 async function requestPersistentStorage() {
@@ -9378,6 +9396,9 @@ async function requestPersistentStorage() {
     }
 }
 requestPersistentStorage();
+// 🌟 应用初始化：加载数据并渲染首页
+loadData(); 
+switchTab('home');
 
 // 键盘弹出处理（通过可视区域高度精准判断，彻底解决“单独收起键盘”不恢复的问题）
 let _keyboardHideTimer = null;
