@@ -1135,9 +1135,23 @@ function _onTouchEnd(e) {
 function openModal(html) { 
     document.getElementById('modal-body').innerHTML = html; 
     document.getElementById('fullscreen-modal').classList.add('active'); 
+    // 🌟 新增：向历史栈压入弹窗状态
+    try { history.pushState({ page: currentTab, modal: true }, '', ''); } catch(e) {}
     updateIcons(document.getElementById('modal-body')); 
 }
-        function closeModal(e) { if (!e || e.target === document.getElementById('fullscreen-modal')) document.getElementById('fullscreen-modal').classList.remove('active'); }
+
+       function closeModal(e) { 
+    if (!e || e.target === document.getElementById('fullscreen-modal')) {
+        const modal = document.getElementById('fullscreen-modal');
+        if (modal.classList.contains('active')) {
+            modal.classList.remove('active'); 
+            // 🌟 新增：同步退栈
+            if (history.state && history.state.modal) {
+                try { history.back(); } catch(err) {}
+            }
+        }
+    }
+}
 
         let currentTab = 'home';
         let goalsExpandedId = null; // 记录当前展开的心愿ID
@@ -1173,6 +1187,7 @@ function toCurrency(amount) {
 function getTodayStr() {
     return formatDateLocal(new Date());
 }
+
 function updateIcons(root = document) {
     if (window.lucide && window.lucide.createIcons) {
         try {
@@ -1182,6 +1197,7 @@ function updateIcons(root = document) {
         }
     }
 }
+
 function showCustomConfirm(message) {
     return new Promise((resolve) => {
         const modal = document.getElementById('custom-confirm');
@@ -1192,12 +1208,22 @@ function showCustomConfirm(message) {
         const onConfirm = () => { hideCustomConfirm(); resolve(true); };
         const onCancel = () => { hideCustomConfirm(); resolve(false); };
         okBtn.onclick = onConfirm; cancelBtn.onclick = onCancel; modal.onclick = onCancel;
-        modal.classList.add('active'); // 触发纯白悬浮动画
+        modal.classList.add('active'); 
+        // 🌟 新增：向历史栈压入弹窗状态
+        try { history.pushState({ page: currentTab, modal: true }, '', ''); } catch(e) {}
     });
 }
+
+
 function hideCustomConfirm() {
     const modal = document.getElementById('custom-confirm');
-    modal.classList.remove('active'); // 触发收起动画
+    if (modal.classList.contains('active')) {
+        modal.classList.remove('active'); 
+        // 🌟 新增：同步退栈
+        if (history.state && history.state.modal) {
+            try { history.back(); } catch(err) {}
+        }
+    }
 }
         // 新增：多选项弹窗，返回 Promise<string|null>
 function showChoiceConfirm(title, message, options) {
@@ -2629,7 +2655,8 @@ function showThemePicker() {
 <div class="grid grid-cols-4 gap-1.5">
     ${DIARY_THEMES.map(t => {
         let bgStyle = t.type === 'color' ? `background-color: ${t.bg};` : (t.type === 'gradient' ? `background-image: ${t.bg};` : '');
-        let imgHtml = t.type === 'image' ? `<img src="${t.url}" class="w-full h-full object-cover">` : '';
+        // 🌟 核心：加载 _min 缩略图，加懒加载，加 pointer-events-none 防止吃点击事件
+        let imgHtml = t.type === 'image' ? `<img src="${t.url.replace('.jpg', '_min.jpg')}" loading="lazy" class="w-full h-full object-cover pointer-events-none">` : '';
         const isActive = window._tempThemeId === t.id;
         return `
             <div id="theme-bg-${t.id}" onclick="setDiaryTheme('${t.id}')" class="relative aspect-[3/4] rounded-lg overflow-hidden border-2 transition-all cursor-pointer active:scale-95 ${isActive ? 'border-blue-500 shadow-md' : 'border-transparent'}" style="${bgStyle}">
@@ -2687,14 +2714,18 @@ function applyDiaryThemeUI() {
 
     const themeObj = DIARY_THEMES.find(t => t.id === window._tempThemeId) || DIARY_THEMES[0];
     
-    // 1. 更新背景
-    if (themeObj.type === 'color') {
-        wrapper.style.background = themeObj.bg;
-    } else if (themeObj.type === 'gradient') {
-        wrapper.style.background = themeObj.bg;
-    } else if (themeObj.type === 'image') {
-        wrapper.style.background = `#111 linear-gradient(rgba(0,0,0,0.2), rgba(0,0,0,0.2)) center/cover no-repeat url('${themeObj.url}')`;
-    }
+   // 1. 更新背景（瞬间去除 transition，防止 WebView 渲染卡死）
+wrapper.style.transition = 'none';
+if (themeObj.type === 'color') {
+    wrapper.style.background = themeObj.bg;
+} else if (themeObj.type === 'gradient') {
+    wrapper.style.background = themeObj.bg;
+} else if (themeObj.type === 'image') {
+    wrapper.style.background = `#111 linear-gradient(rgba(0,0,0,0.2), rgba(0,0,0,0.2)) center/cover no-repeat url('${themeObj.url}')`;
+}
+// 强制重绘后，恢复过渡动画
+void wrapper.offsetWidth;
+wrapper.style.transition = 'background-color 0.3s';
 
     // 🌟 2. 从全局字典获取当前颜色
     const currentMode = window._tempTextColor === 'auto' ? (themeObj.isDark ? 'white' : 'black') : window._tempTextColor;
@@ -4744,7 +4775,7 @@ const SUBCATEGORY_MAP = {
 
 function openCenterModal(html, isNarrow = false, skipIcons = false, onRendered = null) {
     const content = document.querySelector('.center-modal-content');
-    _closeCenterReturnAction = null; // 每次打开新弹窗默认清空，防止串台
+    _closeCenterReturnAction = null; 
     if (isNarrow) {
         content.style.width = '65%';
         content.style.maxWidth = '220px';
@@ -4754,27 +4785,38 @@ function openCenterModal(html, isNarrow = false, skipIcons = false, onRendered =
     }
     
     document.getElementById('center-modal-overlay').classList.add('active');
+    // 🌟 新增：向历史栈压入弹窗状态
+    try { history.pushState({ page: currentTab, modal: true }, '', ''); } catch(e) {}
     
-    // 🌟 同步写入，避免 rAF 时序问题
     const body = document.getElementById('center-modal-body');
-body.innerHTML = html;
-if (!skipIcons) {
-    updateIcons(body);
-}
+    body.innerHTML = html;
+    if (!skipIcons) {
+        updateIcons(body);
+    }
     if (onRendered) {
         onRendered();
     }
 }
+
+
 function closeCenterModal(e) { 
+    // 只有在弹窗处于 active 状态，且是点击蒙层或触发关闭时
     if(!e || e.target === document.getElementById('center-modal-overlay')) {
-        document.getElementById('center-modal-overlay').classList.remove('active'); 
-        resetDraft();
-        
-        // 🌟 核心修复：如果有关联的返回动作，则延迟触发（比如返回心愿列表）
-        if (_closeCenterReturnAction) {
-            const action = _closeCenterReturnAction;
-            _closeCenterReturnAction = null;
-            setTimeout(action, 100); // 延迟一点等关闭动画播完
+        const overlay = document.getElementById('center-modal-overlay');
+        if (overlay.classList.contains('active')) {
+            overlay.classList.remove('active'); 
+            resetDraft();
+            
+            // 🌟 新增：如果历史栈顶层是我们压入的弹窗状态，则同步后退
+            if (history.state && history.state.modal) {
+                try { history.back(); } catch(err) {}
+            }
+
+            if (_closeCenterReturnAction) {
+                const action = _closeCenterReturnAction;
+                _closeCenterReturnAction = null;
+                setTimeout(action, 100); 
+            }
         }
     }
 }
@@ -5653,6 +5695,8 @@ function openDatePickerEngine(initialDate, options) {
     _wheelDay = parseInt(parts[2]);
 
     document.getElementById('custom-date-picker').classList.add('active');
+    // 🌟 新增：向历史栈压入弹窗状态
+    try { history.pushState({ page: currentTab, modal: true }, '', ''); } catch(e) {}
     renderWheels();
 }
 
@@ -9455,32 +9499,34 @@ setTimeout(() => { getEncryptionKey().catch(() => {}); }, 500);
 async function showVersionLog() {
     try {
         const res = await fetch('./version.json?t=' + Date.now());
-        if (res.ok) {
-            const data = await res.json();
-    const logsHtml = data.map(item => `
-        <div class="mb-4">
-            <h4 class="text-sm font-bold text-gray-800 mb-2">v${item.version}</h4>
-            ${item.logs.map(l => `<p class="text-sm text-gray-600 mb-1.5 pl-2 border-l-2 border-blue-400">${escapeHtml(l)}</p>`).join('')}
-        </div>
-    `).join('');
-            const html = `
-                <div class="p-5">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-base font-bold">版本日志</h3>
-                        <button onclick="closeModal()" class="p-2 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
-                    </div>
-                    <div class="space-y-1 max-h-[60vh] overflow-y-auto">
-                        ${logsHtml || '<p class="text-xs text-gray-400">暂无更新日志</p>'}
-                    </div>
-                    <button onclick="closeModal()" class="btn-primary w-full py-3 rounded-xl text-sm font-semibold mt-6">知道了</button>
+        if (!res.ok) throw new Error('文件不存在');
+        const data = await res.json();
+        const logsHtml = data.map(item => `
+            <div class="mb-4">
+                <h4 class="text-sm font-bold text-gray-800 mb-2">v${item.version}</h4>
+                ${item.logs.map(l => `<p class="text-sm text-gray-600 mb-1.5 pl-2 border-l-2 border-blue-400">${escapeHtml(l)}</p>`).join('')}
+            </div>
+        `).join('');
+        const html = `
+            <div class="p-5">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-base font-bold">版本日志</h3>
+                    <button onclick="closeModal()" class="p-2 rounded-full bg-gray-100"><i data-lucide="x" class="w-4 h-4"></i></button>
                 </div>
-            `;
-            openModal(html);
-        } else {
-            showToast('获取日志失败');
-        }
+                <div class="space-y-1 max-h-[60vh] overflow-y-auto">
+                    ${logsHtml || '<p class="text-xs text-gray-400">暂无更新日志</p>'}
+                </div>
+                <button onclick="closeModal()" class="btn-primary w-full py-3 rounded-xl text-sm font-semibold mt-6">知道了</button>
+            </div>
+        `;
+        openModal(html);
     } catch(e) {
-        showToast('网络异常，获取日志失败');
+        console.error('日志加载异常:', e);
+        if (e.message === '文件不存在' || e.name === 'SyntaxError') {
+            showToast('❌ JSON格式错误或文件不存在');
+        } else {
+            showToast('❌ 网络异常，获取日志失败');
+        }
     }
 }
 
