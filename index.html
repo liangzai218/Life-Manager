@@ -2412,43 +2412,53 @@ function addNote() {
 
 // ==================== 日记专属独立页面 ====================
 
-// 使用免费免权限的 IP 定位服务 (ipapi.co)，再联合 Open-Meteo 获取天气
+// 使用高德开放平台 API（IP定位 + 天气查询）
 async function fetchWeatherInfo() {
+    const AMAP_KEY = '08940573b435106805fffc2c3330e339';
+    
     try {
-        // 1. 获取 IP 和 经纬度、城市
-        const ipRes = await fetchWithTimeout('https://ipapi.co/json/', { timeout: 5000 });
-        if (!ipRes.ok) throw new Error('IP 获取失败');
+        // 1. 高德 IP 定位 (获取 adcode 和 城市名)
+        const ipRes = await fetchWithTimeout(`https://restapi.amap.com/v3/ip?key=${AMAP_KEY}`, { timeout: 5000 });
         const ipData = await ipRes.json();
         
-        if (!ipData.latitude || !ipData.longitude) throw new Error('经纬度获取失败');
-        
-        const lat = ipData.latitude;
-        const lon = ipData.longitude;
-        const city = ipData.city || ipData.region || '未知城市';
+        let cityName = '未知';
+        let adcode = '';
 
-        // 2. 使用经纬度获取天气 (Open-Meteo)
-        const wRes = await fetchWithTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`, { timeout: 5000 });
-        const wData = await wRes.json();
-        const temp = wData.current_weather?.temperature;
-        const code = wData.current_weather?.weathercode;
-        
-        let text = '未知';
-        let icon = 'sun';
-        if (code === 0) { text = '晴'; icon = 'sun'; }
-        else if ([1,2,3].includes(code)) { text = '多云'; icon = 'cloud-sun'; }
-        else if ([45,48].includes(code)) { text = '雾'; icon = 'cloud-fog'; }
-        else if ([51,53,55,61,63,65,80,81,82].includes(code)) { text = '雨'; icon = 'cloud-rain'; }
-        else if ([71,73,75,85,86].includes(code)) { text = '雪'; icon = 'cloud-snow'; }
-        else if ([95,96,99].includes(code)) { text = '雷雨'; icon = 'cloud-lightning'; }
-        
-        return { 
-            city: city,
-            weatherStr: `${text} ${temp ? Math.round(temp) + '°C' : ''}`.trim(), 
-            weatherIcon: icon 
-        };
+        if (ipData.status === '1') {
+            cityName = Array.isArray(ipData.city) ? (ipData.province || '未知') : ipData.city;
+            adcode = Array.isArray(ipData.adcode) ? '' : ipData.adcode;
+        }
+
+        // 如果没拿到 adcode，直接返回当前状态，避免后续报错
+        if (!adcode) {
+            return { city: cityName, weatherStr: '未知', weatherIcon: 'sun' };
+        }
+
+        // 2. 高德天气查询 (使用 adcode)
+        const weatherRes = await fetchWithTimeout(`https://restapi.amap.com/v3/weather/weatherInfo?key=${AMAP_KEY}&city=${adcode}&extensions=base`, { timeout: 5000 });
+        const weatherData = await weatherRes.json();
+
+        let weatherStr = '未知';
+        let weatherIcon = 'sun';
+
+        if (weatherData.status === '1' && weatherData.lives && weatherData.lives.length > 0) {
+            const live = weatherData.lives[0];
+            weatherStr = `${live.weather} ${live.temperature}°C`;
+            
+            // 中文天气现象映射为 Lucide 图标
+            const w = live.weather;
+            if (w.includes('晴')) weatherIcon = 'sun';
+            else if (w.includes('云') || w.includes('阴')) weatherIcon = 'cloud';
+            else if (w.includes('雨')) weatherIcon = 'cloud-rain';
+            else if (w.includes('雪')) weatherIcon = 'cloud-snow';
+            else if (w.includes('雾') || w.includes('霾')) weatherIcon = 'cloud-fog';
+            else if (w.includes('风') || w.includes('台风')) weatherIcon = 'wind';
+        }
+
+        return { city: cityName, weatherStr, weatherIcon };
+
     } catch (e) {
-        console.warn('IP定位或天气获取超时/失败:', e);
-        // 失败时返回静默的占位数据，不报错打扰用户
+        console.warn('高德定位或天气获取超时/失败:', e);
         return { city: '未能获取', weatherStr: '天气未知', weatherIcon: 'sun' };
     }
 }
