@@ -9753,7 +9753,7 @@ async function showVersionLog() {
     }
 }
 
-// 更新弹窗（复用已有的 showChoiceConfirm 组件）
+// 更新弹窗
 async function showUpdatePrompt(worker) {
     if (_isUpdatePromptActive) return;
     _isUpdatePromptActive = true;
@@ -9786,31 +9786,36 @@ async function showUpdatePrompt(worker) {
         `;
         openCenterModal(html);
 
-        // 🌟 核心：禁用蒙层关闭
+        // 禁用蒙层关闭
         const overlay = document.getElementById('center-modal-overlay');
         const originalOnclick = overlay.onclick;
         overlay.onclick = (e) => { if (e.target === overlay) return; };
 
         setTimeout(() => {
-            const cleanup = () => { 
-                overlay.onclick = originalOnclick; 
-                // 使用 back 关闭，会触发我们修改过的 popstate，但由于有 data-update-confirm 拦截，这里其实是在做退栈清理
-                closeCenterModal(); 
-                _isUpdatePromptActive = false;
-            };
-            
             document.getElementById('update-now-btn').onclick = () => {
-                cleanup();
+                // 1. 暴力抹除弹窗状态，绝不调用 closeCenterModal() 避免干扰 History
+                overlay.onclick = originalOnclick;
+                overlay.classList.remove('active');
+                _isUpdatePromptActive = false;
+                
                 if (_waitingWorker) {
+                    // 2. 通知后台 Service Worker 立即接管
                     _waitingWorker.postMessage({ action: 'skipWaiting' });
+                    
+                    // 3. 给 SW 留出 1 秒的时间进行生命周期交接，然后暴力替换当前 URL 强制刷新
+                    setTimeout(() => {
+                        window.location.replace(window.location.href);
+                    }, 1000);
                 } else {
-                    window.location.reload();
+                    window.location.replace(window.location.href);
                 }
                 resolve('update');
             };
             
             document.getElementById('update-later-btn').onclick = () => {
-                cleanup();
+                overlay.onclick = originalOnclick; 
+                closeCenterModal(); 
+                _isUpdatePromptActive = false;
                 resolve('cancel');
             };
         }, 50);
