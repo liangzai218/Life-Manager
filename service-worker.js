@@ -1,5 +1,5 @@
 // 🌟 每次发版，只需修改这里的版本号！
-const CACHE_NAME = 'life-manager-v5.4.3.3'; 
+const CACHE_NAME = 'life-manager-v5.4.3.4'; 
 
 const ASSETS_TO_CACHE = [
   './',
@@ -44,27 +44,12 @@ self.addEventListener('activate', (event) => {
 });
 
 // ==========================================
-// 4. 拦截请求：HTML 走网络优先，其他走缓存优先
+// 4. 拦截请求：优先使用缓存（保持你原来的策略）
 // ==========================================
 self.addEventListener('fetch', (event) => {
-    // 🌟 核心：如果是请求 HTML 页面，必须走网络优先！
-    if (event.request.mode === 'navigate' || (event.request.method === 'GET' && event.request.headers.get('accept') && event.request.headers.get('accept').includes('text/html'))) {
-        event.respondWith(
-            fetch(event.request).then((networkResponse) => {
-                return caches.open(CACHE_NAME).then((cache) => {
-                    cache.put(event.request, networkResponse.clone());
-                    return networkResponse;
-                });
-            }).catch(() => {
-                return caches.match(event.request); // 断网才用缓存
-            })
-        );
-    } else {
-        // 其他静态资源走缓存
-        event.respondWith(
-            caches.match(event.request).then((response) => {
-                return response || fetch(event.request);
-            })
-        );
-    }
+    event.respondWith(
+        caches.match(event.request).then((response) => {
+            return response || fetch(event.request);
+        })
+    );
 });
