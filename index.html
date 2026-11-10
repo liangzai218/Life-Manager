@@ -10094,11 +10094,13 @@ async function showUpdatePrompt(worker) {
     if (_waitingWorker) {
         _waitingWorker.postMessage({ action: 'skipWaiting' });
     }
-    // 🌟 核心修复：加 150ms 兜底强刷，且使用全局锁 _isReloading 防止和 controllerchange 冲突
+    // 🌟 强制打断浏览器的排队挂起，直接发起新的网络导航
     setTimeout(() => {
         if (window._isReloading) return;
         window._isReloading = true;
-        window.location.reload();
+        const url = new URL(window.location.href);
+        url.searchParams.set('_v', Date.now().toString());
+        window.location.replace(url.toString());
     }, 150);
     resolve('update');
 };
@@ -10167,11 +10169,13 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
             }
         }).catch(err => console.log('PWA 注册失败!', err));
 
-        // 监听控制权接管，平滑刷新（加入全局锁防止双载）
+        // 监听控制权接管，平滑刷新（同样使用强制导航）
 navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (window._isReloading) return;
     window._isReloading = true;
-    window.location.reload();
+    const url = new URL(window.location.href);
+    url.searchParams.set('_v', Date.now().toString());
+    window.location.replace(url.toString());
 });
     });
 }
