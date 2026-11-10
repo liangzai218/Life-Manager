@@ -9775,15 +9775,21 @@ async function showUpdatePrompt(worker) {
 
     return new Promise((resolve) => {
         const html = `
-            <div class="flex flex-col" data-update-confirm="true">
-                <h3 class="text-[15px] font-bold text-gray-800 text-center mb-2">发现新版本 ${versionStr}</h3>
-                <p class="text-[13px] text-gray-600 text-center mb-5 whitespace-pre-line leading-relaxed max-h-[30vh] overflow-y-auto">${logsStr}</p>
-                <div class="flex flex-col gap-2">
-                    <button id="update-now-btn" class="w-full py-2.5 rounded-xl font-medium text-sm btn-primary">立即更新</button>
-                    <button id="update-later-btn" class="w-full py-2.5 rounded-xl font-medium text-sm bg-gray-100 text-gray-600">稍后更新</button>
-                </div>
-            </div>
-        `;
+    <div class="flex flex-col" data-update-confirm="true">
+        <h3 class="text-[15px] font-bold text-gray-800 text-center mb-2">发现新版本 ${versionStr}</h3>
+        <p class="text-[13px] text-gray-600 text-center mb-4 whitespace-pre-line leading-relaxed max-h-[20vh] overflow-y-auto">${logsStr}</p>
+        
+        <!-- 🌟 新增的提示文案 -->
+        <p class="text-[11px] text-red-500 font-medium text-center mb-4 bg-red-50 py-1.5 rounded-lg">
+            ⚠️ 更新会强制刷新页面，如当前有未保存内容请稍后再更新！
+        </p>
+
+        <div class="flex flex-col gap-2">
+            <button id="update-now-btn" class="w-full py-2.5 rounded-xl font-medium text-sm btn-primary">立即更新</button>
+            <button id="update-later-btn" class="w-full py-2.5 rounded-xl font-medium text-sm bg-gray-100 text-gray-600">稍后更新</button>
+        </div>
+    </div>
+`;
         openCenterModal(html);
 
         // 禁用蒙层关闭
