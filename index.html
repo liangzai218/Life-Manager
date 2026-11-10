@@ -10090,14 +10090,18 @@ async function showUpdatePrompt(worker) {
             };
             
             document.getElementById('update-now-btn').onclick = () => {
-                cleanup();
-                if (_waitingWorker) {
-                    _waitingWorker.postMessage({ action: 'skipWaiting' });
-                } else {
-                    window.location.reload();
-                }
-                resolve('update');
-            };
+    cleanup();
+    if (_waitingWorker) {
+        _waitingWorker.postMessage({ action: 'skipWaiting' });
+    }
+    // 🌟 核心修复：加 150ms 兜底强刷，且使用全局锁 _isReloading 防止和 controllerchange 冲突
+    setTimeout(() => {
+        if (window._isReloading) return;
+        window._isReloading = true;
+        window.location.reload();
+    }, 150);
+    resolve('update');
+};
             
             document.getElementById('update-later-btn').onclick = () => {
                 cleanup();
@@ -10163,13 +10167,12 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
             }
         }).catch(err => console.log('PWA 注册失败!', err));
 
-        // 监听控制权接管，平滑刷新
-        let refreshing;
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (refreshing) return;
-            refreshing = true;
-            window.location.reload();
-        });
+        // 监听控制权接管，平滑刷新（加入全局锁防止双载）
+navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (window._isReloading) return;
+    window._isReloading = true;
+    window.location.reload();
+});
     });
 }
     </script>
