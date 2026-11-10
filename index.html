@@ -11,8 +11,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="app-icon.png">
-<link rel="icon" sizes="192x192" href="app-icon.png">
-<link rel="icon" sizes="512x512" href="app-icon.png">
+<link rel="icon" type="image/png" href="app-icon.png">
 <script>
     // 判断：只要是 http 或 https 线上环境，就用本地文件
     if (location.protocol === 'http:' || location.protocol === 'https:') {
@@ -20,19 +19,17 @@
         document.write('<script src="./tailwind.min.js"><\/script>');
         document.write('<script src="./lucide.min.js"><\/script>');
         document.write('<script src="./confetti.min.js"><\/script>');
-        document.write('<script src="./chart.min.js"><\/script>');
     } else {
         // 本地：不管是 file:// 还是 content://，为了调试方便，一律走 CDN
         document.write('<script src="https://cdn.tailwindcss.com"><\/script>');
         document.write('<script src="https://unpkg.com/lucide@latest"><\/script>');
         document.write('<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"><\/script>');
-        document.write('<script src="https://cdn.bootcdn.net/ajax/libs/Chart.js/3.9.1/chart.min.js"><\/script>');
     }
 </script>
     <style>
         :root { --bg-color: #F0F4F8; --accent-color: #3B82F6; --glass-bg: rgba(255, 255, 255, 0.6); --glass-border: rgba(255, 255, 255, 0.4); }
         * { -webkit-tap-highlight-color: transparent; touch-action: manipulation; box-sizing: border-box; }
-        html { font-size: 15px; background: linear-gradient(135deg, #E8F0F8 0%, #F5F7FA 50%, #EDF2F7 100%); }
+        html { font-size: 14px; background: linear-gradient(135deg, #E8F0F8 0%, #F5F7FA 50%, #EDF2F7 100%); }
         html, body { margin: 0; padding: 0; }
         body { background: transparent; font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'STHeiti', 'Segoe UI', sans-serif; color: #2D3748; min-height: 100vh; padding-bottom: 12px; overflow-x: hidden; }
      
@@ -76,10 +73,10 @@
         .note-card { background: rgba(255, 255, 255, 0.85); border-radius: 14px; padding: 14px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.03); transition: all 0.2s ease; cursor: pointer; }
         .habit-card { 
     background: linear-gradient(135deg, rgba(239, 246, 255, 0.95) 0%, rgba(255, 255, 255, 0.95) 100%); 
-    border-radius: 20px; padding: 12px 14px; margin-bottom: 12px; 
+    border-radius: 14px; padding: 10px 12px; margin-bottom: 10px; 
     border: 1px solid rgba(191, 219, 254, 0.5); /* 淡蓝边框 */
     box-shadow: 0 4px 12px rgba(59, 130, 246, 0.04); 
-    transition: all 0.2s ease; display: flex; align-items: center; gap: 12px; cursor: pointer; position: relative; overflow: hidden; 
+    transition: all 0.2s ease; display: flex; align-items: center; gap: 10px; cursor: pointer; position: relative; overflow: hidden; 
 }
 .habit-card:active { transform: scale(0.98); }
 
@@ -90,11 +87,11 @@
 }
 
 /* 图标区域缩小，并加上圆角底色 */
-.habit-icon { width: 46px; height: 46px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0; }
+.habit-icon { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
 .habit-content { flex: 1; min-width: 0; }
 
 /* 文字紧凑排版（允许自然换行） */
-.habit-name { font-size: 1.05rem; font-weight: 700; color: #1e293b; line-height: 1.3; word-break: break-all; }
+.habit-name { font-size: 0.95rem; font-weight: 700; color: #1e293b; line-height: 1.3; word-break: break-all; }
 .habit-card.completed .habit-name { color: #94a3b8; text-decoration: line-through; }
 .habit-subtitle { font-size: 11px; margin-top: 3px; display: flex; align-items: center; gap: 4px; color: #64748b; }
 .habit-subtitle .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -108,47 +105,15 @@
 .check-btn.unchecked { background: transparent; border: 1.5px solid #cbd5e1; color: #cbd5e1; }
 .check-btn.checked { background: #dcfce7; border: 1.5px solid #22c55e; color: #16a34a; }
 
-        .income-card { background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white; padding: 16px 18px; border-radius: 18px; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.2); }
-
-        .date-picker-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 3000; display: flex; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: all 0.25s ease; }
-        .date-picker-modal.active { opacity: 1; visibility: visible; }
-        .date-picker-modal .picker-box { background: white; border-radius: 20px; padding: 24px 20px 20px; width: 90%; max-width: 340px; transform: scale(0.9); transition: transform 0.25s ease; }
-        .date-picker-modal.active .picker-box { transform: scale(1); }
-        .date-picker-modal .picker-box input[type="date"] { width: 100%; padding: 12px; border: 1px solid #E5E7EB; border-radius: 12px; font-size: 16px; outline: none; background: #F9FAFB; }
-        .date-picker-modal .picker-box input[type="date"]:focus { border-color: #3B82F6; background: white; }
-        .tab-btn-small { padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 600; transition: all 0.25s ease; background: rgba(255, 255, 255, 0.25); color: rgba(255, 255, 255, 0.8); border: 1px solid rgba(255, 255, 255, 0.3); cursor: pointer; }
-        .tab-btn-small.active { background: rgba(255, 255, 255, 0.9); color: #10B981; }
-        .tab-btn-small:active { transform: scale(0.95); }
-        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-        .calendar-day { aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px; font-size: 13px; font-weight: 500; transition: all 0.2s ease; cursor: pointer; position: relative; min-height: 40px; background: #F9FAFB; }
-        .calendar-day:active { transform: scale(0.92); }
-        .calendar-day.has-record { background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25); }
-        .calendar-day.today { border: 2px solid #3B82F6; }
-        .calendar-day.other-month { display: none; }
-        .calendar-day.disabled { opacity: 0.4; cursor: not-allowed; }
-        .calendar-day .record-amount { font-size: 9px; margin-top: 1px; opacity: 0.9; }
-        .month-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-        .month-item { aspect-ratio: 1.3; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 12px; font-size: 13px; font-weight: 500; transition: all 0.2s ease; cursor: pointer; background: rgba(243, 244, 246, 0.8); }
-        .month-item:active { transform: scale(0.95); }
-        .month-item.has-record { background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white; box-shadow: 0 2px 10px rgba(16, 185, 129, 0.25); }
-        .month-item.selected { border: 2px solid #3B82F6; }
-        .month-item .month-income { font-size: 9px; margin-top: 2px; opacity: 0.85; }
         .habit-calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
         .habit-calendar-day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 11px; font-weight: 500; background: rgba(243, 244, 246, 0.8); color: #6B7280; min-height: 32px; }
         .habit-calendar-day.completed { background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%); color: white; box-shadow: 0 1px 4px rgba(59, 130, 246, 0.25); }
         .habit-calendar-day.today { border: 1.5px solid #3B82F6; }
-        .record-item { display: flex; align-items: center; padding: 10px 12px; background: rgba(243, 244, 246, 0.6); border-radius: 10px; margin-bottom: 6px; }
-        .record-item:last-child { margin-bottom: 0; }
+        
         .stat-card { background: rgba(255, 255, 255, 0.9); border-radius: 14px; padding: 14px 10px; text-align: center; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04); }
         .stat-card .stat-number { font-size: 24px; font-weight: 700; }
         .stat-card .stat-label { font-size: 11px; color: #6B7280; margin-top: 4px; }
-        .status-badge { display: inline-block; padding: 4px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; }
-        .status-badge.menstruating { background: #EC4899; color: white; }
-        .status-badge.ovulation { background: #FBBF24; color: #78350F; }
-        .status-badge.safe { background: #10B981; color: white; }
-        .status-badge.follicular { background: #9CA3AF; color: white; }
-        .status-badge.luteal { background: #8B5CF6; color: white; }
-        .status-badge.empty { background: #D1D5DB; color: #4B5563; }
+    
         .menstrual-calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
         .menstrual-calendar-day { aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px; font-size: 13px; font-weight: 500; transition: all 0.15s ease; cursor: pointer; position: relative; min-height: 40px; background: #F9FAFB; color: #6B7280; }
         .menstrual-calendar-day:active { transform: scale(0.92); }
@@ -186,14 +151,6 @@ body.keyboard-open .fab-btn {
     opacity: 0; visibility: hidden; transition: all 0.3s ease; 
 }
 .center-modal-overlay.active { opacity: 1; visibility: visible; }
-/* 居中弹窗（保持自适应，但去掉了固定高度） */
-        .center-modal-content { 
-            background: #FFFFFF; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
-            width: 85%; max-width: 320px; border-radius: 20px; padding: 16px; 
-            transform: scale(0.9) translateY(20px); 
-            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-.center-modal-overlay.active .center-modal-content { transform: scale(1) translateY(0); }
 
 .finance-input {
     background: #F3F4F6; border: none; border-radius: 9px;
@@ -204,34 +161,8 @@ body.keyboard-open .fab-btn {
 .finance-input::placeholder { font-size: 13px; font-weight: 400; color: #9CA3AF; }
 
 /* 流水卡片（改成高级蓝） */
-.day-card { background: rgba(255, 255, 255, 0.9); border-radius: 12px; overflow: hidden; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); }
-.day-card-header { background: #F8FAFC; color: #64748B; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; }
-.day-card-body { padding: 0 12px; }
-.record-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px dashed rgba(0,0,0,0.1); cursor: pointer; transition: opacity 0.2s; }
-.record-row:last-child { border-bottom: none; }
-.record-row:active { opacity: 0.6; }
 .bill-list-container { content-visibility: auto; }
 
-/* 顶部总览卡片（改成高级蓝） */
-.overview-card { background: rgba(255, 255, 255, 0.9); border-radius: 16px; overflow: hidden; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.05); }
-.overview-header { background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white; padding: 16px 16px 14px; text-align: center; }
-.overview-body { padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; background: #F9FAFB; }
-
-/* 美化后的日期选择器（伪装成胶囊按钮） */
-.date-picker-btn {
-    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-    background: #F3F4F6; padding: 6px 14px; border-radius: 20px;
-    font-size: 13px; font-weight: 600; color: #4B5563;
-    position: relative; overflow: hidden; cursor: pointer;
-}
-/* 隐藏原生 input 的丑陋外观，但保留点击呼出系统的功能 */
-.date-picker-btn input[type="date"] {
-    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
-}
-/* 隐藏日期输入框的默认图标 */
-input[type="date"]::-webkit-calendar-picker-indicator {
-    position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;
-}
 
 /* 极简纯白悬浮卡片 */
 .center-modal-content { 
@@ -273,6 +204,13 @@ html, body { scrollbar-width: none !important; -ms-overflow-style: none !importa
 .wheel-highlight { position: absolute; top: 50%; left: 0; right: 0; height: 36px; transform: translateY(-50%); border-top: 1px solid #E5E7EB; border-bottom: 1px solid #E5E7EB; pointer-events: none; z-index: 10; }
 /* 上下边缘的白色渐变遮罩（不用毛玻璃，用渐变实现视觉模糊） */
 .wheel-mask { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 11; background: linear-gradient(to bottom, rgba(255,255,255,1) 0%, rgba(255,255,255,0) 30%, rgba(255,255,255,0) 70%, rgba(255,255,255,1) 100%); }
+
+/* 🌟 新增：为 contenteditable 的 div 模拟 placeholder */
+#diary-content:empty:before {
+    content: attr(data-placeholder);
+    color: #9CA3AF;
+    pointer-events: none;
+}
     </style>
 </head>
 <body>
@@ -490,7 +428,6 @@ let _isUpdatePromptActive = false;
 let _accountSwitching = false;
 let _lastSyncSuccess = null;
 let _syncConfigEditing = false;
-let _incomeChartInst = null, _expenseChartInst = null;   // 新增：图表实例，用于销毁旧图表
 
         function logOp(action, detail = '') {
             try {
@@ -1178,7 +1115,7 @@ function toCurrency(amount) {
     const decimalPart = parts[1] === '00' ? '' : '.' + parts[1];
     return '¥ ' + integerPart + decimalPart;
 }
-        function formatDateTime(timestamp) { const d = new Date(timestamp); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+        
         function formatTime(timestamp) { const d = new Date(timestamp); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
         function isFutureDate(dateStr) { const date = new Date(dateStr); const today = new Date(); today.setHours(23, 59, 59, 999); return date > today; }
         function escapeHtml(str) { if (!str) return ''; return String(str).replace(/[&<>"']/g, function(m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; if (m === '"') return '&quot;'; if (m === "'") return '&#39;'; return m; }); }
@@ -1509,17 +1446,10 @@ countdownCardHtml = `
     ${syncHtml}
     
     <div class="grid grid-cols-3 gap-2">
-        <!-- 🌟 倒数日卡片替换了原来的今日打卡 -->
-        ${countdownCardHtml}
-        
-        <!-- 今日打卡保留代码，暂不显示
-        <div class="glass-card p-3 rounded-xl text-center" style="background: rgba(239, 246, 255, 0.85); border-color: rgba(191, 219, 254, 0.5);">
-            <p class="text-2xl font-bold text-blue-500 truncate px-1" style="font-size: clamp(1.1rem, 4vw, 1.5rem);">${completedTasks}<span class="text-base font-medium text-gray-400">/${totalTasks}</span></p>
-            <p class="text-[11px] text-gray-500 mt-1">今日打卡</p>
-        </div>
-        -->
-        
-        <!-- 今日支出卡片 -->
+    <!-- 🌟 倒数日卡片替换了原来的今日打卡 -->
+    ${countdownCardHtml}
+    
+    <!-- 今日支出卡片 -->
 <div class="glass-card p-3 rounded-xl flex flex-col justify-center items-center" style="background: rgba(254, 242, 242, 0.85); border-color: rgba(254, 202, 202, 0.5);">
     <div class="h-[40px] flex items-center justify-center w-full overflow-hidden">
         <p class="font-bold text-red-500 truncate px-1" style="font-size: clamp(1.2rem, 4.5vw, 1.6rem); line-height: 1;">¥${toPlainNumber(todayExpense)}</p>
@@ -2237,16 +2167,6 @@ async function handleTaskCalendarClick(taskId, dateStr, hasRecord) {
     }
 }
 
-async function deleteCompletion(taskId, completionId) {
-    const confirmed = await showCustomConfirm('确定要删除这条打卡记录吗？');
-    if (!confirmed) return;
-    const task = appData.tasks.find(t => t.id === taskId);
-    task.completions = task.completions.filter(c => c.id !== completionId);
-    task.updatedAt = Date.now();
-    saveData(); logOp('删除打卡记录', task.name);
-    showTaskStats(taskId); showToast('已删除');
-}
-
 async function deleteTask(taskId) {
     const confirmed = await showCustomConfirm('确定要删除此习惯吗？所有打卡记录也将被删除。');
     if (!confirmed) return;
@@ -2348,57 +2268,94 @@ function renderStandardNoteList(notes) {
             preview = lines.slice(0, 2).join('\n');
         }
         return `
-        <div class="note-card" onclick="showNoteDetail('${note.id}')">
+        <div class="note-card p-3 rounded-xl" onclick="showNoteDetail('${note.id}')">
             <div class="flex justify-between items-start">
                 <div class="flex-1 min-w-0">
-                    <p class="font-semibold text-sm text-gray-800 truncate">${escapeHtml(note.title)}</p>
-                    ${noteType === 'text' && preview ? `<p class="text-xs text-gray-500 mt-0.5 line-clamp-2">${escapeHtml(preview)}</p>` : ''}
-                    ${noteType === 'password' ? `<p class="text-xs text-gray-500 mt-0.5">${escapeHtml(note.account || '无账号')}</p>` : ''}
-                    <p class="text-[10px] text-gray-400 mt-1">${new Date(note.updatedAt).toLocaleDateString()}</p>
+                    <p class="font-semibold text-[13px] text-gray-800 truncate">${escapeHtml(note.title)}</p>
+                    ${noteType === 'text' && preview ? `<p class="text-[11px] text-gray-500 mt-0.5 line-clamp-2">${escapeHtml(preview)}</p>` : ''}
+                    ${noteType === 'password' ? `<p class="text-[11px] text-gray-500 mt-0.5">${escapeHtml(note.account || '无账号')}</p>` : ''}
+                    <p class="text-[9px] text-gray-400 mt-1">${new Date(note.updatedAt).toLocaleDateString()}</p>
                 </div>
-                <button onclick="event.stopPropagation(); deleteNote('${note.id}')" class="p-1.5 text-gray-400 hover:text-red-500 ml-2"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                <button onclick="event.stopPropagation(); deleteNote('${note.id}')" class="p-1 text-gray-400 hover:text-red-500 ml-2"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
             </div>
         </div>
         `;
     }).join('');
 }
 
-// 渲染日记列表（复刻图一时间轴风格）
+// 渲染日记列表（完美复刻图二：按组截断的局部虚线）
 function renderDiaryList(notes) {
-    // 左侧时间轴虚线
-    let html = `<div class="absolute left-[19px] top-4 bottom-0 w-px border-l border-dashed border-gray-300 z-0"></div>`;
-    
-    html += notes.map(note => {
-        const d = parseDate(note.date);
-        const weekStr = ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
-        const dateStr = `${d.getFullYear()} / ${String(d.getMonth()+1).padStart(2,'0')} / ${String(d.getDate()).padStart(2,'0')}`;
-        const weatherIcon = getWeatherIcon(note.weather);
-        
-        // 图片九宫格预览 (最多显示3张)
-        let imgsHtml = '';
-        if (note.imageIds && note.imageIds.length > 0) {
-            imgsHtml = `<div class="grid grid-cols-3 gap-1 mt-3">
-                ${note.imageIds.slice(0, 3).map(id => `<img data-asset-id="${id}" class="w-full h-20 object-cover rounded-lg bg-gray-100">`).join('')}
-                ${note.imageIds.length > 3 ? `<div class="w-full h-20 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-xs">+${note.imageIds.length - 3}</div>` : ''}
-            </div>`;
-        }
+    if (!notes || notes.length === 0) return '';
 
-        return `
-        <div class="relative z-10 flex gap-3 mb-4">
-            <!-- 时间轴节点图标 -->
-            <div class="w-10 h-10 rounded-full bg-white shadow-sm border border-gray-100 flex items-center justify-center flex-shrink-0 text-blue-400 mt-1">
-                <i data-lucide="${weatherIcon}" class="w-5 h-5"></i>
+    const groupedByDate = {};
+    notes.forEach(note => {
+        if (!groupedByDate[note.date]) {
+            groupedByDate[note.date] = [];
+        }
+        groupedByDate[note.date].push(note);
+    });
+
+    const sortedDates = Object.keys(groupedByDate).sort((a, b) => new Date(b) - new Date(a));
+
+    // 🌟 移除了全局的 padding 和绝对定位的虚线，改由每个日期组内部自己控制
+    let html = `<div class="pb-4">`;
+
+    html += sortedDates.map(dateStr => {
+        const dayNotes = groupedByDate[dateStr];
+        
+        const d = parseDate(dateStr);
+        const weekStr = ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
+        const displayDate = `${d.getFullYear()} / ${String(d.getMonth()+1).padStart(2,'0')} / ${String(d.getDate()).padStart(2,'0')}`;
+        
+        const weatherIcon = getWeatherIcon(dayNotes[0].weather);
+
+        // 🌟 核心布局：外层 flex，左侧固定宽度画时间轴，右侧自适应内容
+        let dayHtml = `
+        <div class="flex gap-2.5 mb-7"> 
+            
+            <!-- 左侧时间轴列 -->
+            <div class="flex flex-col items-center flex-shrink-0 w-8">
+                <!-- 天气图标：纯图标，无框，无背景 -->
+                <div class="w-8 h-8 flex items-center justify-center text-[#5B9BD5] z-10 flex-shrink-0">
+                    <i data-lucide="${weatherIcon}" class="w-5 h-5"></i>
+                </div>
+                <!-- 局部虚线：flex-1 使其跟随右侧高度自动拉长，直到当天最后一张卡片底部 -->
+                <div class="w-px border-l-[1.5px] border-dashed border-gray-400/60 flex-1 mt-1"></div>
             </div>
             
-            <!-- 日记卡片：点击跳转到独立详情页 -->
-            <div class="flex-1 bg-white rounded-2xl p-4 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] border border-gray-100 active:scale-[0.98] transition-transform" onclick="_currentDiaryId='${note.id}'; switchTab('diary_detail', true)">
-                <p class="text-[11px] text-blue-500 font-bold tracking-wider mb-2">${dateStr} · ${weekStr}</p>
-                <p class="text-[13px] text-gray-700 leading-relaxed line-clamp-3">${escapeHtml(note.content || '')}</p>
-                ${imgsHtml}
-            </div>
-        </div>
+            <!-- 右侧内容区 -->
+            <div class="flex-1 min-w-0">
+                <!-- 日期文字（h-8 保证与左侧图标垂直居中对齐） -->
+                <div class="text-[#5B9BD5] font-bold text-[14px] tracking-wide h-8 flex items-center mb-2">
+                    ${displayDate} · ${weekStr}
+                </div>
+                
+                <!-- 日记卡片列表 -->
+                <div class="space-y-3">
         `;
+
+        dayHtml += dayNotes.map(note => {
+    let imgsHtml = '';
+    if (note.imageIds && note.imageIds.length > 0) {
+        imgsHtml = `<div class="grid grid-cols-3 gap-1.5 mt-3">
+            ${note.imageIds.slice(0, 3).map(id => `<img data-asset-id="${id}" class="w-full h-16 object-cover rounded-md bg-gray-50">`).join('')}
+            ${note.imageIds.length > 3 ? `<div class="w-full h-16 bg-gray-50 rounded-md flex items-center justify-center text-gray-400 text-xs">+${note.imageIds.length - 3}</div>` : ''}
+        </div>`;
+    }
+
+    return `
+        <div class="bg-white rounded-xl p-3 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.05)] border border-gray-100/50 active:scale-[0.98] transition-transform cursor-pointer" onclick="_currentDiaryId='${note.id}'; switchTab('diary_detail', true)">
+            <p class="text-[13px] text-gray-700 leading-relaxed line-clamp-3">${escapeHtml(note.content || '')}</p>
+            ${imgsHtml}
+        </div>
+    `;
+}).join('');
+
+        dayHtml += `</div></div></div>`; // 闭合右侧卡片列表、右侧内容区、当天外层
+        return dayHtml;
     }).join('');
+
+    html += `</div>`;
     return html;
 }
 
@@ -2455,53 +2412,45 @@ function addNote() {
 
 // ==================== 日记专属独立页面 ====================
 
-// 1. 获取 IP 定位与免费天气
-// 1. 获取系统真实定位与免费天气
+// 使用免费免权限的 IP 定位服务 (ipapi.co)，再联合 Open-Meteo 获取天气
 async function fetchWeatherInfo() {
-    return new Promise((resolve) => {
-        // 如果不支持定位，或者用户拒绝，直接返回空
-        if (!navigator.geolocation) {
-            resolve({ city: '未获取', weatherStr: '未获取', weatherIcon: 'sun' });
-            return;
-        }
+    try {
+        // 1. 获取 IP 和 经纬度、城市
+        const ipRes = await fetchWithTimeout('https://ipapi.co/json/', { timeout: 5000 });
+        if (!ipRes.ok) throw new Error('IP 获取失败');
+        const ipData = await ipRes.json();
+        
+        if (!ipData.latitude || !ipData.longitude) throw new Error('经纬度获取失败');
+        
+        const lat = ipData.latitude;
+        const lon = ipData.longitude;
+        const city = ipData.city || ipData.region || '未知城市';
 
-        navigator.geolocation.getCurrentPosition(
-            async (position) => {
-                try {
-                    const lat = position.coords.latitude;
-                    const lon = position.coords.longitude;
-                    
-                    // 使用 Open-Meteo 获取天气 (免费，无需 API Key)
-                    const wRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
-                    const wData = await wRes.json();
-                    const temp = wData.current_weather?.temperature;
-                    const code = wData.current_weather?.weathercode;
-                    
-                    let text = '未知';
-                    let icon = 'sun';
-                    if (code === 0) { text = '晴'; icon = 'sun'; }
-                    else if ([1,2,3].includes(code)) { text = '多云'; icon = 'cloud-sun'; }
-                    else if ([45,48].includes(code)) { text = '雾'; icon = 'cloud-fog'; }
-                    else if ([51,53,55,61,63,65,80,81,82].includes(code)) { text = '雨'; icon = 'cloud-rain'; }
-                    else if ([71,73,75,85,86].includes(code)) { text = '雪'; icon = 'cloud-snow'; }
-                    else if ([95,96,99].includes(code)) { text = '雷雨'; icon = 'cloud-lightning'; }
-                    
-                    resolve({ 
-                        city: '当前位置', // 因为反查城市名需要额外付费 API，这里简化显示
-                        weatherStr: `${text} ${temp ? Math.round(temp) + '°C' : ''}`.trim(), 
-                        weatherIcon: icon 
-                    });
-                } catch (e) {
-                    resolve({ city: '定位成功', weatherStr: '天气获取失败', weatherIcon: 'sun' });
-                }
-            },
-            (error) => {
-                console.warn('用户拒绝定位或获取超时', error);
-                resolve({ city: '未获取', weatherStr: '未获取', weatherIcon: 'sun' });
-            },
-            { timeout: 5000, maximumAge: 60000 } // 5秒超时
-        );
-    });
+        // 2. 使用经纬度获取天气 (Open-Meteo)
+        const wRes = await fetchWithTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`, { timeout: 5000 });
+        const wData = await wRes.json();
+        const temp = wData.current_weather?.temperature;
+        const code = wData.current_weather?.weathercode;
+        
+        let text = '未知';
+        let icon = 'sun';
+        if (code === 0) { text = '晴'; icon = 'sun'; }
+        else if ([1,2,3].includes(code)) { text = '多云'; icon = 'cloud-sun'; }
+        else if ([45,48].includes(code)) { text = '雾'; icon = 'cloud-fog'; }
+        else if ([51,53,55,61,63,65,80,81,82].includes(code)) { text = '雨'; icon = 'cloud-rain'; }
+        else if ([71,73,75,85,86].includes(code)) { text = '雪'; icon = 'cloud-snow'; }
+        else if ([95,96,99].includes(code)) { text = '雷雨'; icon = 'cloud-lightning'; }
+        
+        return { 
+            city: city,
+            weatherStr: `${text} ${temp ? Math.round(temp) + '°C' : ''}`.trim(), 
+            weatherIcon: icon 
+        };
+    } catch (e) {
+        console.warn('IP定位或天气获取超时/失败:', e);
+        // 失败时返回静默的占位数据，不报错打扰用户
+        return { city: '未能获取', weatherStr: '天气未知', weatherIcon: 'sun' };
+    }
 }
 
 function getDeviceName() {
@@ -2510,6 +2459,18 @@ function getDeviceName() {
     if (ua.includes('iPad')) return 'iPad';
     if (ua.includes('Android')) return 'Android';
     return 'Web端';
+}
+
+// 🌟 纯文本粘贴拦截器
+function handleDiaryPaste(e) {
+    e.preventDefault();
+    const text = (e.originalEvent || e).clipboardData.getData('text/plain');
+    const selection = window.getSelection();
+    if (!selection.rangeCount) return;
+    selection.deleteFromDocument();
+    selection.getRangeAt(0).insertNode(document.createTextNode(text));
+    selection.collapseToEnd();
+    document.getElementById('diary-word-count').innerText = document.getElementById('diary-content').innerText.length;
 }
 
 // 2. 独立编辑页
@@ -2523,13 +2484,12 @@ function renderDiaryEditView() {
 
     if (isEdit && !note) return `<div class="p-4 text-center text-gray-500">日记不存在</div>`;
 
-window._tempThemeId = note.bgThemeId || 'default';
-window._tempTextColor = note.textColor || 'auto';
+    // 初始化草稿状态
+    window._tempThemeId = note.bgThemeId || 'default';
+    window._tempTextColor = note.textColor || 'auto';
+    window._tempDiaryImages = [...(note.imageIds || [])];
+    window._sessionUploadedIds = [];
 
-window._tempDiaryImages = [...(note.imageIds || [])];
-window._sessionUploadedIds = [];   // 🌟 草稿层追踪：本次会话新上传但尚未被主数据引用的图
-
-    // 异步拉取天气
     setTimeout(async () => {
         if (!note.weather && !note.location) {
             const info = await fetchWeatherInfo();
@@ -2546,85 +2506,106 @@ window._sessionUploadedIds = [];   // 🌟 草稿层追踪：本次会话新上�
         }
     }, 100);
 
-const d = parseDate(note.date);
-const weekStr = ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
-const dateFormatted = `${d.getMonth() + 1}月${d.getDate()}日`;
+    const d = parseDate(note.date);
+    const weekStr = ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
+    const dateFormatted = `${d.getMonth() + 1}月${d.getDate()}日`;
 
-    // 🌟 根据主题计算文字颜色和背景
+    // 🌟 核心修复：在 return 之前计算好一切初始状态，直接内联
     const themeObj = DIARY_THEMES.find(t => t.id === window._tempThemeId) || DIARY_THEMES[0];
-    const isAutoWhite = window._tempTextColor === 'auto' ? themeObj.isDark : window._tempTextColor === 'white';
-    const textClass = isAutoWhite ? 'text-white' : 'text-gray-800';
-    const placeholderClass = isAutoWhite ? 'placeholder-gray-400' : 'placeholder-gray-300';
-    
-    let bgStyle = '';
-if (themeObj.type === 'color') {
-    bgStyle = `background-color: ${themeObj.bg};`;
-} else if (themeObj.type === 'gradient') {
-    bgStyle = `background-image: ${themeObj.bg};`;
-} else if (themeObj.type === 'image') {
-    bgStyle = `background-color: #111; background-image: linear-gradient(rgba(0,0,0,0.2), rgba(0,0,0,0.2)), url('${themeObj.url}'); background-size: cover; background-position: center;`;
-}
+    let initBgStyle = '';
+    if (themeObj.type === 'color') {
+        initBgStyle = `background-color: ${themeObj.bg};`;
+    } else if (themeObj.type === 'gradient') {
+        initBgStyle = `background-image: ${themeObj.bg};`;
+    } else if (themeObj.type === 'image') {
+        initBgStyle = `background-color: #111; background-image: linear-gradient(rgba(0,0,0,0.2), rgba(0,0,0,0.2)), url('${themeObj.url}');`;
+    }
 
-return `
-    <div id="diary-edit-root" class="fixed inset-0 z-[999] w-full h-[100dvh] overflow-y-auto transition-colors duration-300" style="${bgStyle} overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch;">
+    const currentMode = window._tempTextColor === 'auto' ? (themeObj.isDark ? 'white' : 'black') : window._tempTextColor;
+    const colorObj = DIARY_TEXT_COLORS.find(c => c.id === currentMode) || DIARY_TEXT_COLORS[1];
+    const isWhiteText = (currentMode === 'white' || currentMode === 'silver');
+
+    return `
+    <!-- 整个视口，锁死高度，只让内部 main 缩放 -->
+    <div id="diary-edit-root" class="fixed inset-0 z-[999] w-full h-[100dvh] flex flex-col overflow-hidden">
+        
+        <!-- L1：背景层 -->
+        <div id="diary-edit-bg-layer" data-current-theme="${window._tempThemeId}" class="absolute inset-0 z-0 bg-cover bg-center" style="${initBgStyle}"></div>
+
+        <!-- L2：顶栏（高度压扁，字号缩小） -->
+        <div class="relative z-20 flex justify-between items-center px-3 py-1 flex-shrink-0" style="padding-top: calc(env(safe-area-inset-top, 0px) + 4px);">
+            <button id="diary-header-back" onclick="handleDiaryBack()" class="${isWhiteText ? 'text-white/80' : 'text-gray-500'} p-1.5 -ml-1 active:opacity-60"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
             
-            <!-- 顶部导航 -->
-<div class="diary-theme-border flex justify-between items-center px-4 py-2 flex-shrink-0" style="padding-top: calc(env(safe-area-inset-top, 0px) + 6px);">
-            
-                <button onclick="handleDiaryBack()" class="${isAutoWhite ? 'text-white/80' : 'text-gray-500'} p-2 -ml-2 active:opacity-60"><i data-lucide="chevron-left" class="w-6 h-6"></i></button>
-
-<!-- 图二风格：大字号日期 + 小字号时间/星期 -->
-<div class="flex items-baseline justify-center gap-0.1 flex-1 min-w-0 mx-2">
-    <span class="${isAutoWhite ? 'text-white' : 'text-gray-800'} text-[15px] font-semibold tracking-tight cursor-pointer active:opacity-60 flex-shrink-0" 
-          id="diary-form-date" 
-          data-date="${note.date}" 
-          onclick="changeDiaryDate()">${dateFormatted}</span>
-    
-    <div class="${isAutoWhite ? 'text-white/70' : 'text-gray-500'} flex items-baseline text-[13px] font-medium cursor-pointer active:opacity-60" 
-         onclick="openDiaryTimePicker()">
-        <span class="mx-0.5">/</span>
-        <span id="diary-form-time">${note.time}</span>
-        <span class="ml-1" id="diary-week-text">${weekStr}</span>
-    </div>
-</div>
-
-<!-- 右侧操作区：调色盘 + 完成 -->
-<div class="flex items-center gap-1">
-    <button onclick="showThemePicker()" class="${isAutoWhite ? 'text-white' : 'text-gray-600'} p-2 active:opacity-60"><i data-lucide="palette" class="w-5 h-5"></i></button>
-                    <button onclick="saveDiary('${_currentDiaryId || ''}', false)" class="text-blue-500 font-bold text-[15px] p-2 -mr-2 active:opacity-60">完成</button>
+            <div class="flex items-baseline justify-center gap-0.1 flex-1 min-w-0 mx-2">
+                <span class="${isWhiteText ? 'text-white' : 'text-gray-800'} text-[14px] font-semibold tracking-tight cursor-pointer active:opacity-60 flex-shrink-0" id="diary-form-date" data-date="${note.date}" onclick="changeDiaryDate()">${dateFormatted}</span>
+                <div id="diary-header-time" class="${isWhiteText ? 'text-white/70' : 'text-gray-500'} flex items-baseline text-[12px] font-medium cursor-pointer active:opacity-60" onclick="openDiaryTimePicker()">
+                    <span class="mx-0.5">/</span>
+                    <span id="diary-form-time">${note.time}</span>
+                    <span class="ml-1" id="diary-week-text">${weekStr}</span>
                 </div>
             </div>
-
-                        <!-- 内容区域 -->
-<div class="relative z-10 flex flex-col px-5 pt-4 pb-12" style="min-height: calc(100dvh - 60px);" onclick="document.getElementById('diary-content').focus()">
-    
-    <!-- 输入框：自然高度 -->
-    <textarea id="diary-content" class="diary-theme-text w-full text-[16px] text-gray-800 leading-relaxed outline-none resize-none placeholder-gray-300 bg-transparent" placeholder="记录今日..." oninput="document.getElementById('diary-word-count').innerText = this.value.length" rows="1" style="min-height: 120px;">${escapeHtml(note.content)}</textarea>
-    
-    <!-- 图片区：接管 mt-auto，让它和小字一起沉底 -->
-<div class="grid grid-cols-3 gap-2 mt-auto pt-8" id="diary-image-grid"></div>
-
-<!-- 底部元数据：去掉 mt-auto，紧紧跟在图片下面 -->
-<div class="pt-8 space-y-1.5 opacity-50 pointer-events-none">
-                    <div class="diary-theme-subtext flex items-center gap-1.5 text-[11px] text-gray-600">
-                        <i data-lucide="${note.weatherIcon || 'sun'}" class="w-3.5 h-3.5"></i>
-                        <span id="diary-form-wea" data-wea="${note.weather}" data-icon="${note.weatherIcon}">${note.weather || '获取中...'}</span>
-                    </div>
-                    <div class="diary-theme-subtext flex items-center gap-1.5 text-[11px] text-gray-600">
-                        <i data-lucide="map-pin" class="w-3.5 h-3.5"></i>
-                        <span id="diary-form-loc" data-loc="${note.location}">${note.location || '定位中...'}</span>
-                    </div>
-                    <div class="diary-theme-subtext flex items-center gap-1.5 text-[11px] text-gray-600">
-                        <i data-lucide="smartphone" class="w-3.5 h-3.5"></i>
-                        <span>${note.device || 'Web端'}</span>
-                    </div>
-                    <div class="diary-theme-subtext flex items-center gap-1.5 text-[11px] text-gray-600">
-                        <i data-lucide="type" class="w-3.5 h-3.5"></i>
-                        <span id="diary-word-count">${note.content ? note.content.length : 0}</span> 字
-                    </div>
-                </div>
+            
+            <div class="flex items-center gap-1">
+                <button id="diary-header-save" onclick="saveDiary('${_currentDiaryId || ''}', false)" class="${isWhiteText ? 'text-white' : 'text-blue-500'} font-bold text-[14px] p-1.5 -mr-1 active:opacity-60">完成</button>
             </div>
         </div>
+
+        <!-- L3：滚动内容层（边距缩小，正文字号缩小） -->
+<main id="diary-scroll-area" class="relative z-10 flex-1 min-h-0 overflow-y-auto px-4 pt-2" style="overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch;">
+    
+    <div id="diary-content" 
+         contenteditable="true" 
+         class="w-full text-[15px] leading-[1.7] outline-none bg-transparent whitespace-pre-wrap break-words"
+         style="min-height: ${note.content ? 'auto' : '150px'}; color: ${colorObj.hex}; font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif; -webkit-font-smoothing: antialiased;"
+         data-placeholder="记录今日..."
+         oninput="document.getElementById('diary-word-count').innerText = this.innerText.length"
+         onpaste="handleDiaryPaste(event)">${escapeHtml(note.content)}</div>
+
+    <div class="pt-6 flex-shrink-0">
+        <div class="grid grid-cols-3 gap-1.5 mb-6" id="diary-image-grid"></div>
+
+        <div class="space-y-1 opacity-50 pointer-events-none">
+            <div class="diary-theme-subtext flex items-center gap-1 text-[10px]" style="color: ${colorObj.sub};">
+                <i data-lucide="${note.weatherIcon || 'sun'}" class="w-3 h-3"></i>
+                <span id="diary-form-wea" data-wea="${note.weather}" data-icon="${note.weatherIcon}">${note.weather || '获取中...'}</span>
+            </div>
+            <div class="diary-theme-subtext flex items-center gap-1 text-[10px]" style="color: ${colorObj.sub};">
+                <i data-lucide="map-pin" class="w-3 h-3"></i>
+                <span id="diary-form-loc" data-loc="${note.location}">${note.location || '定位中...'}</span>
+            </div>
+            <div class="diary-theme-subtext flex items-center gap-1 text-[10px]" style="color: ${colorObj.sub};">
+                <i data-lucide="smartphone" class="w-3 h-3"></i>
+                <span>${note.device || 'Web端'}</span>
+            </div>
+            <div class="diary-theme-subtext flex items-center gap-1 text-[10px]" style="color: ${colorObj.sub};">
+                <i data-lucide="type" class="w-3 h-3"></i>
+                <span id="diary-word-count">${note.content ? note.content.length : 0}</span> 字
+            </div>
+        </div>
+    </div>
+    
+    <!-- 🌟 物理垫片：100px 绝对高度，强制 iOS 计算滚动态时不贴底 -->
+    <div style="height: 100px; width: 100%; pointer-events: none; flex-shrink: 0;"></div>
+</main>
+
+        <!-- L4：底部悬浮工具栏（高度压扁到 38px，图标缩小到 16px） -->
+        <div id="diary-toolbar" class="absolute z-30 glass-nav rounded-[18px]" style="left: 16px; right: 16px; height: 38px; bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); transition: bottom 0.2s ease, margin 0.2s ease; box-shadow: 0 4px 16px -4px rgba(0,0,0,0.15);">
+            <div class="flex items-center h-full">
+                <button onpointerdown="event.preventDefault()" onclick="insertDiaryDate()" class="flex-1 h-full flex items-center justify-center active:scale-90 transition-transform" aria-label="插入日期">
+                    <i data-lucide="calendar" class="w-4 h-4 text-slate-600"></i>
+                </button>
+                <button onpointerdown="event.preventDefault()" onclick="insertDiaryTime()" class="flex-1 h-full flex items-center justify-center active:scale-90 transition-transform" aria-label="插入时间">
+                    <i data-lucide="clock" class="w-4 h-4 text-slate-600"></i>
+                </button>
+                <button onpointerdown="event.preventDefault()" onclick="insertDiaryIndent()" class="flex-1 h-full flex items-center justify-center active:scale-90 transition-transform" aria-label="首行缩进">
+                    <i data-lucide="indent-increase" class="w-4 h-4 text-slate-600"></i>
+                </button>
+                <button onpointerdown="event.preventDefault()" onclick="openDiaryThemeFromToolbar()" class="flex-1 h-full flex items-center justify-center active:scale-90 transition-transform" aria-label="更换背景">
+                    <i data-lucide="palette" class="w-4 h-4 text-slate-600"></i>
+                </button>
+            </div>
+        </div>
+    </div>
     `;
 }
 
@@ -2709,40 +2690,89 @@ function refreshThemePickerSelection() {
 // 🌟 切换背景时：更新草稿变量 + 重绘编辑页 (主从驱动)
 // 🌟 实时应用主题样式（不重绘 DOM，不打断输入）
 function applyDiaryThemeUI() {
-    const wrapper = document.getElementById('diary-edit-root');
-    if (!wrapper) return;
-
-    const themeObj = DIARY_THEMES.find(t => t.id === window._tempThemeId) || DIARY_THEMES[0];
+    const bgLayer = document.getElementById('diary-edit-bg-layer');
     
-    wrapper.style.transform = 'translateZ(0)';
-    wrapper.style.transition = 'none'; 
+    // 只有找到背景层时，才执行背景动画逻辑
+    if (bgLayer) {
+        const themeObj = DIARY_THEMES.find(t => t.id === window._tempThemeId) || DIARY_THEMES[0];
+        const newThemeId = themeObj.id;
+        const currentThemeId = bgLayer.dataset.currentTheme || 'default';
 
-    if (themeObj.type === 'color') {
-        wrapper.style.backgroundColor = themeObj.bg;
-        wrapper.style.backgroundImage = 'none';
-        wrapper.style.backgroundSize = 'auto'; // 🌟 修复：纯色重置
-    } else if (themeObj.type === 'gradient') {
-        wrapper.style.backgroundColor = '';
-        wrapper.style.backgroundImage = themeObj.bg;
-        wrapper.style.backgroundSize = 'auto'; // 🌟 修复：渐变重置
-    } else if (themeObj.type === 'image') {
-        wrapper.style.backgroundColor = '#111';
-        wrapper.style.backgroundImage = `linear-gradient(rgba(0,0,0,0.2), rgba(0,0,0,0.2)), url('${themeObj.url}')`;
-        wrapper.style.backgroundSize = 'cover'; // 🌟 核心修复：让图片以覆盖模式等比缩放
-        wrapper.style.backgroundPosition = 'center'; // 🌟 核心修复：居中显示
+        // 只有当背景真正改变时，才执行交叉淡化动画
+        if (newThemeId !== currentThemeId) {
+            bgLayer.dataset.currentTheme = newThemeId;
+
+            // 1. 拍一张旧背景的“照片”（克隆层），盖在最上面
+            const oldBgOverlay = document.createElement('div');
+            oldBgOverlay.className = bgLayer.className; 
+            oldBgOverlay.style.cssText = bgLayer.style.cssText; 
+            oldBgOverlay.style.transition = 'opacity 0.3s ease-out';
+            oldBgOverlay.style.pointerEvents = 'none';
+            bgLayer.parentNode.insertBefore(oldBgOverlay, bgLayer.nextSibling);
+
+            // 2. 原背景层瞬间换成新背景（因为被旧照片盖住了，用户看不到突变）
+            if (themeObj.type === 'color') {
+                bgLayer.style.backgroundColor = themeObj.bg;
+                bgLayer.style.backgroundImage = 'none';
+            } else if (themeObj.type === 'gradient') {
+                bgLayer.style.backgroundColor = '';
+                bgLayer.style.backgroundImage = themeObj.bg;
+            } else if (themeObj.type === 'image') {
+                bgLayer.style.backgroundColor = '#111';
+                bgLayer.style.backgroundImage = `linear-gradient(rgba(0,0,0,0.2), rgba(0,0,0,0.2)), url('${themeObj.url}')`;
+            }
+
+            // 3. 让旧背景慢慢变透明，露出下面的新背景
+            requestAnimationFrame(() => {
+                oldBgOverlay.style.opacity = '0';
+            });
+
+            // 4. 动画结束后，清理掉旧背景
+            setTimeout(() => {
+                oldBgOverlay.remove();
+            }, 350);
+        }
     }
- 
-    // 3. 更新文字颜色逻辑（保持原样不变）
-    const currentMode = window._tempTextColor === 'auto' ? (themeObj.isDark ? 'white' : 'black') : window._tempTextColor;
+
+    // ==========================================
+    // 下面是原有的文字颜色更新逻辑，保持原样
+    // ==========================================
+    const themeObjForColor = DIARY_THEMES.find(t => t.id === window._tempThemeId) || DIARY_THEMES[0];
+    const currentMode = window._tempTextColor === 'auto' ? (themeObjForColor.isDark ? 'white' : 'black') : window._tempTextColor;
     const colorObj = DIARY_TEXT_COLORS.find(c => c.id === currentMode) || DIARY_TEXT_COLORS[1];
+    const isWhiteText = (currentMode === 'white' || currentMode === 'silver');
 
     const textarea = document.getElementById('diary-content');
     if (textarea) textarea.style.color = colorObj.hex;
 
-    wrapper.querySelectorAll('.diary-theme-subtext').forEach(el => {
+    document.querySelectorAll('.diary-theme-subtext').forEach(el => {
         el.style.color = colorObj.sub;
     });
+
+    const backBtn = document.getElementById('diary-header-back');
+const dateEl = document.getElementById('diary-form-date');
+const timeEl = document.getElementById('diary-header-time');
+const saveBtn = document.getElementById('diary-header-save');
+
+if (backBtn) {
+    backBtn.classList.toggle('text-white/80', isWhiteText);
+    backBtn.classList.toggle('text-gray-500', !isWhiteText);
 }
+if (dateEl) {
+    dateEl.classList.toggle('text-white', isWhiteText);
+    dateEl.classList.toggle('text-gray-800', !isWhiteText);
+}
+if (timeEl) {
+    timeEl.classList.toggle('text-white/70', isWhiteText);
+    timeEl.classList.toggle('text-gray-500', !isWhiteText);
+}
+if (saveBtn) {
+    saveBtn.classList.toggle('text-white', isWhiteText);
+    saveBtn.classList.toggle('text-blue-500', !isWhiteText);
+}
+}
+
+    
 
 function setDiaryTheme(themeId) {
     window._tempThemeId = themeId;
@@ -2833,71 +2863,55 @@ function renderDiaryDetailView() {
         imgsHtml = `<div class="space-y-4 mt-6">${note.imageIds.map(id => `<img data-asset-id="${id}" class="w-full rounded-xl object-cover bg-gray-50 cursor-pointer shadow-sm" onclick="showImagePreview(this.src)">`).join('')}</div>`;
     }
 
-    // 🌟 这里接上你新加的背景主题逻辑
-const themeObj = DIARY_THEMES.find(t => t.id === (note.bgThemeId || 'default')) || DIARY_THEMES[0];
-const isAutoWhite = (note.textColor || 'auto') === 'auto' ? themeObj.isDark : note.textColor === 'white';
-const borderClass = isAutoWhite ? 'border-white/20' : 'border-gray-100';
-
-// 🌟 直接使用全局颜色字典
-const dMode = (note.textColor || 'auto') === 'auto' ? (themeObj.isDark ? 'white' : 'black') : note.textColor;
-const dColorObj = DIARY_TEXT_COLORS.find(c => c.id === dMode) || DIARY_TEXT_COLORS[1]; // 兜底黑色
-
-const dTextColor = dColorObj.hex;
-const dSubColor = dColorObj.sub;
+    const themeObj = DIARY_THEMES.find(t => t.id === (note.bgThemeId || 'default')) || DIARY_THEMES[0];
+    const isAutoWhite = (note.textColor || 'auto') === 'auto' ? themeObj.isDark : note.textColor === 'white';
+    const borderClass = isAutoWhite ? 'border-white/20' : 'border-gray-100';
     
-    let bgStyle = '';
-if (themeObj.type === 'color') {
-    bgStyle = `background-color: ${themeObj.bg};`;
-} else if (themeObj.type === 'gradient') {
-    bgStyle = `background-image: ${themeObj.bg};`;
-} else if (themeObj.type === 'image') {
-    // 🌟 图片背景：加 #111 兜底，叠加 20% 黑色遮罩，彻底防白屏闪烁
-    bgStyle = `background-color: #111; background-image: linear-gradient(rgba(0,0,0,0.2), rgba(0,0,0,0.2)), url('${themeObj.url}'); background-size: cover; background-position: center;`;
-}
+    const dMode = (note.textColor || 'auto') === 'auto' ? (themeObj.isDark ? 'white' : 'black') : note.textColor;
+    const dColorObj = DIARY_TEXT_COLORS.find(c => c.id === dMode) || DIARY_TEXT_COLORS[1];
+    const dTextColor = dColorObj.hex;
+    const dSubColor = dColorObj.sub;
 
-        return `
-    <div class="fixed inset-0 z-[999] w-full h-full overflow-y-auto transition-colors duration-300" style="${bgStyle} overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch;">
+    // 注意这里也把背景拆分了
+    return `
+    <div id="diary-detail-root" class="fixed inset-0 z-[999] w-full h-[100dvh] flex flex-col overflow-hidden">
+        
+        <!-- L1：独立背景层 -->
+<div id="diary-detail-bg-layer" class="absolute inset-0 z-0 bg-cover bg-center transition-colors duration-300" style="${themeObj.type === 'color' ? `background-color: ${themeObj.bg};` : themeObj.type === 'gradient' ? `background-image: ${themeObj.bg};` : `background-color: #111; background-image: linear-gradient(rgba(0,0,0,0.2), rgba(0,0,0,0.2)), url('${themeObj.url}');`}"></div>
 
-            <!-- 顶部导航：完全透明沉浸，无边框、无背景，与编辑页完全一致 -->
-<div class="flex justify-between items-center px-4 py-1.5 flex-shrink-0" style="padding-top: calc(env(safe-area-inset-top, 0px) + 4px);">
-
-    <!-- 返回键变大：w-6 h-6 -->
-    <button onclick="goBackFromSubPage()" class="${isAutoWhite ? 'text-white/80' : 'text-gray-700'} p-2 -ml-2 active:opacity-60"><i data-lucide="chevron-left" class="w-6 h-6"></i></button>
-<div class="flex gap-1">
-    <button onclick="_currentDiaryId='${note.id}'; switchTab('diary_edit', true)" class="${isAutoWhite ? 'text-white' : 'text-gray-700'} p-2 active:opacity-60"><i data-lucide="edit-3" class="w-[18px] h-[18px]"></i></button>
-    <button onclick="deleteNote('${note.id}')" class="text-red-400 p-2 active:opacity-60"><i data-lucide="trash-2" class="w-[18px] h-[18px]"></i></button>
-</div>
-</div>
-
-            <!-- 内容区 -->
-<div class="relative z-10 flex flex-col px-5" style="padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 40px); min-height: calc(100dvh - 60px);">
-    
-                                                        <!-- 日期排版：整体缩小，间距微调 -->
-<div class="flex items-center gap-2.5 border-b ${borderClass} pb-2 mb-6 mt-1">
-    <span class="text-[24px] font-medium ${isAutoWhite ? 'text-white/90' : 'text-gray-700'} tracking-tight leading-none" style="font-family: Georgia, 'Times New Roman', serif;">${dayStr}</span>
-    <div class="flex flex-col">
-        <span class="text-[10px] font-medium tracking-wide" style="color: ${dSubColor};">${monthStr}</span>
-        <span class="text-[9px] mt-0.5" style="color: ${dSubColor};">${note.time || ''}</span>
-    </div>
-</div>
-
-                                <!-- 正文内容 -->
-<p class="text-[15px] leading-[1.8] whitespace-pre-wrap mb-6" style="color: ${dTextColor}; font-family: Georgia, 'Songti SC', 'Noto Serif CJK SC', 'SimSun', serif;">${escapeHtml(note.content || '')}</p>
-
-<!-- 🌟 用 mt-auto 把“图片+底部信息”作为一个整体沉底 -->
-<div class="mt-auto">
-    <!-- 图片区 -->
-    ${imgsHtml}
-
-    <!-- 底部元数据：取消 mt-auto，用 pt-8 跟图片保持呼吸感 -->
-    <div class="pt-8 space-y-1.5 opacity-60">
-        ${note.weather ? `<div class="flex items-center gap-1.5 text-[11px]" style="color: ${dSubColor};"><i data-lucide="${note.weatherIcon || 'sun'}" class="w-3.5 h-3.5"></i>${escapeHtml(note.weather)}</div>` : ''}
-        ${note.location ? `<div class="flex items-center gap-1.5 text-[11px]" style="color: ${dSubColor};"><i data-lucide="map-pin" class="w-3.5 h-3.5"></i>${escapeHtml(note.location)}</div>` : ''}
-        ${note.device ? `<div class="flex items-center gap-1.5 text-[11px]" style="color: ${dSubColor};"><i data-lucide="smartphone" class="w-3.5 h-3.5"></i>${escapeHtml(note.device)}</div>` : ''}
-        <div class="flex items-center gap-1.5 text-[11px]" style="color: ${dSubColor};"><i data-lucide="type" class="w-3.5 h-3.5"></i>${(note.content || '').length} 字</div>
-    </div>
-</div>
+        <!-- L2：顶栏（高度压扁） -->
+        <div class="relative z-20 flex justify-between items-center px-3 py-1 flex-shrink-0" style="padding-top: calc(env(safe-area-inset-top, 0px) + 4px);">
+            <button onclick="goBackFromSubPage()" class="${isAutoWhite ? 'text-white/80' : 'text-gray-700'} p-1.5 -ml-1 active:opacity-60"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+            <div class="flex gap-1">
+                <button onclick="_currentDiaryId='${note.id}'; switchTab('diary_edit', true)" class="${isAutoWhite ? 'text-white' : 'text-gray-700'} p-1.5 active:opacity-60"><i data-lucide="edit-3" class="w-4 h-4"></i></button>
+                <button onclick="deleteNote('${note.id}')" class="text-red-400 p-1.5 active:opacity-60"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+            </div>
         </div>
+
+        <!-- L3：滚动内容（边距缩小，字号缩小） -->
+<main class="relative z-10 flex-1 overflow-y-auto px-4" style="padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 30px); overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch;">
+            
+            <div class="flex items-center gap-2 border-b ${borderClass} pb-1.5 mb-4 mt-1">
+                <span class="text-[20px] font-medium ${isAutoWhite ? 'text-white/90' : 'text-gray-700'} tracking-tight leading-none" style="font-family: Georgia, 'Times New Roman', serif;">${dayStr}</span>
+                <div class="flex flex-col">
+                    <span class="text-[9px] font-medium tracking-wide" style="color: ${dSubColor};">${monthStr}</span>
+                    <span class="text-[8px] mt-0.5" style="color: ${dSubColor};">${note.time || ''}</span>
+                </div>
+            </div>
+
+            <!-- 🌟 加入 GPU 加速与抗锯齿 -->
+<p class="text-[15px] leading-[1.7] whitespace-pre-wrap mb-6" style="color: ${dTextColor}; font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif; -webkit-font-smoothing: antialiased;">${escapeHtml(note.content || '')}</p>
+
+            <div class="mt-4">
+                ${imgsHtml}
+                <div class="pt-6 space-y-1 opacity-60">
+                    ${note.weather ? `<div class="flex items-center gap-1 text-[10px]" style="color: ${dSubColor};"><i data-lucide="${note.weatherIcon || 'sun'}" class="w-3 h-3"></i>${escapeHtml(note.weather)}</div>` : ''}
+                    ${note.location ? `<div class="flex items-center gap-1 text-[10px]" style="color: ${dSubColor};"><i data-lucide="map-pin" class="w-3 h-3"></i>${escapeHtml(note.location)}</div>` : ''}
+                    ${note.device ? `<div class="flex items-center gap-1 text-[10px]" style="color: ${dSubColor};"><i data-lucide="smartphone" class="w-3 h-3"></i>${escapeHtml(note.device)}</div>` : ''}
+                    <div class="flex items-center gap-1 text-[10px]" style="color: ${dSubColor};"><i data-lucide="type" class="w-3 h-3"></i>${(note.content || '').length} 字</div>
+                </div>
+            </div>
+        </main>
     </div>
     `;
 }
@@ -2906,9 +2920,10 @@ if (themeObj.type === 'color') {
 function saveDiary(noteId = null, isAuto = false) {
     const contentEl = document.getElementById('diary-content');
     if (!contentEl) return; // 页面已被关掉
-    const content = contentEl.value.trim();
+    // 🌟 核心修改：把 .value 换成 .innerText
+    const content = contentEl.innerText.trim();
     const dateEl = document.getElementById('diary-form-date');
-const date = dateEl ? (dateEl.dataset.date || formatDateLocal(new Date())) : formatDateLocal(new Date());
+    const date = dateEl ? (dateEl.dataset.date || formatDateLocal(new Date())) : formatDateLocal(new Date());
 
 const timeEl = document.getElementById('diary-form-time');
 const time = timeEl ? timeEl.textContent : `${String(new Date().getHours()).padStart(2,'0')}:${String(new Date().getMinutes()).padStart(2,'0')}`;
@@ -2916,10 +2931,10 @@ const time = timeEl ? timeEl.textContent : `${String(new Date().getHours()).padS
     const locEl = document.getElementById('diary-form-loc');
     
     // 如果什么都没写，且没有图片，静默退出
-    if (!content && window._tempDiaryImages.length === 0) {
-        if (!isAuto) showToast('写点什么再保存吧');
-        return;
-    }
+if (!content && window._tempDiaryImages.length === 0) {
+    if (!isAuto) showToast('写点什么再保存吧');
+    return;
+}
 
     const isEdit = !!noteId;
     const now = Date.now();
@@ -2984,9 +2999,10 @@ textColor: window._tempTextColor || 'auto',   // 🌟 保存颜色
 function isDiaryUnchanged(oldNote) {
     if (!oldNote) return false;
     const contentEl = document.getElementById('diary-content');
-    const content = contentEl ? contentEl.value.trim() : '';
+    // 🌟 核心修改：把 .value 换成 .innerText
+    const content = contentEl ? contentEl.innerText.trim() : '';
     const dateEl = document.getElementById('diary-form-date');
-const date = dateEl ? (dateEl.dataset.date || '') : '';
+    const date = dateEl ? (dateEl.dataset.date || '') : '';
 
 const timeEl = document.getElementById('diary-form-time');
 const time = timeEl ? timeEl.textContent : '';
@@ -3005,18 +3021,36 @@ return content === (oldNote.content || '')
 // 🌟 有变化检测：返回时决定是否弹窗
 function isDiaryDirty() {
     const contentEl = document.getElementById('diary-content');
-    const content = contentEl ? contentEl.value.trim() : '';
+    // 🌟 核心修改：把 .value 换成 .innerText
+    const content = contentEl ? contentEl.innerText.trim() : '';
     const hasTempImages = (window._tempDiaryImages || []).length > 0;
-
-    if (!_currentDiaryId) {
-        // 新建模式：有内容或有图片
-        return content !== '' || hasTempImages;
+    
+    const oldNote = _currentDiaryId ? appData.notes.find(n => n.id === _currentDiaryId) : null;
+    
+    // 🌟 核心逻辑：如果没有任何文字，也没有新图片，且旧日记也没有内容，那换背景不算修改，直接放行！
+    const hasAnyContent = content !== '' || hasTempImages;
+    const oldHasContent = oldNote && ((oldNote.content && oldNote.content.trim() !== '') || (oldNote.imageIds && oldNote.imageIds.length > 0));
+    
+    if (!hasAnyContent && !oldHasContent) {
+        return false; 
     }
-    const oldNote = appData.notes.find(n => n.id === _currentDiaryId);
-    if (!oldNote) {
-        return content !== '' || hasTempImages;
-    }
-    return !isDiaryUnchanged(oldNote);
+    
+    if (!oldNote) return true;
+    
+    const dateEl = document.getElementById('diary-form-date');
+    const date = dateEl ? (dateEl.dataset.date || '') : '';
+    const timeEl = document.getElementById('diary-form-time');
+    const time = timeEl ? timeEl.textContent : '';
+    const weatherEl = document.getElementById('diary-form-wea');
+    const currentWeather = weatherEl?.dataset.wea || '';
+    
+    return content !== (oldNote.content || '')
+        || date !== (oldNote.date || '')
+        || time !== (oldNote.time || '')
+        || JSON.stringify(window._tempDiaryImages || []) !== JSON.stringify(oldNote.imageIds || [])
+        || currentWeather !== (oldNote.weather || '')
+        || (window._tempThemeId || 'default') !== (oldNote.bgThemeId || 'default')
+        || (window._tempTextColor || 'auto') !== (oldNote.textColor || 'auto');
 }
 
 // 🌟 三选项弹窗（专用，禁用蒙层，避免 Promise 悬空）
@@ -3146,13 +3180,125 @@ function cancelDiaryEdit() {
     window._tempDiaryImages = [];
 }
 
+// ==================== 日记编辑页：稳态高度与键盘适配引擎 ====================
+// 核心：外层 root 锁死不动（防顶飞），用 absolute 工具栏（防露白），
+// 暴力锁死 main 高度并减去 40px 呼吸区（防光标被吃）
+function _applyDiaryLayout() {
+    const toolbar = document.getElementById('diary-toolbar');
+    const main = document.getElementById('diary-scroll-area');
+    if (!main || !toolbar) return;
+
+    if (window.visualViewport) {
+        const currentVH = window.visualViewport.height;
+        const isKeyboardOpen = currentVH < window.innerHeight - 100;
+        const kbHeight = window.innerHeight - currentVH;
+
+        // offsetTop 是相对 root（fixed）的，不会受页面滑动影响，极其稳定
+        const topBarHeight = main.offsetTop; 
+
+        if (isKeyboardOpen) {
+            // 1. 键盘弹起：工具栏悬浮在键盘上方 12px
+            toolbar.style.bottom = `${kbHeight + 12}px`;
+            
+            // 2. 强制缩小 main 滚动区：减去 顶栏高度、工具栏高度(44)、间距(12)、以及额外的呼吸距离(40)
+            const BREATH = 40; 
+            const availHeight = currentVH - topBarHeight - 44 - 12 - BREATH;
+            
+            // 🌟 核心修复：用 height + 禁用 flex 弹性，物理锁死高度，不让 flex-1 撑开它
+            main.style.height = `${Math.max(100, availHeight)}px`;
+            main.style.flex = '0 0 auto';
+            main.style.maxHeight = 'none'; // 彻底清理可能残留的限制
+            
+            main.style.paddingBottom = '0'; 
+        } else {
+            // 1. 键盘收起：工具栏落回原位
+            toolbar.style.bottom = 'calc(env(safe-area-inset-bottom, 0px) + 12px)';
+            
+            // 2. 恢复满高，恢复 flex-1 特性
+            main.style.height = '';
+            main.style.flex = '';
+            main.style.maxHeight = '';
+            main.style.paddingBottom = '0';
+        }
+    }
+}
+
+// ==================== 工具栏插入引擎（L5 交互层） ====================
+// 所有插入统一走 execCommand('insertText')：
+//   - 保留光标位置
+//   - 保留 iOS 原生 undo 栈
+//   - 不破坏已有的粘贴过滤（handleDiaryPaste）
+function insertDiaryText(text) {
+    const contentEl = document.getElementById('diary-content');
+    if (!contentEl) return;
+
+    contentEl.focus();
+
+    // 兜底：若光标不在正文内（用户点工具栏前光标丢了），把 Range 折叠到末尾
+    const sel = window.getSelection();
+    if (!sel.rangeCount || !contentEl.contains(sel.anchorNode)) {
+        const range = document.createRange();
+        range.selectNodeContents(contentEl);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+    }
+
+    try {
+        document.execCommand('insertText', false, text);
+    } catch (e) {
+        console.warn('insertText failed:', e);
+    }
+
+    // 手动同步字数（oninput 也会触发，这里是双保险）
+    const wordCountEl = document.getElementById('diary-word-count');
+    if (wordCountEl) wordCountEl.innerText = contentEl.innerText.length;
+}
+
+// 日期戳：取【日记日期】（用户可在顶栏改），不是 new Date()
+function insertDiaryDate() {
+    const dateEl = document.getElementById('diary-form-date');
+    const date = (dateEl && dateEl.dataset.date) ? dateEl.dataset.date : formatDateLocal(new Date());
+    insertDiaryText(`[${date}]`);
+}
+
+// 时间戳：取当前真实时间（HH:MM 补零）
+function insertDiaryTime() {
+    const now = new Date();
+    const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    insertDiaryText(`[${time}]`);
+}
+
+// 首行缩进：插入 4 个全角空格 U+3000
+function insertDiaryIndent() {
+    insertDiaryText('　　　　');
+}
+
+// 换肤入口：先 blur 正文收起键盘，再打开面板，避免键盘与弹窗抢空间
+function openDiaryThemeFromToolbar() {
+    const contentEl = document.getElementById('diary-content');
+    if (contentEl) contentEl.blur();
+    setTimeout(() => showThemePicker(), 80);
+}
+
 // 初始化附件和图片网格（在 switchTab 渲染完成后触发）
 function initDiaryPage() {
     if (currentTab === 'diary_edit') {
-        applyDiaryThemeUI();   // 🌟 补上这句，修复退出重进背景失效的问题
+        // 应用背景与字体色（同步顶部导航等状态）
+        applyDiaryThemeUI();
+
+        // 初始化布局
+_applyDiaryLayout();
+
+        // 渲染图片网格
         renderDiaryImageGrid();
-        // 动态生成隐藏的 file input 用于多选
+
+        // 挂载隐藏的文件上传组件
+        const oldInput = document.getElementById('diary-file-input-dynamic');
+        if (oldInput) oldInput.remove();
+
         const fileInput = document.createElement('input');
+        fileInput.id = 'diary-file-input-dynamic';
         fileInput.type = 'file';
         fileInput.accept = 'image/*';
         fileInput.multiple = true;
@@ -3460,10 +3606,7 @@ function getTrendOffset() {
     if (Math.abs(diff) >= 1) return Math.round(diff * 0.5);
     return 0;
 }
-// 🌟 废弃原本错误的算法，遵循绝对医学标准：黄体期固定为14天
-function getUserLutealLength() {
-    return 14;
-}
+
 function predictNextPeriodStart() {
     if (_menstrualRenderCache && _menstrualRenderCache.pred !== undefined) return _menstrualRenderCache.pred;
     const result = _computePredictNextPeriodStart();
@@ -4675,8 +4818,8 @@ const DIARY_TEXT_COLORS = [
 
 // 🌟 日记主题配置
 const DIARY_THEMES = [
-    // 前4个默认纯色/渐变，保留名称
-    { id: 'default', name: '默认纯白', type: 'color', bg: '#FFFFFF', isDark: false },
+    { id: 'default', name: '默认浅灰', type: 'color', bg: '#F3F4F6', isDark: false },
+
     { id: 'dark', name: '暗夜黑', type: 'color', bg: '#1A1A1A', isDark: true },
     { id: 'gradient_pink', name: '蜜桃粉', type: 'gradient', bg: 'linear-gradient(135deg, #FFDEE9 0%, #B5FFFC 100%)', isDark: false },
     { id: 'gradient_purple', name: '暮光紫', type: 'gradient', bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', isDark: true },
@@ -8058,36 +8201,6 @@ function showAddInstallmentModal(editId = null) {
     });
 }
 
-// 辅助：切换渠道时自动更新预设参数
-function changeInstallmentChannel(channel) {
-    document.querySelectorAll('[data-channel]').forEach(el => {
-        el.classList.remove('bg-orange-500', 'text-white', 'shadow-md', 'border-orange-500', 'font-bold');
-        el.classList.add('bg-white', 'text-gray-600', 'border-gray-200');
-    });
-    const target = document.querySelector(`[data-channel="${channel}"]`);
-    if (target) {
-        target.classList.remove('bg-white', 'text-gray-600', 'border-gray-200');
-        target.classList.add('bg-orange-500', 'text-white', 'shadow-md', 'border-orange-500', 'font-bold');
-    }
-    
-    const preset = INSTALLMENT_PRESETS[channel];
-    if (preset) {
-        document.getElementById('inst-interestMode').value = preset.interestMode;
-        document.getElementById('inst-prepayPolicy').value = preset.prepayPolicy;
-        document.getElementById('inst-penaltyRate').value = preset.penaltyRate;
-        
-        // 自动切 rateType
-        const rateTypeSelect = document.getElementById('inst-rateType');
-        if (rateTypeSelect) rateTypeSelect.value = preset.rateType;
-        
-        // 自动切还款方式
-        window._tempRepType = preset.repaymentType;
-        document.querySelectorAll('.rep-btn').forEach(el => el.classList.remove('bg-blue-500', 'text-white', 'border-blue-500', 'font-bold'));
-        const repBtns = Array.from(document.querySelectorAll('.rep-btn'));
-        const targetRep = repBtns.find(b => b.textContent.includes(preset.repaymentType === 'equal_installment' ? '等额本息' : preset.repaymentType === 'equal_principal' ? '等额本金' : '先息后本'));
-        if (targetRep) targetRep.classList.add('bg-blue-500', 'text-white', 'border-blue-500', 'font-bold');
-    }
-}
 
 function saveInstallment(editId) {
     const name = document.getElementById('inst-name').value.trim() || '未命名分期';
@@ -9134,32 +9247,44 @@ function switchTab(tab, forceRender = false) {
     
     currentTab = tab;
 
-    // 🌟 统一路由入栈：如果是进入任何子页面，且是从父页进来的
-if (SUB_PAGE_ROUTES[tab] && SUB_PAGE_ROUTES[tab] === previousTab) {
-    try { history.pushState({ from: previousTab, page: tab }, '', ''); } catch(e) {}
+// 离开日记编辑页时，彻底清空布局属性（DOM 反正会被清空，这是双重保险）
+if (previousTab === 'diary_edit' && tab !== 'diary_edit') {
+    const _kbMain = document.getElementById('diary-scroll-area');
+    if (_kbMain) {
+        _kbMain.style.height = '';
+        _kbMain.style.flex = '';
+        _kbMain.style.maxHeight = '';
+        _kbMain.style.paddingBottom = '';
+    }
+    const _kbToolbar = document.getElementById('diary-toolbar');
+    if (_kbToolbar) _kbToolbar.style.bottom = '';
 }
 
-// 🌟 统一路由出栈：如果是离开子页面去了其他底部Tab，重置历史栈
-if (SUB_PAGE_ROUTES[previousTab] && !SUB_PAGE_ROUTES[tab]) {
-    try { history.replaceState({ page: tab }, '', ''); } catch(e) {}
-}
-    
+    // 🌟 统一路由入栈：只要进入的是子页面，就独立入栈
+    if (SUB_PAGE_ROUTES[tab] && tab !== previousTab) {
+        try { history.pushState({ from: previousTab, page: tab }, '', ''); } catch(e) {}
+    }
+
+    // 🌟 统一路由出栈：如果是离开子页面去了其他底部Tab，重置历史栈
+    if (SUB_PAGE_ROUTES[previousTab] && !SUB_PAGE_ROUTES[tab]) {
+        try { history.replaceState({ page: tab }, '', ''); } catch(e) {}
+    }
+        
     const content = document.getElementById('content');
     const data = views[tab];
     if (forceRender) {
-    if (tab === 'menstrual') menstrualViewMonth = new Date();
-}
-    if (tab === 'bill') {
-    // 🌟 智能定位到当前周
-    const today = new Date();
-    if (currentMonth.getFullYear() === today.getFullYear() && currentMonth.getMonth() === today.getMonth()) {
-        currentBillWeek = Math.min(5, Math.ceil(today.getDate() / 7));
-    } else {
-        currentBillWeek = 1; 
+        if (tab === 'menstrual') menstrualViewMonth = new Date();
     }
-}
+    if (tab === 'bill') {
+        // 🌟 智能定位到当前周
+        const today = new Date();
+        if (currentMonth.getFullYear() === today.getFullYear() && currentMonth.getMonth() === today.getMonth()) {
+            currentBillWeek = Math.min(5, Math.ceil(today.getDate() / 7));
+        } else {
+            currentBillWeek = 1; 
+        }
+    }
 
-    // 🚨 下面这部分绝对不能放进上面的 else 里！
     // 判断是否重绘
     let pageDiv = document.getElementById('page-wrapper-' + tab);
     const isSamePageRefresh = (tab === previousTab);
@@ -9173,10 +9298,10 @@ if (SUB_PAGE_ROUTES[previousTab] && !SUB_PAGE_ROUTES[tab]) {
         }
         
         try { 
-    pageDiv.innerHTML = data.render(); 
-    updateIcons(pageDiv); 
-    AssetEngine.hydrateImages(pageDiv); // 🌟 异步扫描当前页面的图片并注入
-} catch (e) {
+            pageDiv.innerHTML = data.render(); 
+            updateIcons(pageDiv); 
+            AssetEngine.hydrateImages(pageDiv); 
+        } catch (e) {
             console.error('渲染错误:', e);
             pageDiv.innerHTML = `<div class="text-center text-red-500 p-4">页面渲染出错，请重试</div>`;
         }
@@ -9188,61 +9313,59 @@ if (SUB_PAGE_ROUTES[previousTab] && !SUB_PAGE_ROUTES[tab]) {
     });
 
     const mainEl = document.getElementById('content');
-const navContainer = document.querySelector('.nav-container');
+    const navContainer = document.querySelector('.nav-container');
 
-// 🌟 核心修复：进入日记独立页面时，彻底解除父容器的封印
-if (tab === 'diary_edit' || tab === 'diary_detail') {
-    mainEl.style.padding = '0'; // 去除 #content 的上下左右 padding
-    mainEl.classList.remove('px-4'); // 去除左右边距
-    if (navContainer) navContainer.style.display = 'none'; // 隐藏底部导航
-    
-    // 找到当前的页面容器，去除它的 transform 限制，让内部的 fixed 真正贴合屏幕
-    const targetPage = document.getElementById('page-wrapper-' + tab);
-    if (targetPage) {
-        targetPage.style.animation = 'none';
-        targetPage.style.transform = 'none';
-        targetPage.style.height = '100dvh'; // 撑满屏幕高度
+    // 🌟 核心修复：进入日记独立页面时，彻底解除父容器的封印
+    if (tab === 'diary_edit' || tab === 'diary_detail') {
+        mainEl.style.padding = ''; 
+        mainEl.classList.remove('px-4'); 
+        if (navContainer) navContainer.style.display = 'none'; 
+        
+        const targetPage = document.getElementById('page-wrapper-' + tab);
+        if (targetPage) {
+            targetPage.style.animation = 'none';
+            targetPage.style.transform = 'none';
+            targetPage.style.height = '100dvh'; 
+        }
+    } else {
+        mainEl.style.padding = ''; 
+        mainEl.style.paddingTop = 'calc(env(safe-area-inset-top, 0px) + 16px)';
+        mainEl.style.paddingBottom = tab === 'me' ? '0px' : (tab === 'bill' ? '48px' : '68px');
+        mainEl.classList.add('px-4');
+        
+        if (navContainer) navContainer.style.display = 'block';
     }
-} else {
-    // 恢复正常页面的样式
-    mainEl.style.padding = ''; 
-    mainEl.style.paddingTop = 'calc(env(safe-area-inset-top, 0px) + 16px)';
-    mainEl.style.paddingBottom = tab === 'me' ? '0px' : (tab === 'bill' ? '48px' : '68px');
-    mainEl.classList.add('px-4');
     
-    if (navContainer) navContainer.style.display = 'block';
-}
     // 底部导航高亮
     document.querySelectorAll('nav .nav-btn').forEach(btn => {
         btn.classList.add('text-gray-400');
         btn.classList.remove('active-tab');
     });
     const navBtn = document.getElementById('btn-' + tab);
-if (navBtn) { navBtn.classList.remove('text-gray-400'); navBtn.classList.add('active-tab'); }
+    if (navBtn) { navBtn.classList.remove('text-gray-400'); navBtn.classList.add('active-tab'); }
 
-// 补充更新导航栏和 FAB 悬浮按钮的图标
-updateIcons(document.querySelector('.nav-container'));
-updateIcons(document.getElementById('fab-add-btn'));
+    updateIcons(document.querySelector('.nav-container'));
+    updateIcons(document.getElementById('fab-add-btn'));
 
-// 右下角 FAB 按钮
-const fabBtn = document.getElementById('fab-add-btn');
-if (tab === 'finish' || tab === 'note' || tab === 'bill' || tab === 'installments' || tab === 'goals' || tab === 'countdowns') { // 🌟 加上了 countdowns
-    fabBtn.style.display = 'flex';
-    if (tab === 'finish') fabBtn.onclick = showAddTaskModal;
-else if (tab === 'note') {
-    if (noteType === 'diary') {
-        fabBtn.onclick = () => { _currentDiaryId = null; switchTab('diary_edit', true); };
+    // 右下角 FAB 按钮
+    const fabBtn = document.getElementById('fab-add-btn');
+    if (tab === 'finish' || tab === 'note' || tab === 'bill' || tab === 'installments' || tab === 'goals' || tab === 'countdowns') {
+        fabBtn.style.display = 'flex';
+        if (tab === 'finish') fabBtn.onclick = showAddTaskModal;
+        else if (tab === 'note') {
+            if (noteType === 'diary') {
+                fabBtn.onclick = () => { _currentDiaryId = null; switchTab('diary_edit', true); };
+            } else {
+                fabBtn.onclick = showAddNoteModal;
+            }
+        }
+        else if (tab === 'bill') fabBtn.onclick = () => { resetDraft(); openDraft(); showAddBillModal(); };
+        else if (tab === 'installments') fabBtn.onclick = () => showAddInstallmentModal();
+        else if (tab === 'goals') fabBtn.onclick = () => showCreateGoalModal();
+        else if (tab === 'countdowns') fabBtn.onclick = () => showCountdownForm(); 
     } else {
-        fabBtn.onclick = showAddNoteModal;
+        fabBtn.style.display = 'none';
     }
-}
-    else if (tab === 'bill') fabBtn.onclick = () => { resetDraft(); openDraft(); showAddBillModal(); };
-    else if (tab === 'installments') fabBtn.onclick = () => showAddInstallmentModal();
-    else if (tab === 'goals') fabBtn.onclick = () => showCreateGoalModal();
-    else if (tab === 'countdowns') fabBtn.onclick = () => showCountdownForm(); // 🌟 新增倒数日新建
-} else {
-    fabBtn.style.display = 'none';
-}
 
     vibrate(3);
     if (typeof _fabHidden !== 'undefined') {
@@ -9269,13 +9392,12 @@ else if (tab === 'note') {
         setTimeout(() => { fetchRemoteMenstrual(false); }, 300);
     }
 
-  // 🌟 新增：如果进入了日记编辑页，挂载图片上传的事件
+    // 🌟 进入日记页，仅挂载事件和图片网格
 if (tab === 'diary_edit') {
-    setTimeout(initDiaryPage, 50);
+    setTimeout(initDiaryPage, 10); 
 }
-
-// 🌟 新增：页面切换并渲染完毕后，检测 FAB 是否遮挡最后一条内容
-setTimeout(() => checkAndAddFABSpacer(tab), 100);
+    // 页面切换并渲染完毕后，检测 FAB 是否遮挡最后一条内容
+    setTimeout(() => checkAndAddFABSpacer(tab), 100);
 }
 
 // 从后台切回前台时，尝试拉取云端最新数据
@@ -9315,19 +9437,24 @@ const SUB_PAGE_ROUTES = {
 };
 
 // 🌟 统一处理子页面返回（供按钮点击或物理返回触发）
+let _isNavigatingBack = false;
+
 function goBackFromSubPage() {
+    if (_isNavigatingBack) return; // 🌟 防抖锁，防止连击退出
+    
     if (currentTab === 'diary_edit') {
         handleDiaryBack();
         return;
     }
 
-    // 下面是你原本的其他页面返回逻辑
     const parentTab = SUB_PAGE_ROUTES[currentTab] || 'home';
     try {
-        if (history.state && SUB_PAGE_ROUTES[history.state.page]) {
-            history.back(); 
+        if (history.state && history.state.page) {
+            _isNavigatingBack = true;
+            history.back();
+            setTimeout(() => { _isNavigatingBack = false; }, 500); // 500ms 后解锁
         } else {
-            switchTab(parentTab); 
+            switchTab(parentTab);
         }
     } catch (e) {
         switchTab(parentTab);
@@ -9373,11 +9500,22 @@ window.addEventListener('popstate', (e) => {
     }
 
     // 3. 🌟 日记编辑页决策
-    if (currentTab === 'diary_edit') {
+if (currentTab === 'diary_edit') {
+    if (!isDiaryDirty()) {
+        // 没有修改，直接静默退回
+        const targetState = e.state;
+        if (targetState && targetState.page && targetState.page !== 'diary_edit') {
+            switchTab(targetState.page, true);
+        } else {
+            switchTab(_currentDiaryId ? 'diary_detail' : 'note', true);
+        }
+    } else {
+        // 有修改，拦截返回并弹窗
         try { history.pushState({ page: 'diary_edit' }, '', ''); } catch(err) {}
         handleDiaryBack();
-        return;
     }
+    return;
+}
 
     // 4. 原有的页面路由拦截
     if (SUB_PAGE_ROUTES[currentTab]) {
@@ -9402,11 +9540,15 @@ requestPersistentStorage();
 loadData(); 
 switchTab('home');
 
-// 键盘弹出处理（通过可视区域高度精准判断，彻底解决“单独收起键盘”不恢复的问题）
+// 键盘弹出处理（智能计算键盘高度，动态分配底部留白）
 let _keyboardHideTimer = null;
+let _initialVH = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+
 function showKeyboardUI() {
     document.body.classList.add('keyboard-open');
-    // 确保输入框可见
+    
+    if (currentTab === 'diary_edit' || currentTab === 'diary_detail') return;
+
     const t = document.activeElement;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) {
         setTimeout(() => {
@@ -9414,32 +9556,39 @@ function showKeyboardUI() {
         }, 100);
     }
 }
+
 function hideKeyboardUI() {
     document.body.classList.remove('keyboard-open');
 }
 
 if (window.visualViewport) {
-    // 现代设备：直接监听屏幕可视高度变化
-    let _initialHeight = window.visualViewport.height;
     window.visualViewport.addEventListener('resize', () => {
-        // 如果高度缩水 100px 以上，说明键盘弹起了
-        if (window.visualViewport.height < _initialHeight - 100) {
+        const currentVH = window.visualViewport.height;
+        const keyboardHeight = _initialVH - currentVH;
+
+        if (keyboardHeight > 100) {
             showKeyboardUI();
         } else {
-            // 高度恢复，说明键盘收起了（不管焦点丢没丢）
             hideKeyboardUI();
+            _initialVH = currentVH;
         }
+        
+        // 每次视口变化，重绘日记页布局
+        if (currentTab === 'diary_edit') _applyDiaryLayout();
     });
-    
-    // 旋转屏幕时重置初始高度
+
+    // 旋转屏幕时重置
     window.addEventListener('orientationchange', () => {
-        setTimeout(() => { _initialHeight = window.visualViewport.height; }, 300);
+        setTimeout(() => {
+            _initialVH = window.visualViewport.height;
+            if (currentTab === 'diary_edit') _applyDiaryLayout();
+        }, 300);
     });
 } else {
-    // 老旧浏览器兜底：只能靠焦点事件
+    // 老旧浏览器兜底（只改状态类）
     document.addEventListener('focusin', (e) => {
         const t = e.target;
-        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) {
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) {
             if (_keyboardHideTimer) { clearTimeout(_keyboardHideTimer); _keyboardHideTimer = null; }
             showKeyboardUI();
         }
@@ -9449,7 +9598,6 @@ if (window.visualViewport) {
         _keyboardHideTimer = setTimeout(hideKeyboardUI, 120);
     });
 }
-
 
 // ==================== 性能优化：滚动监听 & FAB 按钮 ====================
 let _isScrolling = false;
