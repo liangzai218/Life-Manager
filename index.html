@@ -9793,24 +9793,27 @@ async function showUpdatePrompt(worker) {
 
         setTimeout(() => {
             document.getElementById('update-now-btn').onclick = () => {
-                // 1. 暴力抹除弹窗状态，绝不调用 closeCenterModal() 避免干扰 History
-                overlay.onclick = originalOnclick;
-                overlay.classList.remove('active');
-                _isUpdatePromptActive = false;
-                
-                if (_waitingWorker) {
-                    // 2. 通知后台 Service Worker 立即接管
-                    _waitingWorker.postMessage({ action: 'skipWaiting' });
-                    
-                    // 3. 给 SW 留出 1 秒的时间进行生命周期交接，然后暴力替换当前 URL 强制刷新
-                    setTimeout(() => {
-                        window.location.replace(window.location.href);
-                    }, 1000);
-                } else {
-                    window.location.replace(window.location.href);
-                }
-                resolve('update');
-            };
+    // 直接强拆 DOM，绝不碰 history！
+    overlay.onclick = originalOnclick;
+    overlay.classList.remove('active');
+    _isUpdatePromptActive = false;
+    
+    if (_waitingWorker) {
+        _waitingWorker.postMessage({ action: 'skipWaiting' });
+        
+        setTimeout(() => {
+            // 🌟 终极绝杀：加时间戳强刷，无视一切历史栈
+            const url = new URL(window.location.href);
+            url.searchParams.set('_t', Date.now());
+            window.location.href = url.toString();
+        }, 1000);
+    } else {
+        const url = new URL(window.location.href);
+        url.searchParams.set('_t', Date.now());
+        window.location.href = url.toString();
+    }
+    resolve('update');
+};
             
             document.getElementById('update-later-btn').onclick = () => {
                 overlay.onclick = originalOnclick; 
