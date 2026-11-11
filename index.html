@@ -10334,16 +10334,10 @@ async function showUpdatePrompt(worker) {
             document.getElementById('update-now-btn').onclick = () => {
     cleanup();
     if (_waitingWorker) {
+        // 🌟 核心修复：只发送 skipWaiting 指令，绝对不再拼接带时间戳的 URL
+        // 页面刷新由底部的 controllerchange 事件统一接管
         _waitingWorker.postMessage({ action: 'skipWaiting' });
     }
-    // 🌟 强制打断浏览器的排队挂起，直接发起新的网络导航
-    setTimeout(() => {
-        if (window._isReloading) return;
-        window._isReloading = true;
-        const url = new URL(window.location.href);
-        url.searchParams.set('_v', Date.now().toString());
-        window.location.replace(url.toString());
-    }, 150);
     resolve('update');
 };
             
@@ -10411,13 +10405,12 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
             }
         }).catch(err => console.log('PWA 注册失败!', err));
 
-        // 监听控制权接管，平滑刷新（同样使用强制导航）
+ // 监听控制权接管，平滑刷新（彻底去除时间戳，直接走缓存重载）
 navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (window._isReloading) return;
     window._isReloading = true;
-    const url = new URL(window.location.href);
-    url.searchParams.set('_v', Date.now().toString());
-    window.location.replace(url.toString());
+    // 🌟 核心修复：新 SW 接管后，直接 reload，请求会被 SW 拦截并返回本地缓存
+    window.location.reload();
 });
     });
 }

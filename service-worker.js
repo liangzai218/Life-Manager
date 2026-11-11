@@ -1,10 +1,15 @@
 // 🌟 每次发版，只需修改这里的版本号！
-const CACHE_NAME = 'life-manager-v5.4.4.4'; 
+const CACHE_NAME = 'life-manager-v5.4.4.5'; 
 
+// 🌟 核心修复 1：把所有本地核心依赖都加进预缓存列表，彻底保障离线可用
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
-  './app-icon.png'
+  './app-icon.png',
+  './manifest.json',
+  './tailwind.min.js',
+  './lucide.min.js',
+  './confetti.min.js'
 ];
 
 // ==========================================
@@ -44,9 +49,21 @@ self.addEventListener('activate', (event) => {
 });
 
 // ==========================================
-// 4. 拦截请求：优先使用缓存（保持你原来的策略）
+// 4. 拦截请求：优先使用缓存
 // ==========================================
 self.addEventListener('fetch', (event) => {
+    // 🌟 核心修复 2：专门拦截“页面导航请求”（mode === 'navigate'）
+    // 不管 WebView 在 URL 后面加了什么乱七八糟的参数，统统返回纯正的本地 index.html
+    if (event.request.mode === 'navigate') {
+        event.respondWith(
+            caches.match('./index.html').then((response) => {
+                return response || fetch(event.request);
+            })
+        );
+        return;
+    }
+
+    // 其他静态资源（JS、图片等）按原逻辑匹配缓存，匹配不到再走网络
     event.respondWith(
         caches.match(event.request).then((response) => {
             return response || fetch(event.request);
