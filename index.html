@@ -326,9 +326,15 @@ html, body { scrollbar-width: none !important; -ms-overflow-style: none !importa
 
     <div id="toast" class="toast"></div>
 <!-- 全屏图片预览 -->
-<div id="image-lightbox" class="fixed inset-0 z-[99999] bg-black/95 hidden flex-col items-center justify-center overflow-hidden" onclick="hideImagePreview()" style="touch-action: none; user-select: none;">
+<div id="image-lightbox" class="fixed inset-0 z-[99999] bg-black/95 hidden flex-col items-center justify-center overflow-hidden" onclick="if(window._hasGestured) return; hideImagePreview();" style="touch-action: none; user-select: none;">
+    
+    <!-- 🌟 新增：顶部页码指示器 -->
+    <div id="lightbox-counter" class="absolute text-white/80 text-sm font-medium tracking-widest z-[100000] transition-opacity duration-300" style="top: calc(env(safe-area-inset-top, 0px) + 24px);">
+        1 / 1
+    </div>
+
     <!-- 图片容器 -->
-    <img id="lightbox-img" class="max-w-full max-h-full object-contain cursor-grab active:cursor-grabbing" onclick="event.stopPropagation()" style="will-change: transform, translate; transform-origin: center center;">
+    <img id="lightbox-img" class="max-w-full max-h-full object-contain cursor-grab active:cursor-grabbing" onclick="event.stopPropagation()" style="will-change: transform, translate; transform-origin: center center; transition: opacity 0.2s;">
     
     <!-- 悬浮关闭按钮（高对比白底，图标修复） -->
     <button class="absolute text-gray-800 p-3 bg-white/90 rounded-full active:bg-white z-[100000] shadow-xl flex items-center justify-center border border-gray-100" 
@@ -964,40 +970,86 @@ let _isDragging = false;
 let _isPinching = false;
 let _rafId = null;
 
-function showImagePreview(src) {
-    if (!src) return;
+let _previewImages = [];
+let _previewIndex = 0;
+let _startSwipeX = 0; // 用于记录横向滑动
+
+async function showImagePreview(imagesJson, index = 0) {
     const box = document.getElementById('image-lightbox');
     const img = document.getElementById('lightbox-img');
     if (!box || !img) return;
-    
-    img.src = src;
+
+    // 解析图片数组（兼容传入单个 src 的情况）
+    try {
+        _previewImages = typeof imagesJson === 'string' ? JSON.parse(imagesJson.replace(/&quot;/g, '"')) : imagesJson;
+    } catch(e) {
+        _previewImages = [imagesJson]; // 兜底
+    }
+    _previewIndex = index;
+
+    // 彻底清理旧监听
+    img.removeEventListener('touchstart', _onTouchStart);
+    img.removeEventListener('touchmove', _onTouchMove);
+    window.removeEventListener('touchend', _onTouchEnd);
+    window.removeEventListener('touchcancel', _onTouchEnd); 
     
     // 重置状态
     _currentScale = 1; _targetScale = 1;
     _currentX = 0; _currentY = 0; _targetX = 0; _targetY = 0;
     _isDragging = false; _isPinching = false;
+    window._hasGestured = false;
     
     img.style.transform = `translate3d(0px, 0px, 0px) scale(1)`;
+    img.style.transition = 'none'; // 切图时取消过渡
+    img.style.opacity = '0'; // 先透明，加载完再显示
     
     box.classList.remove('hidden');
     box.style.display = 'flex';
+    img.style.touchAction = 'none';
     
-    // 🌟 核心修复：向历史栈推入一个状态，拦截安卓物理返回键
     try { history.pushState({ page: currentTab, lightbox: true }, '', ''); } catch(e) {}
-
-    // 🌟 核心修复：重新渲染关闭按钮的图标
     setTimeout(() => { updateIcons(box); }, 50);
 
-    // 监听触摸事件（全用 touch 事件，移动端最丝滑）
+    // 绑定新事件
     img.addEventListener('touchstart', _onTouchStart, { passive: false });
     img.addEventListener('touchmove', _onTouchMove, { passive: false });
     window.addEventListener('touchend', _onTouchEnd);
+    window.addEventListener('touchcancel', _onTouchEnd);
+
+    // 🌟 加载当前索引的图片
+    await loadPreviewImage(_previewIndex);
+}
+
+async function loadPreviewImage(index) {
+    if (index < 0 || index >= _previewImages.length) return;
+    const img = document.getElementById('lightbox-img');
+    const counter = document.getElementById('lightbox-counter');
+    
+    // 更新计数器
+    if (counter) {
+        if (_previewImages.length > 1) {
+            counter.textContent = `${index + 1} / ${_previewImages.length}`;
+            counter.style.display = 'block';
+        } else {
+            counter.style.display = 'none';
+        }
+    }
+
+    const imgId = _previewImages[index];
+    // 从本地 AssetEngine 获取 Base64
+    const base64 = await AssetEngine.getLocal(imgId);
+    if (base64) {
+        img.src = base64;
+    } else {
+        // 兜底：如果是直接传的 URL
+        img.src = imgId; 
+    }
+    
+    // 渐显
+    img.style.opacity = '1';
 }
 
 function hideImagePreview(isFromPop = false) {
-    // 🌟 关键：按钮关闭时先把控制权交给 popstate，让灯箱拦截逻辑先命中
-    // 如果先 display='none' 再 back()，popstate 里的灯箱判断会失效，
-    // 进入常规页面路由逻辑，会误退到上一级 Tab
     if (!isFromPop && history.state && history.state.lightbox) {
         try { history.back(); } catch(e) {}
         return;
@@ -1011,17 +1063,16 @@ function hideImagePreview(isFromPop = false) {
     box.style.display = 'none';
     img.src = '';
     
-    // 解绑事件
     img.removeEventListener('touchstart', _onTouchStart);
     img.removeEventListener('touchmove', _onTouchMove);
     window.removeEventListener('touchend', _onTouchEnd);
+    window.removeEventListener('touchcancel', _onTouchEnd);
     
-    if (_rafId) cancelAnimationFrame(_rafId);
+    if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; }
 }
 
-// ------------------ 平滑渲染引擎 (带阻尼) ------------------
+// ------------------ 手势与动画引擎 ------------------
 function _renderLoop() {
-    // 弹簧阻尼平滑过渡
     _currentScale += (_targetScale - _currentScale) * 0.3;
     _currentX += (_targetX - _currentX) * 0.3;
     _currentY += (_targetY - _currentY) * 0.3;
@@ -1031,7 +1082,6 @@ function _renderLoop() {
         img.style.transform = `translate3d(${_currentX}px, ${_currentY}px, 0px) scale(${_currentScale})`;
     }
     
-    // 如果还有差距，继续下一帧
     if (Math.abs(_targetScale - _currentScale) > 0.001 || 
         Math.abs(_targetX - _currentX) > 0.1 || 
         Math.abs(_targetY - _currentY) > 0.1) {
@@ -1047,7 +1097,6 @@ function _updateTransform() {
     }
 }
 
-// ------------------ 触摸手势处理 ------------------
 function _getDist(touches) {
     return Math.hypot(
         touches[0].clientX - touches[1].clientX,
@@ -1056,14 +1105,23 @@ function _getDist(touches) {
 }
 
 function _onTouchStart(e) {
-    if (e.touches.length === 1 && _currentScale > 1) {
-        // 单指拖拽准备
-        _isDragging = true;
-        _startX = e.touches[0].clientX - _currentX;
-        _startY = e.touches[0].clientY - _currentY;
+    window._hasGestured = false;
+    const img = document.getElementById('lightbox-img');
+    if (img) img.style.transition = 'none';
+
+    if (e.touches.length === 1) {
+        if (_currentScale > 1) {
+            // 缩放状态下，单指拖拽图片
+            _isDragging = true;
+            _startX = e.touches[0].clientX - _currentX;
+            _startY = e.touches[0].clientY - _currentY;
+        } else {
+            // 原始比例下，单指记录横向滑动起点
+            _startSwipeX = e.touches[0].clientX;
+        }
     } else if (e.touches.length === 2) {
-        // 双指缩放准备
         e.preventDefault();
+        window._hasGestured = true;
         _isPinching = true;
         _isDragging = false;
         _initialPinchDistance = _getDist(e.touches);
@@ -1073,73 +1131,111 @@ function _onTouchStart(e) {
 
 function _onTouchMove(e) {
     if (e.touches.length === 1 && _isDragging && !_isPinching) {
-        // 单指拖拽逻辑 (1:1 跟手)
+        // 放大后的拖拽
         e.preventDefault();
+        window._hasGestured = true;
         
         let newX = e.touches[0].clientX - _startX;
         let newY = e.touches[0].clientY - _startY;
         
-        // 计算边界极限
         const maxX = (window.innerWidth * (_currentScale - 1)) / 2;
         const maxY = (window.innerHeight * (_currentScale - 1)) / 2;
         
-        // 限制边界
         newX = Math.max(-maxX, Math.min(maxX, newX));
         newY = Math.max(-maxY, Math.min(maxY, newY));
         
-        // 直接赋值给 target，让它通过 requestAnimationFrame 瞬间跟上
-        _targetX = newX;
-        _targetY = newY;
+        _targetX = newX; _targetY = newY;
+        _currentX = newX; _currentY = newY;
         
-        // 拖拽时不需要阻尼，直接渲染
-        _currentX = newX;
-        _currentY = newY;
         const img = document.getElementById('lightbox-img');
         if (img) {
             img.style.transform = `translate3d(${_currentX}px, ${_currentY}px, 0px) scale(${_currentScale})`;
         }
-    } else if (e.touches.length === 2 && _isPinching) {
-        // 双指缩放逻辑
-        e.preventDefault();
-        const dist = _getDist(e.touches);
+    } else if (e.touches.length === 1 && _currentScale === 1 && _previewImages.length > 1) {
+        // 🌟 未放大时的左右滑动切图
+        const deltaX = e.touches[0].clientX - _startSwipeX;
+        if (Math.abs(deltaX) > 10) window._hasGestured = true; // 判定为滑动而非点击
         
+        const img = document.getElementById('lightbox-img');
+        if (img) {
+            // 跟随手指移动，加点阻尼感
+            const resistance = (deltaX > 0 && _previewIndex === 0) || (deltaX < 0 && _previewIndex === _previewImages.length - 1) ? 0.3 : 1;
+            img.style.transform = `translateX(${deltaX * resistance}px)`;
+        }
+    } else if (e.touches.length === 2 && _isPinching) {
+        e.preventDefault();
+        window._hasGestured = true;
+        
+        const dist = _getDist(e.touches);
         _targetScale = (_initialScaleOnPinch * dist) / _initialPinchDistance;
-        _targetScale = Math.max(1, Math.min(_targetScale, 4)); // 限制 1~4 倍
+        _targetScale = Math.max(1, Math.min(_targetScale, 4));
         
         if (_targetScale <= 1) {
-            _targetX = 0;
-            _targetY = 0;
+            _targetX = 0; _targetY = 0;
         }
-        
         _updateTransform();
     }
 }
 
 function _onTouchEnd(e) {
+    const img = document.getElementById('lightbox-img');
+    
     if (e.touches.length === 0) {
-        // 全部手指离开
         _isDragging = false;
-        _isPinching = false;
         
-        // 如果缩小到 1 倍以下，回弹居中
-        if (_targetScale <= 1) {
-            _targetScale = 1;
-            _targetX = 0;
-            _targetY = 0;
-            _updateTransform();
-        } else {
-            // 边界回弹处理
-            const maxX = (window.innerWidth * (_targetScale - 1)) / 2;
-            const maxY = (window.innerHeight * (_targetScale - 1)) / 2;
-            let needUpdate = false;
-            if (_targetX > maxX) { _targetX = maxX; needUpdate = true; }
-            if (_targetX < -maxX) { _targetX = -maxX; needUpdate = true; }
-            if (_targetY > maxY) { _targetY = maxY; needUpdate = true; }
-            if (_targetY < -maxY) { _targetY = -maxY; needUpdate = true; }
-            if (needUpdate) _updateTransform();
+        // 处理双指松开回弹
+        if (_isPinching) {
+            _isPinching = false;
+            if (_targetScale <= 1) {
+                _targetScale = 1; _targetX = 0; _targetY = 0;
+                _updateTransform();
+            } else {
+                const maxX = (window.innerWidth * (_targetScale - 1)) / 2;
+                const maxY = (window.innerHeight * (_targetScale - 1)) / 2;
+                let needUpdate = false;
+                if (_targetX > maxX) { _targetX = maxX; needUpdate = true; }
+                if (_targetX < -maxX) { _targetX = -maxX; needUpdate = true; }
+                if (_targetY > maxY) { _targetY = maxY; needUpdate = true; }
+                if (_targetY < -maxY) { _targetY = -maxY; needUpdate = true; }
+                if (needUpdate) _updateTransform();
+            }
+        } 
+        // 🌟 处理单指左滑右滑切图
+        else if (_currentScale === 1 && _previewImages.length > 1 && window._hasGestured && img) {
+            const deltaX = _currentX = parseFloat((img.style.transform.match(/translateX\((.*?)px\)/) || [0, 0])[1]);
+            
+            if (Math.abs(deltaX) > window.innerWidth * 0.2) {
+                // 超过 20% 屏幕宽度，触发切换
+                img.style.transition = 'transform 0.25s ease-out, opacity 0.25s ease-out';
+                img.style.transform = `translateX(${deltaX > 0 ? window.innerWidth : -window.innerWidth}px)`;
+                img.style.opacity = '0';
+                
+                setTimeout(async () => {
+                    if (deltaX > 0 && _previewIndex > 0) {
+                        _previewIndex--;
+                    } else if (deltaX < 0 && _previewIndex < _previewImages.length - 1) {
+                        _previewIndex++;
+                    }
+                    // 瞬间归位并从另一侧滑入（视觉上很连贯）
+                    img.style.transition = 'none';
+                    img.style.transform = `translateX(${deltaX > 0 ? -window.innerWidth * 0.5 : window.innerWidth * 0.5}px)`;
+                    
+                    await loadPreviewImage(_previewIndex);
+                    
+                    requestAnimationFrame(() => {
+                        img.style.transition = 'transform 0.25s ease-out, opacity 0.25s ease-out';
+                        img.style.transform = 'translateX(0)';
+                    });
+                }, 200);
+            } else {
+                // 没滑动够，弹回原位
+                img.style.transition = 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+                img.style.transform = 'translateX(0)';
+            }
         }
+        
+        setTimeout(() => { window._hasGestured = false; }, 100);
     } else if (e.touches.length === 1 && _isPinching) {
-        // 从双指变单指，接力拖拽
         _isPinching = false;
         _isDragging = true;
         _startX = e.touches[0].clientX - _currentX;
@@ -1175,6 +1271,7 @@ function openModal(html) {
        let noteType = 'text';
 let _currentDiaryId = null; // 🌟 新增：记录当前日记ID
 let _userGeo = { lat: null, lon: null, city: '' }; // 🌟 新增：缓存定位，用于查历史天气
+let _diaryRenderLimit = 30; // 🌟 日记列表每次渲染的天数
 let showAddInput = false;
 let taskStatsMonth = new Date();
 let menstrualViewMonth = new Date();
@@ -2302,14 +2399,40 @@ async function confirmEditTaskName(taskId) {
 }
 
 // ==================== 记事模块 ====================
+// 渲染普通的笔记/密码列表（保持原样）
+function renderStandardNoteList(notes) {
+    return notes.map(note => {
+        let preview = '';
+        if (noteType === 'text' && note.content) {
+            const lines = note.content.split('\n').filter(line => line.trim());
+            preview = lines.slice(0, 2).join('\n');
+        }
+        return `
+        <div class="note-card p-3 rounded-xl" onclick="showNoteDetail('${note.id}')">
+            <div class="flex justify-between items-start">
+                <div class="flex-1 min-w-0">
+                    <p class="font-semibold text-[13px] text-gray-800 truncate">${escapeHtml(note.title)}</p>
+                    ${noteType === 'text' && preview ? `<p class="text-[11px] text-gray-500 mt-0.5 line-clamp-2">${escapeHtml(preview)}</p>` : ''}
+                    ${noteType === 'password' ? `<p class="text-[11px] text-gray-500 mt-0.5">${escapeHtml(note.account || '无账号')}</p>` : ''}
+                    <p class="text-[9px] text-gray-400 mt-1">${new Date(note.updatedAt).toLocaleDateString()}</p>
+                </div>
+                <button onclick="event.stopPropagation(); deleteNote('${note.id}')" class="p-1 text-gray-400 hover:text-red-500 ml-2"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
+            </div>
+        </div>
+        `;
+    }).join('');
+}
+
 function renderNoteView() {
     const filteredNotes = appData.notes.filter(n => n.type === noteType).sort((a, b) => {
-        // 日记按日期倒序，普通笔记按更新时间倒序
         if (noteType === 'diary') {
             return new Date(b.date) - new Date(a.date) || b.createdAt - a.createdAt;
         }
         return b.updatedAt - a.updatedAt;
     });
+
+    // 🌟 每次进入页面，如果是日记，重置分页限制
+    if (noteType === 'diary') _diaryRenderLimit = 30;
 
     let html = `
         <div class="space-y-3 mt-2 pb-6">
@@ -2338,31 +2461,62 @@ function renderNoteView() {
     return html;
 }
 
-// 渲染普通的笔记/密码列表（保持原样）
-function renderStandardNoteList(notes) {
-    return notes.map(note => {
-        let preview = '';
-        if (noteType === 'text' && note.content) {
-            const lines = note.content.split('\n').filter(line => line.trim());
-            preview = lines.slice(0, 2).join('\n');
-        }
-        return `
-        <div class="note-card p-3 rounded-xl" onclick="showNoteDetail('${note.id}')">
-            <div class="flex justify-between items-start">
-                <div class="flex-1 min-w-0">
-                    <p class="font-semibold text-[13px] text-gray-800 truncate">${escapeHtml(note.title)}</p>
-                    ${noteType === 'text' && preview ? `<p class="text-[11px] text-gray-500 mt-0.5 line-clamp-2">${escapeHtml(preview)}</p>` : ''}
-                    ${noteType === 'password' ? `<p class="text-[11px] text-gray-500 mt-0.5">${escapeHtml(note.account || '无账号')}</p>` : ''}
-                    <p class="text-[9px] text-gray-400 mt-1">${new Date(note.updatedAt).toLocaleDateString()}</p>
-                </div>
-                <button onclick="event.stopPropagation(); deleteNote('${note.id}')" class="p-1 text-gray-400 hover:text-red-500 ml-2"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
+// 🌟 新增：抽取单日日记的渲染逻辑，方便无限滚动追加
+function renderSingleDayDiary(dateStr, dayNotes) {
+    const d = parseDate(dateStr);
+    const weekStr = ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
+    const displayDate = `${d.getFullYear()} / ${String(d.getMonth()+1).padStart(2,'0')} / ${String(d.getDate()).padStart(2,'0')}`;
+    const weatherIcon = dayNotes[0].weatherIcon || getWeatherIcon(dayNotes[0].weather);
+
+    let dayHtml = `
+    <div class="flex gap-2.5 mb-7"> 
+        <div class="flex flex-col items-center flex-shrink-0 w-8">
+            <div class="w-8 h-8 flex items-center justify-center text-[#5B9BD5] z-10 flex-shrink-0">
+                <i data-lucide="${weatherIcon}" class="w-5 h-5"></i>
             </div>
+            <div class="w-px border-l-[1.5px] border-dashed border-gray-400/60 flex-1 mt-1"></div>
         </div>
+        <div class="flex-1 min-w-0">
+            <div class="text-[#5B9BD5] font-semibold text-[12px] tracking-normal h-8 flex items-center mb-2">
+                ${displayDate} · ${weekStr}
+            </div>
+            <div class="space-y-3">
+    `;
+
+    dayHtml += dayNotes.map(note => {
+        let imgsHtml = '';
+        if (note.imageIds && note.imageIds.length > 0) {
+            const maxShow = 3;
+            const showIds = note.imageIds.slice(0, maxShow);
+            const extra = note.imageIds.length - maxShow;
+            imgsHtml = `<div class="flex flex-wrap gap-1.5 mt-3">
+                ${showIds.map((id, idx) => {
+                    const isLast = idx === showIds.length - 1 && extra > 0;
+                    return `
+                    <div class="relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100">
+                        <img data-asset-id="${id}" class="w-full h-full object-cover">
+                        ${isLast ? `<div class="absolute inset-0 bg-black/45 flex items-center justify-center text-white text-sm font-bold">+${extra}</div>` : ''}
+                    </div>`;
+                }).join('')}
+            </div>`;
+        }
+
+        return `
+            <div class="relative bg-white rounded-2xl p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.03),0_8px_20px_-12px_rgba(15,23,42,0.10)] active:scale-[0.985] transition-transform duration-200 cursor-pointer" onclick="_currentDiaryId='${note.id}'; switchTab('diary_detail', true)">
+                <div class="flex items-center gap-1.5 mb-2">
+                    <span class="text-[10px] text-gray-400 font-medium tracking-wider">${note.time || '--:--'}</span>
+                    <span class="flex-1 h-px bg-gradient-to-r from-gray-100 to-transparent"></span>
+                </div>
+                <p class="text-[13px] text-gray-700 leading-[1.75] whitespace-pre-wrap line-clamp-6">${escapeHtml(note.content || '')}</p>
+                ${imgsHtml}
+            </div>
         `;
     }).join('');
+
+    dayHtml += `</div></div></div>`;
+    return dayHtml;
 }
 
-// 渲染日记列表（完美复刻图二：按组截断的局部虚线）
 function renderDiaryList(notes) {
     if (!notes || notes.length === 0) return '';
 
@@ -2375,81 +2529,79 @@ function renderDiaryList(notes) {
     });
 
     const sortedDates = Object.keys(groupedByDate).sort((a, b) => new Date(b) - new Date(a));
+    
+    // 只取前 _diaryRenderLimit 天
+    const renderDates = sortedDates.slice(0, _diaryRenderLimit);
 
-    // 🌟 移除了全局的 padding 和绝对定位的虚线，改由每个日期组内部自己控制
-    let html = `<div class="pb-4">`;
+    let html = `<div class="pb-4" id="diary-list-container">`;
+    html += renderDates.map(dateStr => renderSingleDayDiary(dateStr, groupedByDate[dateStr])).join('');
+    html += `</div>`;
 
-    html += sortedDates.map(dateStr => {
-        const dayNotes = groupedByDate[dateStr];
-        
-        const d = parseDate(dateStr);
-const weekStr = ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
-const displayDate = `${d.getFullYear()} / ${String(d.getMonth()+1).padStart(2,'0')} / ${String(d.getDate()).padStart(2,'0')}`;
+    // 🌟 如果还有更多，在底部放置一个加载哨兵
+    if (sortedDates.length > _diaryRenderLimit) {
+        html += `<div id="diary-load-more" class="text-center text-gray-400 text-xs py-4 flex justify-center items-center gap-2">
+            <div class="w-4 h-4 rounded-full border-2 border-gray-300 border-t-blue-500 animate-spin"></div>正在加载更多...
+        </div>`;
+    }
 
-// 🌟 优先读取数据库里存好的准确图标；如果是旧日记没存图标，再用老方法兜底
-const weatherIcon = dayNotes[0].weatherIcon || getWeatherIcon(dayNotes[0].weather);
-
-        // 🌟 核心布局：外层 flex，左侧固定宽度画时间轴，右侧自适应内容
-        let dayHtml = `
-        <div class="flex gap-2.5 mb-7"> 
-            
-            <!-- 左侧时间轴列 -->
-            <div class="flex flex-col items-center flex-shrink-0 w-8">
-                <!-- 天气图标：纯图标，无框，无背景 -->
-                <div class="w-8 h-8 flex items-center justify-center text-[#5B9BD5] z-10 flex-shrink-0">
-                    <i data-lucide="${weatherIcon}" class="w-5 h-5"></i>
-                </div>
-                <!-- 局部虚线：flex-1 使其跟随右侧高度自动拉长，直到当天最后一张卡片底部 -->
-                <div class="w-px border-l-[1.5px] border-dashed border-gray-400/60 flex-1 mt-1"></div>
-            </div>
-            
-            <!-- 右侧内容区 -->
-            <div class="flex-1 min-w-0">
-                <!-- 日期文字（h-8 保证与左侧图标垂直居中对齐） -->
-                <div class="text-[#5B9BD5] font-semibold text-[12px] tracking-normal h-8 flex items-center mb-2">
-    ${displayDate} · ${weekStr}
-</div>
-                
-                <!-- 日记卡片列表 -->
-                <div class="space-y-3">
-        `;
-
-        dayHtml += dayNotes.map(note => {
-    let imgsHtml = '';
-if (note.imageIds && note.imageIds.length > 0) {
-    const maxShow = 3;
-    const showIds = note.imageIds.slice(0, maxShow);
-    const extra = note.imageIds.length - maxShow;
-    imgsHtml = `<div class="flex flex-wrap gap-1.5 mt-3">
-        ${showIds.map((id, idx) => {
-            const isLast = idx === showIds.length - 1 && extra > 0;
-            return `
-            <div class="relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100">
-                <img data-asset-id="${id}" class="w-full h-full object-cover">
-                ${isLast ? `<div class="absolute inset-0 bg-black/45 flex items-center justify-center text-white text-sm font-bold">+${extra}</div>` : ''}
-            </div>`;
-        }).join('')}
-    </div>`;
+    return html;
 }
 
-return `
-    <div class="relative bg-white rounded-2xl p-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.03),0_8px_20px_-12px_rgba(15,23,42,0.10)] active:scale-[0.985] transition-transform duration-200 cursor-pointer" onclick="_currentDiaryId='${note.id}'; switchTab('diary_detail', true)">
-        <div class="flex items-center gap-1.5 mb-2">
-            <span class="text-[10px] text-gray-400 font-medium tracking-wider">${note.time || '--:--'}</span>
-            <span class="flex-1 h-px bg-gradient-to-r from-gray-100 to-transparent"></span>
-        </div>
-        <p class="text-[13px] text-gray-700 leading-[1.75] whitespace-pre-wrap line-clamp-6">${escapeHtml(note.content || '')}</p>
-        ${imgsHtml}
-    </div>
-`;
-}).join('');
 
-        dayHtml += `</div></div></div>`; // 闭合右侧卡片列表、右侧内容区、当天外层
-        return dayHtml;
-    }).join('');
+function setupDiaryInfiniteScroll() {
+    const sentinel = document.getElementById('diary-load-more');
+    if (!sentinel || !window.IntersectionObserver) return;
 
-    html += `</div>`;
-    return html;
+    if (window._diaryObserver) window._diaryObserver.disconnect();
+
+    window._diaryObserver = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting) {
+            // 移出视野后立刻移除旧哨兵，防止重复触发
+            sentinel.remove();
+            window._diaryObserver.disconnect();
+
+            // 重新拉取数据并按天分组
+            const filteredNotes = appData.notes.filter(n => n.type === 'diary').sort((a, b) => {
+                return new Date(b.date) - new Date(a.date) || b.createdAt - a.createdAt;
+            });
+            const groupedByDate = {};
+            filteredNotes.forEach(note => {
+                if (!groupedByDate[note.date]) groupedByDate[note.date] = [];
+                groupedByDate[note.date].push(note);
+            });
+            const sortedDates = Object.keys(groupedByDate).sort((a, b) => new Date(b) - new Date(a));
+
+            const nextDates = sortedDates.slice(_diaryRenderLimit, _diaryRenderLimit + 30);
+            _diaryRenderLimit += 30;
+
+            const container = document.getElementById('diary-list-container');
+            if (container && nextDates.length > 0) {
+                // 🌟 核心：只拼接新增的 DOM，绝不重绘之前的，保证滚动条位置不乱
+                const newHtml = nextDates.map(dateStr => renderSingleDayDiary(dateStr, groupedByDate[dateStr])).join('');
+                container.insertAdjacentHTML('beforeend', newHtml);
+                
+                // 初始化新插入内容的图标和懒加载图片
+                updateIcons(container);
+                AssetEngine.hydrateImages(container);
+            }
+
+            // 如果还有更多，重新生成哨兵并继续监听
+            if (sortedDates.length > _diaryRenderLimit) {
+                const pageDiv = document.getElementById('page-wrapper-note');
+                if (pageDiv) {
+                    const newSentinel = document.createElement('div');
+                    newSentinel.id = 'diary-load-more';
+                    newSentinel.className = 'text-center text-gray-400 text-xs py-4 flex justify-center items-center gap-2';
+                    newSentinel.innerHTML = '<div class="w-4 h-4 rounded-full border-2 border-gray-300 border-t-blue-500 animate-spin"></div>正在加载更多...';
+                    pageDiv.appendChild(newSentinel);
+                    
+                    window._diaryObserver.observe(newSentinel);
+                }
+            }
+        }
+    }, { rootMargin: '300px' }); // 距离底部 300px 时就开始加载
+
+    window._diaryObserver.observe(sentinel);
 }
 
 // 辅助：根据天气文字返回 Lucide 图标名
@@ -3036,10 +3188,30 @@ function renderDiaryDetailView() {
     const dayStr = String(d.getDate()).padStart(2, '0');
     const monthStr = `${d.getMonth()+1}月 / ${weekStr}`;
     
-    let imgsHtml = '';
+let imgsHtml = '';
 if (note.imageIds && note.imageIds.length > 0) {
-    // 🌟 修复 1：给图片父容器加上 flex-shrink-0，防止高度被强制挤压
-    imgsHtml = `<div class="space-y-4 mt-10 w-full flex-shrink-0">${note.imageIds.map(id => `<img data-asset-id="${id}" class="w-full h-auto rounded-xl object-cover bg-gray-50 cursor-pointer shadow-sm" onclick="showImagePreview(this.src)">`).join('')}</div>`;
+    const count = note.imageIds.length;
+    // 基础的外层容器类
+    let wrapperClass = "mt-10 w-full flex-shrink-0 ";
+    // 基础的单张图片类
+    let imgClass = "rounded-xl object-cover bg-gray-50 cursor-pointer shadow-sm active:scale-95 transition-transform ";
+
+    if (count === 1) {
+        // 🌟 1张：保持大图，限制最大高度防止长图撑爆
+        imgClass += "w-full h-auto max-h-[60vh]";
+    } else if (count === 2) {
+        // 🌟 2张：两列一行，图片设为正方形（aspect-square）保证整齐
+        wrapperClass += "grid grid-cols-2 gap-2";
+        imgClass += "w-full aspect-square";
+    } else {
+        // 🌟 3张及以上：三列不限行
+        wrapperClass += "grid grid-cols-3 gap-2";
+        imgClass += "w-full aspect-square";
+    }
+
+    // 🌟 将整个 imageIds 数组和当前点击的索引传过去
+const idsJson = JSON.stringify(note.imageIds).replace(/"/g, '&quot;');
+imgsHtml = `<div class="${wrapperClass}">${note.imageIds.map((id, index) => `<img data-asset-id="${id}" class="${imgClass}" onclick="showImagePreview(${idsJson}, ${index})">`).join('')}</div>`;
 }
 
     const themeObj = DIARY_THEMES.find(t => t.id === (note.bgThemeId || 'default')) || DIARY_THEMES[0];
@@ -3774,22 +3946,25 @@ function getRecordsDateRange(records, field = 'date') {
     if (!Array.isArray(records) || records.length === 0) return null;
     let earliest = null;
     let latest = null;
+    const uniqueDates = new Set(); // 🌟 新增：用于统计实际有记录的唯一天数
+
     for (let i = 0; i < records.length; i++) {
         const d = records[i] && records[i][field];
         if (!d || typeof d !== 'string') continue;
         if (earliest === null || d < earliest) earliest = d;
         if (latest === null || d > latest) latest = d;
+        uniqueDates.add(d);
     }
     if (earliest === null) return null;
 
-    // 🌟 跨度天数：用 Date.UTC 解析 YYYY-MM-DD，避开夏令时/时区跨日风险
     const [ey, em, ed] = earliest.split('-').map(Number);
     const [ly, lm, ld] = latest.split('-').map(Number);
     const eUtc = Date.UTC(ey, em - 1, ed);
     const lUtc = Date.UTC(ly, lm - 1, ld);
     const spanDays = Math.round((lUtc - eUtc) / 86400000) + 1;
 
-    return { earliest, latest, spanDays };
+    // 🌟 返回增加 activeDays（实际消费天数）
+    return { earliest, latest, spanDays, activeDays: uniqueDates.size };
 }
 
 // 🌟 L2 聚合引擎：计算日均值
@@ -6020,15 +6195,17 @@ return `
     }
 
     // 日期范围 / 天数 / 日均（只服务支出，收入不展示）
-    let rangeHtml = '';
-    if (dateRange) {
-        const fmt = (s) => s.slice(5).replace('-', '/');
-        const rangeStr = dateRange.earliest === dateRange.latest
-            ? fmt(dateRange.earliest)
-            : `${fmt(dateRange.earliest)} ~ ${fmt(dateRange.latest)}`;
-        const dailyAvg = calcDailyAverage(totalAmount, dateRange.spanDays);
-        rangeHtml = `<span class="block text-[10px] text-gray-400 font-normal mt-0.5">${rangeStr} · ${dateRange.spanDays}天 · 日均 ¥${toPlainNumber(dailyAvg)}</span>`;
-    }
+let rangeHtml = '';
+if (dateRange) {
+    const fmt = (s) => s.slice(5).replace('-', '/');
+    const rangeStr = dateRange.earliest === dateRange.latest
+        ? fmt(dateRange.earliest)
+        : `${fmt(dateRange.earliest)} ~ ${fmt(dateRange.latest)}`;
+        
+    // 🌟 修复：展示“共 X 天”（跨度）、“消费 Y 天”（有记录的天数），日均按 Y 算
+    const dailyAvg = calcDailyAverage(totalAmount, dateRange.activeDays);
+    rangeHtml = `<span class="block text-[10px] text-gray-400 font-normal mt-0.5">${rangeStr} · 共 ${dateRange.spanDays} 天 · 消费 ${dateRange.activeDays} 天 · 日均 ¥${toPlainNumber(dailyAvg)}</span>`;
+}
 
     const html = `
     <div class="flex flex-col max-h-[75vh]">
@@ -7573,36 +7750,65 @@ let _isProcessingAssets = false;
         });
     }
 
-    // 3. 图片极限压缩
-    function compressImage(file, maxWidth = 300, maxHeight = 300, quality = 0.6) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = e => {
-                const img = new Image();
-                img.src = e.target.result;
-                img.onload = () => {
-                    let width = img.width;
-                    let height = img.height;
-                    
-                    if (width > height) {
-                        if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
-                    } else {
-                        if (height > maxHeight) { width = Math.round((width * maxHeight) / height); height = maxHeight; }
-                    }
+    // 3. 图片极限压缩（支持智能分级）
+function compressImage(file, maxWidth = 300, maxHeight = 300, quality = 0.6) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = e => {
+            const img = new Image();
+            img.src = e.target.result;
+            img.onload = () => {
+                let width = img.width;
+                let height = img.height;
+                
+                let finalMaxSize = maxWidth;
+                let finalQuality = quality;
 
-                    const canvas = document.createElement('canvas');
-                    canvas.width = width;
-                    canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, width, height);
-                    resolve(canvas.toDataURL('image/jpeg', quality));
-                };
-                img.onerror = err => reject(err);
+                // 🌟 智能分级策略：仅当传入尺寸 >= 1080 时（即日记图片）触发
+                if (maxWidth >= 1080) {
+                    const fileSizeMB = file.size / (1024 * 1024);
+                    
+                    if (fileSizeMB < 0.5) {
+                        // 小图（< 500KB）：不缩放，极高画质（避免截图变糊）
+                        finalMaxSize = 2048; 
+                        finalQuality = 0.95;
+                    } else if (fileSizeMB < 2) {
+                        // 中图（500KB ~ 2MB）：高清保留
+                        finalMaxSize = 1920;
+                        finalQuality = 0.88;
+                    } else if (fileSizeMB < 5) {
+                        // 大图（2MB ~ 5MB）：适度压缩省空间
+                        finalMaxSize = 1600;
+                        finalQuality = 0.85;
+                    } else {
+                        // 超大图（> 5MB）：重点压缩，防止撑爆存储
+                        finalMaxSize = 1440;
+                        finalQuality = 0.8;
+                    }
+                }
+
+                // 缩放计算
+                if (width > height) {
+                    if (width > finalMaxSize) { height = Math.round((height * finalMaxSize) / width); width = finalMaxSize; }
+                } else {
+                    if (height > finalMaxSize) { width = Math.round((width * finalMaxSize) / height); height = finalMaxSize; }
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                // 如果是小图且不需要缩放，画质拉满
+                resolve(canvas.toDataURL('image/jpeg', finalQuality));
             };
-            reader.onerror = err => reject(err);
-        });
-    }
+            img.onerror = err => reject(err);
+        };
+        reader.onerror = err => reject(err);
+    });
+}
 
     // 4. 云端路径生成与隔离
     function getCloudPath(imgId) {
@@ -7646,34 +7852,53 @@ let _isProcessingAssets = false;
         return null;
     }
 
-    // 7. 统一注入渲染引擎（自动扫描并填充图片）
-    async function hydrateImages(container = document) {
-        const imgs = container.querySelectorAll('img[data-asset-id]');
-        for (let img of imgs) {
-            if (img.src && img.src.startsWith('data:image')) continue; // 已加载则跳过
+    // 7. 统一注入渲染引擎（自动扫描并填充图片，原生 IntersectionObserver 懒加载）
+async function hydrateImages(container = document) {
+    const imgs = Array.from(container.querySelectorAll('img[data-asset-id]'));
+    
+    const loadImage = async (img) => {
+        if (img.src && img.src.startsWith('data:image')) return;
+        const imgId = img.dataset.assetId;
+        if (!imgId) return;
 
-            const imgId = img.dataset.assetId;
-            if (!imgId) continue;
-
-            // 1. 先查本地
-            let base64 = await getLocal(imgId);
-            
-            // 2. 本地没有，查云端
-            if (!base64) {
-                if (img.dataset.loading) continue;
-                img.dataset.loading = 'true';
-                base64 = await fetchFromCloud(imgId);
-                delete img.dataset.loading;
-            }
-
-            // 3. 赋值
-            if (base64) {
-                img.src = base64;
-            } else {
-                img.style.display = 'none'; // 彻底找不到就不显示了
-            }
+        let base64 = await getLocal(imgId);
+        if (!base64) {
+            if (img.dataset.loading) return;
+            img.dataset.loading = 'true';
+            base64 = await fetchFromCloud(imgId);
+            delete img.dataset.loading;
         }
+
+        if (base64) {
+            img.src = base64;
+        } else {
+            img.style.display = 'none'; 
+        }
+    };
+
+    if (!window.IntersectionObserver) {
+        for (let img of imgs) await loadImage(img);
+        return;
     }
+
+    // 🌟 全局唯一 Observer，只对即将进入视口的图片执行读取
+    if (!window._assetObserver) {
+        window._assetObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const img = entry.target;
+                    window._assetObserver.unobserve(img);
+                    loadImage(img);
+                }
+            });
+        }, { rootMargin: '300px' }); // 提前 300px 加载，滑动更丝滑
+    }
+
+    imgs.forEach(img => {
+        if (img.src && img.src.startsWith('data:image')) return;
+        window._assetObserver.observe(img);
+    });
+}
 
     // 8. 业务调用：处理用户上传的图片
 async function processAndSave(file, maxSize = 300, quality = 0.6) {
@@ -9768,7 +9993,10 @@ if (tab === 'diary_edit') {
     setTimeout(initDiaryPage, 10); 
 }
     // 页面切换并渲染完毕后，检测 FAB 是否遮挡最后一条内容
-    setTimeout(() => checkAndAddFABSpacer(tab), 100);
+    // 🌟 进入日记列表时，挂载无限滚动监听
+if (tab === 'note' && noteType === 'diary') {
+    setTimeout(setupDiaryInfiniteScroll, 100);
+}
 }
 
 // 从后台切回前台时，尝试拉取云端最新数据
@@ -9835,15 +10063,13 @@ function goBackFromSubPage() {
 
 window.addEventListener('popstate', (e) => {
     // 1. 优先拦截图片灯箱的物理返回
-    const imgLightbox = document.getElementById('image-lightbox');
-    if (imgLightbox && imgLightbox.style.display === 'flex') {
-        if (window._isPoppingImage) return;
-        window._isPoppingImage = true;
-        hideImagePreview(true); 
-        try { history.pushState({ page: currentTab }, '', ''); } catch(err) {} 
-        setTimeout(() => { window._isPoppingImage = false; }, 400);
-        return;
-    }
+const imgLightbox = document.getElementById('image-lightbox');
+if (imgLightbox && imgLightbox.style.display === 'flex') {
+    // 🌟 核心修复 3：移除复杂的 _isPoppingImage 锁，直接调用关闭并重置状态
+    hideImagePreview(true); 
+    try { history.pushState({ page: currentTab }, '', ''); } catch(err) {} 
+    return;
+}
 
     // 2. 拦截弹窗的物理返回
     const activeOverlays = document.querySelectorAll('.fullscreen-modal.active, .center-modal-overlay.active, .date-picker-modal.active');
