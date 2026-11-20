@@ -1,5 +1,5 @@
 // 🌟 每次发版，只需修改这里的版本号！
-const CACHE_NAME = 'life-manager-v5.4.4.5'; 
+const CACHE_NAME = 'life-manager-v5.4.4.6'; 
 
 // 🌟 核心修复 1：把所有本地核心依赖都加进预缓存列表，彻底保障离线可用
 const ASSETS_TO_CACHE = [

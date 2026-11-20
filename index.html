@@ -478,6 +478,19 @@ async function fetchUnderMainScheduler(url, options = {}) {
         const LOCAL_MENSTRUAL_BACKUP_KEY = 'life_manager_local_menstrual_backup';
         const OP_LOGS_KEY = 'life_manager_op_logs';
         const LAST_SYNC_ACCOUNT_KEY = 'life_manager_last_sync_account';
+        // 根据仓库和文件名生成独立的同步基准标识
+function getSyncAccountKey(settings = appData.settings) {
+    const repo = (settings?.giteeRepo || '').trim();
+    const filename = (settings?.giteeFilename || '').trim();
+
+    // 未配置完整账号时，兼容原来的默认标识
+    if (!repo || !filename) {
+        return filename || '_default';
+    }
+
+    // 仓库 + 文件名共同确定账号
+    return encodeURIComponent(`${repo}::${filename}`);
+}
         const OP_LOG_MAX = 200;
 
                         let appData = {
@@ -628,17 +641,52 @@ if (!appData.countdowns) appData.countdowns = []; // 👈 新增
             lastSyncData = JSON.stringify(appData);
         } catch (e) { console.error('加载数据失败', e); }
     }
-    const accountKey = appData.settings.giteeFilename || '_default';
-    const savedSync = localStorage.getItem('life_manager_last_sync_data_' + accountKey);
-    if (savedSync) lastSyncData = savedSync;
-    else { lastSyncData = JSON.stringify(appData); localStorage.setItem('life_manager_last_sync_data_' + accountKey, lastSyncData); }
+    const accountKey = getSyncAccountKey();
+    const storageKey = 'life_manager_last_sync_data_' + accountKey;
+
+    const savedSync = localStorage.getItem(storageKey);
+
+    if (savedSync) {
+        lastSyncData = savedSync;
+    } else {
+        // 兼容旧版本：尝试迁移原来仅按文件名保存的同步基准
+        const legacyAccountKey = appData.settings.giteeFilename || '_default';
+        const legacyStorageKey = 'life_manager_last_sync_data_' + legacyAccountKey;
+        const legacySync = localStorage.getItem(legacyStorageKey);
+        const legacyOwner = localStorage.getItem(LAST_SYNC_ACCOUNT_KEY);
+
+        if (
+            legacySync &&
+            (
+                legacyOwner === legacyAccountKey ||
+                legacyOwner === accountKey
+            )
+        ) {
+            // 能确认旧基准属于当前账号，才允许迁移
+            lastSyncData = legacySync;
+            localStorage.setItem(storageKey, lastSyncData);
+        } else {
+            // 无法确认归属时，以当前本地数据建立独立基准
+            // 避免错误继承其他账号的同步快照
+            lastSyncData = JSON.stringify(appData);
+            localStorage.setItem(storageKey, lastSyncData);
+        }
+
+        // 更新当前同步基准所属账号
+        localStorage.setItem(LAST_SYNC_ACCOUNT_KEY, accountKey);
+    }
 }
 
-        function saveLastSyncData() {
-            const accountKey = appData.settings.giteeFilename || '_default';
-            localStorage.setItem('life_manager_last_sync_data_' + accountKey, lastSyncData);
-            localStorage.setItem(LAST_SYNC_ACCOUNT_KEY, accountKey);
-        }
+function saveLastSyncData() {
+    const accountKey = getSyncAccountKey();
+
+    localStorage.setItem(
+        'life_manager_last_sync_data_' + accountKey,
+        lastSyncData
+    );
+
+    localStorage.setItem(LAST_SYNC_ACCOUNT_KEY, accountKey);
+}
 
         function migrateOldData(parsed) {
             const incomes = [];
@@ -786,7 +834,13 @@ function canISeePartnerMenstrual(remoteData) {
 async function fetchRemoteMenstrual(showResult = false) {
     if (_menstrualFetchInFlight) return;
     const { giteeToken, giteeRepo, syncMenstrualFrom } = appData.settings;
-    if (!giteeToken || !giteeRepo || !syncMenstrualFrom) return;
+
+// 保存本次请求的账号和共享来源，防止旧请求覆盖新账号的数据
+const requestToken = giteeToken;
+const requestRepo = giteeRepo;
+const requestSource = syncMenstrualFrom;
+
+if (!requestToken || !requestRepo || !requestSource) return;
 
     _menstrualFetchInFlight = true;
     const needLock = !NetworkScheduler.isMainHolding();
@@ -795,79 +849,215 @@ async function fetchRemoteMenstrual(showResult = false) {
         const getRes = await fetchWithTimeout(`https://gitee.com/api/v5/repos/${giteeRepo}/contents/${encodeURIComponent(syncMenstrualFrom)}?access_token=${giteeToken}`, { timeout: 8000 });
         if (getRes.ok) {
             const fileInfo = await getRes.json();
-            let remoteData;
-            try { remoteData = await decryptData(fileInfo.content); } catch (err) {
-                console.warn('对方文件解密失败:', err);
-                if (showResult) showToast('无法读取 ' + syncMenstrualFrom + ' 的数据'); return;
+
+            // HTTP 200 不代表共享文件内容一定完整
+            // 内容缺失或格式异常时保留上一次有效缓存
+            if (
+                !fileInfo ||
+                typeof fileInfo.content !== 'string' ||
+                !fileInfo.content.trim()
+            ) {
+                throw new Error('共享文件信息不完整');
             }
-            const isAllowed = canISeePartnerMenstrual(remoteData);
 
-            if (isAllowed && remoteData && remoteData.menstrual) {
-                appData.menstrualRemote = {
-                    records: (remoteData.menstrual.records || []).map(sanitizeMenstrualRecord).filter(Boolean),
-                    loveDates: (remoteData.menstrual.loveDates || []).map(sanitizeLoveDate).filter(Boolean)
-                };
-                appData.settings.partnerShareMenstrual = true;
+            let remoteData;
 
-                const remoteShare = remoteData.shareModules || remoteData.settings?.shareModules;
-                const isGoalShared = !remoteShare || remoteShare.goals !== false;
-                if (isGoalShared && remoteData.goals) {
-                    appData.goalsRemote = remoteData.goals;
-                } else {
-                    appData.goalsRemote = [];
+            try {
+                remoteData = await decryptData(fileInfo.content);
+
+                // 解密成功后还要确认结果是有效对象
+                if (
+                    !remoteData ||
+                    typeof remoteData !== 'object' ||
+                    Array.isArray(remoteData)
+                ) {
+                    throw new Error('共享文件数据格式无效');
                 }
 
-                saveData(true);
-if (currentTab === 'menstrual') refreshMenstrualView(); // 只刷 innerHTML，无滚动问题，保留
-else if (currentTab === 'home') {
-    if (showResult) softRefreshCurrentTab();
-    else _needsRefresh.add('home'); // 后台被动拉取时不重绘
-}
-if (showResult) showToast('已更新共享数据');
+            } catch (err) {
+                console.warn('对方文件解密或数据校验失败:', err);
+                if (showResult) {
+                    showToast('无法读取 ' + requestSource + ' 的数据');
+                }
+                return;
+            }
+
+            // 请求期间如果切换了账号、仓库或共享来源，丢弃旧请求结果
+            if (
+                appData.settings.giteeToken !== requestToken ||
+                appData.settings.giteeRepo !== requestRepo ||
+                appData.settings.syncMenstrualFrom !== requestSource
+            ) {
+                return;
+            }
+
+            const isAllowed = canISeePartnerMenstrual(remoteData);
+
+            // 经期和心愿分别判断共享权限，互不影响
+            const remoteShare = remoteData.shareModules || remoteData.settings?.shareModules;
+            const isGoalShared = !remoteShare || remoteShare.goals !== false;
+
+            // 独立更新对方的心愿共享缓存
+            if (isGoalShared && Array.isArray(remoteData.goals)) {
+                appData.goalsRemote = remoteData.goals;
+            } else {
+                appData.goalsRemote = [];
+            }
+
+            // 独立处理经期共享
+            if (isAllowed && remoteData.menstrual) {
+                appData.menstrualRemote = {
+                    records: (Array.isArray(remoteData.menstrual.records)
+                        ? remoteData.menstrual.records : []
+                    ).map(sanitizeMenstrualRecord).filter(Boolean),
+
+                    loveDates: (Array.isArray(remoteData.menstrual.loveDates)
+                        ? remoteData.menstrual.loveDates : []
+                    ).map(sanitizeLoveDate).filter(Boolean)
+                };
+
+                appData.settings.partnerShareMenstrual = true;
+
             } else {
                 appData.menstrualRemote = { records: [], loveDates: [] };
-                appData.goalsRemote = [];
                 appData.settings.partnerShareMenstrual = isAllowed;
-saveData(true);
-if (currentTab === 'menstrual') refreshMenstrualView();
-else if (currentTab === 'home') {
-    if (showResult) softRefreshCurrentTab();
-    else _needsRefresh.add('home');
-}
-if (!isAllowed && showResult) showToast('对方已关闭经期共享');
-else if (showResult) showToast('该文件内无经期数据');
             }
+
+            saveData(true);
+
+            // 心愿缓存发生变化时，标记心愿页需要更新
+            if (currentTab === 'goals') {
+                if (showResult) softRefreshCurrentTab();
+                else _needsRefresh.add('goals');
+            } else {
+                _needsRefresh.add('goals');
+            }
+
+            // 刷新当前正在显示的相关页面
+            if (currentTab === 'menstrual') {
+                refreshMenstrualView();
+            } else if (currentTab === 'home') {
+                if (showResult) softRefreshCurrentTab();
+                else _needsRefresh.add('home');
+            }
+
+            if (showResult) {
+                if (!isAllowed) {
+                    showToast('对方已关闭经期共享');
+                } else if (!remoteData.menstrual) {
+                    showToast('该文件内无经期数据');
+                } else {
+                    showToast('已更新共享数据');
+                }
+            }
+
         } else if (getRes.status === 404) {
-            if (showResult) showToast('未找到文件 ' + syncMenstrualFrom);
+
+            // 只有当前账号和共享来源仍与本次请求一致时，才清除缓存
+            if (
+                appData.settings.giteeToken !== requestToken ||
+                appData.settings.giteeRepo !== requestRepo ||
+                appData.settings.syncMenstrualFrom !== requestSource
+            ) {
+                return;
+            }
+
+            // 文件确实不存在：清除对应的旧共享数据
+            appData.menstrualRemote = {
+                records: [],
+                loveDates: []
+            };
+
+            appData.goalsRemote = [];
+
+            // 404 不等于对方明确关闭共享，因此不显示“对方已关闭”
+            appData.settings.partnerShareMenstrual = null;
+
+            saveData(true);
+
+            if (currentTab === 'menstrual') {
+                refreshMenstrualView();
+            } else if (currentTab === 'home') {
+                if (showResult) softRefreshCurrentTab();
+                else _needsRefresh.add('home');
+            }
+
+            if (showResult) {
+                showToast('未找到文件 ' + requestSource + '，已清除旧共享缓存');
+            }
+
         } else {
+            // 网络或权限异常时保留上一次有效缓存
             if (showResult) showToast('拉取失败，请检查Token权限');
         }
     } catch (e) {
         console.warn('拉取对方经期异常:', e);
         if (showResult) showToast('网络异常或请求超时');
     } finally {
-        if (needLock) NetworkScheduler.releaseAsset();
-        _menstrualFetchInFlight = false;
+    if (needLock) NetworkScheduler.releaseAsset();
+
+    _menstrualFetchInFlight = false;
+
+    // 如果请求期间切换了账号或共享来源，自动补拉当前来源
+    const currentSettings = appData.settings;
+
+    const sourceChanged =
+        currentSettings.giteeToken !== requestToken ||
+        currentSettings.giteeRepo !== requestRepo ||
+        currentSettings.syncMenstrualFrom !== requestSource;
+
+    if (
+        sourceChanged &&
+        currentSettings.giteeToken &&
+        currentSettings.giteeRepo &&
+        currentSettings.syncMenstrualFrom
+    ) {
+        fetchRemoteMenstrual(false);
     }
+}
 }
 
         async function handleSyncMenstrualFromChange(newValue) {
     const oldValue = appData.settings.syncMenstrualFrom || '';
     const trimmed = normalizeFilename(newValue);
+
     if (trimmed === oldValue) return;
+
+    // 更新共享来源
     appData.settings.syncMenstrualFrom = trimmed;
+
+    // 清除上一个共享来源的全部缓存和状态，
+    // 避免切换期间显示上一个人的经期或心愿单数据。
+    appData.menstrualRemote = {
+        records: [],
+        loveDates: []
+    };
+
+    appData.goalsRemote = [];
+
+    // 新来源尚未验证前，不沿用旧来源的共享状态。
+    appData.settings.partnerShareMenstrual = null;
+
     if (trimmed) {
         saveData(true);
         logOp('设置经期来源', trimmed);
         showToast('正在拉取 ' + trimmed + ' 的数据...');
+
+        // 拉取新共享来源的数据
         await fetchRemoteMenstrual(true);
     } else {
-    saveData(true);
-    logOp('取消经期来源');
-    if (currentTab === 'menstrual') refreshMenstrualView();
-    else if (currentTab === 'home') switchTab('home', true);
-    showToast('已恢复自己的经期数据');
-}
+        saveData(true);
+        logOp('取消经期来源');
+
+        if (currentTab === 'menstrual') {
+            refreshMenstrualView();
+        } else if (currentTab === 'home') {
+            switchTab('home', true);
+        }
+
+        showToast('已恢复自己的经期数据');
+    }
+
     switchTab('home');
 }
 
@@ -875,16 +1065,26 @@ else if (showResult) showToast('该文件内无经期数据');
     if (!appData.settings.autoSync) return;
     if (!appData.settings.giteeToken || !appData.settings.giteeRepo) return;
 
+    // 账号切换期间不启动自动同步
+    if (_accountSwitching) return;
+
     if (NetworkScheduler.isMainInFlow()) {
         _pendingSync = true;
     }
 
-    if (_syncTimer) { clearTimeout(_syncTimer); _syncTimer = null; }
-    if (immediate) smartSync(false, true);
-    else _syncTimer = setTimeout(() => {
+    if (_syncTimer) {
+        clearTimeout(_syncTimer);
         _syncTimer = null;
+    }
+
+    if (immediate) {
         smartSync(false, true);
-    }, 300);
+    } else {
+        _syncTimer = setTimeout(() => {
+            _syncTimer = null;
+            smartSync(false, true);
+        }, 300);
+    }
 }
 
 function saveData(skipAutoSync = false) {
@@ -1428,30 +1628,49 @@ function goBackFromInstallments() {
 const pendingTasks = sortTasksForDisplay(rawPendingTasks);
 const _viewMenstrualHome = getActiveMenstrual();
 const menstrualRecords = _viewMenstrualHome.records || [];
-const activePeriod = [...menstrualRecords].filter(r => r.isActive === true).sort((a, b) => parseDate(b.startDate) - parseDate(a.startDate))[0];
 
-// 🌟 全新的智能状态计算
+// 首页与经期页面共用同一份状态判断结果
+const menstrualStatus = getCurrentStatus();
+const activePeriod = getActivePeriod();
 const pred = predictNextPeriodStart();
+
 let isWarning = false;
 let daysLeft = null;
 
 if (pred && pred.best) {
     const bestDate = parseDate(pred.best);
     const todayDate = parseDate(todayStr);
-    daysLeft = Math.round((bestDate - todayDate) / (1000 * 60 * 60 * 24));
-    if (daysLeft >= 0 && daysLeft <= 3 && !activePeriod) isWarning = true;
+
+    daysLeft = Math.round(
+        (bestDate - todayDate) / (1000 * 60 * 60 * 24)
+    );
+
+    if (
+        daysLeft >= 0 &&
+        daysLeft <= 3 &&
+        !activePeriod
+    ) {
+        isWarning = true;
+    }
 }
 
+// 状态统一由 getCurrentStatus() 决定
 let statusType = 'safe';
-if (activePeriod) statusType = 'menstruating';
-else if (isDateInOvulation(todayStr)) statusType = 'ovulation';
-else {
-    if (pred) {
-        const ovDate = parseDate(pred.best);
-        ovDate.setDate(ovDate.getDate() - 14);
-        if (parseDate(todayStr) < ovDate) statusType = 'follicular';
-        else statusType = 'luteal';
-    } else statusType = 'follicular';
+
+if (menstrualStatus.type === 'menstruating') {
+    statusType = 'menstruating';
+} else if (menstrualStatus.type === 'delayed') {
+    statusType = 'delayed';
+} else if (menstrualStatus.type === 'predicted') {
+    statusType = 'predicted';
+} else if (menstrualStatus.type === 'ovulation') {
+    statusType = 'ovulation';
+} else if (menstrualStatus.type === 'follicular') {
+    statusType = 'follicular';
+} else if (menstrualStatus.type === 'luteal') {
+    statusType = 'luteal';
+} else {
+    statusType = 'safe';
 }
 
 // 顶部小卡片 HTML
@@ -1478,11 +1697,31 @@ if (menstrualRecords.length === 0) {
     }
 } else {
     const phaseTexts = {
-        'ovulation': { text: '排卵期', color: 'text-amber-500' },
-        'follicular': { text: '卵泡期', color: 'text-blue-500' },
-        'luteal': { text: '黄体期', color: 'text-purple-500' },
-        'safe': { text: '安全期', color: 'text-emerald-500' }
-    };
+    'predicted': {
+        text: '预测经期',
+        color: 'text-pink-400'
+    },
+    'delayed': {
+        text: `已推迟 ${Math.abs(daysLeft || 0)} 天`,
+        color: 'text-red-500'
+    },
+    'ovulation': {
+        text: '排卵期',
+        color: 'text-amber-500'
+    },
+    'follicular': {
+        text: '卵泡期',
+        color: 'text-blue-500'
+    },
+    'luteal': {
+        text: '黄体期',
+        color: 'text-purple-500'
+    },
+    'safe': {
+        text: '安全期',
+        color: 'text-emerald-500'
+    }
+};
     const p = phaseTexts[statusType] || phaseTexts['safe'];
     menstrualBigHtml = `<p class="text-xl font-bold ${p.color} mt-1">${p.text}</p>`;
 }
@@ -1525,10 +1764,20 @@ if (menstrualRecords.length === 0) {
         subCardText = `记录两次完整周期后可预测`;
     }
 
-    const colors = { 'ovulation': 'text-amber-500', 'follicular': 'text-blue-500', 'luteal': 'text-purple-500', 'safe': 'text-emerald-500' };
+    const colors = {
+    'predicted': 'text-pink-400',
+    'delayed': 'text-red-500',
+    'ovulation': 'text-amber-500',
+    'follicular': 'text-blue-500',
+    'luteal': 'text-purple-500',
+    'safe': 'text-emerald-500'
+};
     mainCardColor = colors[statusType] || colors['safe'];
 
-    if (isWarning) {
+    if (statusType === 'delayed') {
+    mainCardColor = 'text-red-500';
+    tipIcon = '⏳';
+} else if (isWarning) {
     mainCardColor = 'text-red-500';
     tipIcon = '⏳';
 } else if (statusType === 'ovulation') {
@@ -1717,28 +1966,6 @@ countdownCardHtml = `
         <div class="mt-3 pt-3 border-t border-gray-100/80 flex items-start gap-2">
             <span class="text-sm mt-0.5">${tipIcon}</span>
             <p class="text-[11px] text-gray-500 leading-relaxed">${tipText}</p>
-        </div>
-    </div>
-    
-    <div class="glass-card p-4 rounded-2xl">
-        <p class="text-sm font-bold text-gray-800 mb-3">📊 累计记录</p>
-        <div class="grid grid-cols-2 gap-3">
-            <div class="flex items-center gap-2">
-                <div class="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-500"><i data-lucide="circle-check" class="w-4 h-4"></i></div>
-                <div><p class="text-sm font-bold text-gray-800">${totalCompletions}</p><p class="text-[10px] text-gray-400">打卡次数</p></div>
-            </div>
-            <div class="flex items-center gap-2">
-                <div class="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center text-green-500"><i data-lucide="wallet" class="w-4 h-4"></i></div>
-                <div><p class="text-sm font-bold text-gray-800">${totalBills}</p><p class="text-[10px] text-gray-400">记账笔数</p></div>
-            </div>
-            <div class="flex items-center gap-2">
-                <div class="w-8 h-8 rounded-lg bg-pink-50 flex items-center justify-center text-pink-500"><i data-lucide="heart" class="w-4 h-4"></i></div>
-                <div><p class="text-sm font-bold text-gray-800">${totalMenstrual}</p><p class="text-[10px] text-gray-400">经期记录</p></div>
-            </div>
-            <div class="flex items-center gap-2">
-                <div class="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center text-purple-500"><i data-lucide="sticky-note" class="w-4 h-4"></i></div>
-                <div><p class="text-sm font-bold text-gray-800">${totalNotes}</p><p class="text-[10px] text-gray-400">记事条数</p></div>
-            </div>
         </div>
     </div>
 </div>
@@ -4110,10 +4337,8 @@ function _computePredictNextPeriodStart() {
             const d = parseDate(lastStart);
             d.setDate(d.getDate() + 28); 
             
-            // 🌟 P3 核心修复：如果默认算出来是过去的日期，按 28 天往后推，直到今天或未来
-            while (d < today) {
-                d.setDate(d.getDate() + 28);
-            }
+            // 预测日期即使已经过去，也保留原始预测日期。
+// 只有用户新增真实经期开始记录后，才会以新的真实开始日期重新计算。
             
             const earliestD = new Date(d); earliestD.setDate(earliestD.getDate() - 3);
             const latestD = new Date(d); latestD.setDate(latestD.getDate() + 3);
@@ -4148,12 +4373,9 @@ function _computePredictNextPeriodStart() {
     let latestDate = new Date(baseDate);
     latestDate.setDate(latestDate.getDate() + maxCycle + (trend < 0 ? trend : 0));
 
-    // 🌟 P3 核心修复：如果最可能的日期已经过去，整体向后推演直到未来
-    while (bestDate < today) {
-        bestDate.setDate(bestDate.getDate() + bestCycle);
-        earliestDate.setDate(earliestDate.getDate() + bestCycle);
-        latestDate.setDate(latestDate.getDate() + bestCycle);
-    }
+    // 不因预测日期已经过去而自动顺延。
+// bestDate、earliestDate、latestDate 始终保留基于最近一次真实经期开始日期计算的结果。
+// 用户记录新的真实经期开始日期后，getLastPeriodStart() 才会提供新的计算基准。
 
     const rangeDays = Math.round((latestDate - earliestDate) / (1000 * 60 * 60 * 24));
     
@@ -4190,7 +4412,10 @@ function getDailyTip(statusType, isWarning = false) {
     const todayStr = formatDateLocal(today);
     
     const activePeriod = getActivePeriod();
-    const data = getActiveMenstrual();
+const data = getActiveMenstrual();
+
+// 与首页、经期页面共用同一份状态结果
+const currentStatus = getCurrentStatus();
     
     if (activePeriod) {
         // 1. 正在经期
@@ -4208,11 +4433,19 @@ function getDailyTip(statusType, isWarning = false) {
             daysUntilNext = Math.round((bestDate - today) / (1000 * 60 * 60 * 24));
         }
 
-        if (daysUntilNext !== null && daysUntilNext < 0) {
-            // 经期推迟
-            const delayDays = Math.abs(daysUntilNext);
-            phaseKey = (delayDays <= 3) ? 'delayed_short' : 'delayed_long';
-        } else {
+        if (currentStatus.type === 'delayed') {
+    // 使用统一状态引擎判断是否推迟
+    const delayDays = currentStatus.delayDays || 0;
+
+    phaseKey = (delayDays <= 3)
+        ? 'delayed_short'
+        : 'delayed_long';
+
+} else if (currentStatus.type === 'predicted') {
+    // 已进入预测经期窗口，贴士也应匹配预测经期状态
+    phaseKey = 'predicted_period';
+
+} else {
             // 没推迟，看排卵期
             const isOvulatingToday = isDateInOvulation(todayStr);
             
@@ -4357,16 +4590,48 @@ function isDateInPeriod(dateStr) {
 
 function isDateInPredictedPeriod(dateStr) {
     const d = parseDate(dateStr);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (d < today) return false; // 过去的日子不显示预测
-    if (isDateInPeriod(dateStr)) return false; // 已经记录过的不算预测
-    
-    // 🌟 核心修复：读取所有的计算周期，只要在起止区间内，就返回 true
-    const calculatedPeriods = getAllCalculatedPeriods();
-    for (let p of calculatedPeriods) {
-        if (d >= p.start && d <= p.end) return true;
+
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    const today = new Date(now);
+
+    // 优先判断真实经期。
+    // 已经实际记录的经期日期，不能再标记为预测经期。
+    if (isDateInPeriod(dateStr)) {
+        return false;
     }
+
+    // 如果用户已经真实记录经期开始，但还没有记录结束：
+    // 今天之后、预计结束日之前的日期显示为浅粉色预测经期。
+    // 注意：这些未来日期只是预测，不会写入真实经期记录。
+    const active = getActivePeriod();
+
+    if (active && !active.endDate) {
+        const activeStart = parseDate(active.startDate);
+        const estimatedEnd = parseDate(
+            predictPeriodEnd(active.startDate)
+        );
+
+        if (
+            d > today &&
+            d >= activeStart &&
+            d <= estimatedEnd
+        ) {
+            return true;
+        }
+    }
+
+    // 检查基于真实经期记录计算出来的预测区间。
+    // 不再因为日期已经过去就取消预测。
+    const calculatedPeriods = getAllCalculatedPeriods();
+
+    for (const p of calculatedPeriods) {
+        if (d >= p.start && d <= p.end) {
+            return true;
+        }
+    }
+
     return false;
 }
 
@@ -4439,55 +4704,163 @@ function isDateLove(dateStr) {
 
 function getCurrentStatus() {
     const data = getActiveMenstrual();
-    const _t = new Date(); const today = `${_t.getFullYear()}-${String(_t.getMonth()+1).padStart(2,'0')}-${String(_t.getDate()).padStart(2,'0')}`;
-    
+
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const today = formatDateLocal(now);
+
     if (data.records.length === 0) {
-        return { type: 'empty', label: '尚无记录', badgeClass: 'empty' };
-    }
-    
-    const active = getActivePeriod();
-    if (active) {
-        const s = parseDate(active.startDate);
-        const now = new Date(); now.setHours(0, 0, 0, 0);
-        const day = Math.floor((now - s) / (1000 * 60 * 60 * 24)) + 1;
-        return { type: 'menstruating', label: `经期中 · 第${day}天`, badgeClass: 'menstruating' };
+        return {
+            type: 'empty',
+            label: '尚无记录',
+            badgeClass: 'empty',
+            delayDays: 0
+        };
     }
 
+    // 优先级 1：真实活跃经期
+    // 只要用户没有记录实际结束日期，就持续显示经期中。
+    const active = getActivePeriod();
+
+    if (active) {
+        const start = parseDate(active.startDate);
+        const day = Math.floor((now - start) / (1000 * 60 * 60 * 24)) + 1;
+
+        return {
+            type: 'menstruating',
+            label: `经期中 · 第${day}天`,
+            badgeClass: 'menstruating',
+            day,
+            activePeriod: active,
+            delayDays: 0
+        };
+    }
+
+    // 统一读取当前周期预测
+    const pred = predictNextPeriodStart();
+
+    let daysUntilNext = null;
+
+    if (pred && pred.best) {
+        const bestDate = parseDate(pred.best);
+        daysUntilNext = Math.round(
+            (bestDate - now) / (1000 * 60 * 60 * 24)
+        );
+    }
+
+    // 优先级 2：预测最可能日期已过，但用户没有记录真实开始日期。
+    // 不自动滚动到下个月，也不将预测日期当成真实经期。
+    if (daysUntilNext !== null && daysUntilNext < 0) {
+        const delayDays = Math.abs(daysUntilNext);
+
+        return {
+            type: 'delayed',
+            label: `经期已推迟 ${delayDays} 天`,
+            badgeClass: 'delayed',
+            delayDays,
+            daysUntilNext,
+            prediction: pred
+        };
+    }
+
+    // 优先级 3：当前处于预测经期窗口
+    if (isDateInPredictedPeriod(today)) {
+        return {
+            type: 'predicted',
+            label: '预测经期',
+            badgeClass: 'predicted',
+            delayDays: 0,
+            daysUntilNext,
+            prediction: pred
+        };
+    }
+
+    // 优先级 4：排卵期
     if (isDateInOvulation(today)) {
         let isOvulationDay = false;
-        const nextPreds = getAllCalculatedPeriods().map(p => formatDateLocal(p.start));
+
+        const nextPreds = getAllCalculatedPeriods()
+            .map(p => formatDateLocal(p.start));
+
         const realStarts = data.records.map(r => r.startDate);
-        const allStarts = [...new Set([...realStarts, ...nextPreds])].map(s => parseDate(s).getTime()).sort((a,b)=>a-b);
+
+        const allStarts = [...new Set([
+            ...realStarts,
+            ...nextPreds
+        ])]
+            .map(s => parseDate(s).getTime())
+            .sort((a, b) => a - b);
+
         const currentT = parseDate(today).getTime();
+
         for (let t of allStarts) {
             if (t >= currentT) {
-                const ovDate = new Date(t); ovDate.setDate(ovDate.getDate() - 14);
-                if (formatDateLocal(ovDate) === today) isOvulationDay = true;
+                const ovDate = new Date(t);
+                ovDate.setDate(ovDate.getDate() - 14);
+
+                if (formatDateLocal(ovDate) === today) {
+                    isOvulationDay = true;
+                }
+
                 break;
             }
         }
-        return { type: 'ovulation', label: isOvulationDay ? '排卵日' : '排卵期', badgeClass: 'ovulation' };
-    }
-    
-    if (isDateInPredictedPeriod(today)) {
-        return { type: 'predicted', label: '预测经期', badgeClass: 'predicted' };
+
+        return {
+            type: 'ovulation',
+            label: isOvulationDay ? '排卵日' : '排卵期',
+            badgeClass: 'ovulation',
+            delayDays: 0,
+            prediction: pred
+        };
     }
 
-    const nextPreds = getAllCalculatedPeriods().map(p => p.start).sort((a,b)=>a-b);
+    // 优先级 5、6：卵泡期和黄体期
+    const nextPreds = getAllCalculatedPeriods()
+        .map(p => p.start)
+        .sort((a, b) => a - b);
+
     const currentT = parseDate(today).getTime();
+
     let nextStart = null;
+
     for (let p of nextPreds) {
-        if (p.getTime() >= currentT) { nextStart = p; break; }
+        if (p.getTime() >= currentT) {
+            nextStart = p;
+            break;
+        }
     }
-    
+
     if (nextStart) {
-        const ovDate = new Date(nextStart); 
+        const ovDate = new Date(nextStart);
         ovDate.setDate(ovDate.getDate() - 14);
-        if (currentT < ovDate.getTime()) return { type: 'follicular', label: '卵泡期', badgeClass: 'follicular' };
-        else return { type: 'luteal', label: '黄体期', badgeClass: 'luteal' };
-    } else {
-        return { type: 'empty', label: '无近期预测', badgeClass: 'empty' };
+
+        if (currentT < ovDate.getTime()) {
+            return {
+                type: 'follicular',
+                label: '卵泡期',
+                badgeClass: 'follicular',
+                delayDays: 0,
+                prediction: pred
+            };
+        }
+
+        return {
+            type: 'luteal',
+            label: '黄体期',
+            badgeClass: 'luteal',
+            delayDays: 0,
+            prediction: pred
+        };
     }
+
+    return {
+        type: 'empty',
+        label: '无近期预测',
+        badgeClass: 'empty',
+        delayDays: 0,
+        prediction: pred
+    };
 }
 
 function findAdjacentCompletedPeriod(dateStr, days = 2) {
@@ -4638,7 +5011,7 @@ function deleteMenstrualRecord(recordId, clickedDate) {
 
 function onMenstrualDayClick(dateStr) {
     const isReadOnly = !!appData.settings.syncMenstrualFrom;
-    if (isFutureDate(dateStr)) { showToast('不能对未来日期进行操作'); return; }
+const isFuture = isFutureDate(dateStr);
     
     // 1. 完全信任底层瀑布流判定
     const isMenstrual = isDateInPeriod(dateStr);
@@ -4678,9 +5051,12 @@ if (isMenstrual) {
     let actionsHtml = '';
 
     if (isReadOnly) {
-        actionsHtml = `<div class="bg-gray-50 text-gray-500 rounded-xl p-3 flex items-center justify-center gap-2 text-sm w-full mt-2"><i data-lucide="lock" class="w-4 h-4"></i>只读模式，无法操作</div>`;
-    } else {
-        // 3. 菜单操作逻辑（历史记录绝对优先）
+    actionsHtml = `<div class="bg-gray-50 text-gray-500 rounded-xl p-3 flex items-center justify-center gap-2 text-sm w-full mt-2"><i data-lucide="lock" class="w-4 h-4"></i>只读模式，无法操作</div>`;
+} else if (isFuture) {
+    // 未来日期只允许查看预测状态，不允许写入真实记录
+    actionsHtml = `<p class="text-center text-xs text-gray-400 w-full mt-2">这是未来日期，仅供查看预测信息，暂不能记录或修改。</p>`;
+} else {
+    // 3. 菜单操作逻辑（历史记录绝对优先）
         if (record && !record.isActive) {
             // 点在已结束的真实历史经期上
             const isEnd = record.endDate && parseDate(dateStr).getTime() === parseDate(record.endDate).getTime();
@@ -4843,6 +5219,12 @@ for (let i = 0; i < firstDay; i++) {
 
 // 🌟 性能优化：一次性提取所有的真实和预测基准线
 const _viewMenstrual = getActiveMenstrual();
+
+// 检测是否存在多条活跃经期记录
+const activePeriodCount = _viewMenstrual.records.filter(
+    r => r.isActive === true
+).length;
+
 const allRealStarts = _viewMenstrual.records.map(r => r.startDate);
 const allPredictedStarts = getAllCalculatedPeriods().map(p => formatDateLocal(p.start));
 const cachedAllStarts = [...new Set([...allRealStarts, ...allPredictedStarts])]
@@ -4941,11 +5323,29 @@ if (isReadOnly) {
     } else {
         readOnlyHint = `
             <div class="flex items-center justify-center gap-1 text-xs text-blue-500 py-1">
-                <span>只读 · 正在查看 ${escapeHtml(appData.settings.syncMenstrualFrom.replace(/\.json$/i, ''))} 的经期数据</span>
+                <span>正在查看 ${escapeHtml(appData.settings.syncMenstrualFrom.replace(/\.json$/i, ''))} 的经期数据</span>
             </div>
         `;
     }
 }
+
+// 多条活跃经期记录异常提醒
+let activePeriodWarning = '';
+
+if (activePeriodCount > 1) {
+    activePeriodWarning = `
+        <div class="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 mb-2">
+            <i data-lucide="alert-triangle" class="w-4 h-4 flex-shrink-0 mt-0.5"></i>
+            <div class="text-xs leading-relaxed">
+                <div class="font-bold mb-1">检测到经期记录异常</div>
+                当前存在 ${activePeriodCount} 条尚未结束的经期记录。
+                当前状态暂按开始日期较晚的一条记录显示。
+                请检查历史记录，App 不会自动合并或删除记录。
+            </div>
+        </div>
+    `;
+}
+
         // 🌟 合并状态与预测，做成粉色高光卡片
             const combinedHeaderHtml = `
 <div class="mb-3 rounded-2xl p-4 text-white relative overflow-hidden transition-all duration-500" style="background: ${theme.bg}; box-shadow: 0 8px 20px -6px ${theme.shadow};">
@@ -4953,12 +5353,12 @@ if (isReadOnly) {
         <div class="flex justify-between items-center relative z-10 gap-3">
             <div class="flex flex-col text-left flex-1 min-w-0">
     <!-- 第一行：大状态（独立出来，视觉焦点） -->
-    <span class="text-xl font-bold tracking-wide text-white drop-shadow-sm">${status.label}</span>
+    <span class="text-2xl font-extrabold tracking-wide text-white drop-shadow-sm">${status.label}</span>
     
     <!-- 下方的辅助信息统一放在一个组里，用 gap-1 控制统一行距 -->
     <div class="flex flex-col gap-1.5 mt-2.5">
         <!-- 第二行：预测日期（纯白，稍大） -->
-        <div class="text-[14px] font-bold text-white/95 leading-none truncate">${predictMainText}</div>
+        <div class="text-[14px] font-bold text-[#FFE4EF] leading-none truncate">${predictMainText}</div>
         
         <!-- 第三行：可靠性（浅粉色） -->
         ${confidenceText ? `<div class="text-[11px] font-medium text-white/90 leading-none truncate">${confidenceText}</div>` : ''}
@@ -4985,7 +5385,8 @@ if (isReadOnly) {
         return `
 <div class="space-y-2 mt-1">
     ${readOnlyHint}
-                ${combinedHeaderHtml}
+    ${activePeriodWarning}
+    ${combinedHeaderHtml}
                 <div class="glass-card rounded-2xl overflow-hidden">
     <!-- 🌟 头部横幅：背景色延伸，左右拉满 -->
     <div class="flex justify-between items-center p-3 ${theme.lightBg}">
@@ -5007,6 +5408,19 @@ if (isReadOnly) {
         <!-- 🌟 新增：数据洞察与健康关怀模块 -->
         <div class="space-y-3 mt-3 pb-6">
             <!-- 1. 周期数据统计 -->
+                        <!-- 1. 健康小贴士 -->
+<div class="glass-card p-4 rounded-2xl flex items-start gap-3 border ${theme.lightBorder} ${theme.lightBg}">
+                <div class="text-xl mt-0.5">
+                    ${status.type === 'menstruating' ? '🍵' : status.type === 'ovulation' ? '💖' : status.type === 'luteal' ? '🧘‍♀️' : status.type === 'follicular' ? '🏃‍♀️' : '💡'}
+                </div>
+                <div>
+                    <p class="text-xs font-bold text-gray-800 mb-1">今日健康贴士</p>
+                    <p class="text-[11px] text-gray-500 leading-relaxed">
+    ${getDailyTip(status.type, false)}
+</p>
+                </div>
+            </div>
+            
             <div class="glass-card p-4 rounded-2xl flex justify-around items-center">
                 <div class="text-center">
                     <p class="text-lg font-bold text-pink-500">${getWeightedAverageCycle()}<span class="text-xs font-normal text-gray-400 ml-0.5">天</span></p>
@@ -5023,45 +5437,6 @@ if (isReadOnly) {
                     <p class="text-[10px] text-gray-500 mt-1">有效记录</p>
                 </div>
             </div>
-
-            <!-- 2. 健康小贴士 -->
-<div class="glass-card p-4 rounded-2xl flex items-start gap-3 border ${theme.lightBorder} ${theme.lightBg}">
-                <div class="text-xl mt-0.5">
-                    ${status.type === 'menstruating' ? '🍵' : status.type === 'ovulation' ? '💖' : status.type === 'luteal' ? '🧘‍♀️' : status.type === 'follicular' ? '🏃‍♀️' : '💡'}
-                </div>
-                <div>
-                    <p class="text-xs font-bold text-gray-800 mb-1">今日健康贴士</p>
-                    <p class="text-[11px] text-gray-500 leading-relaxed">
-    ${getDailyTip(status.type, false)}
-</p>
-                </div>
-            </div>
-
-            <!-- 3. 最近记录 -->
-            ${_viewMenstrual.records.filter(r => r.endDate).length > 0 ? `
-            <div class="glass-card p-4 rounded-2xl">
-                <div class="flex justify-between items-center mb-3">
-                    <p class="text-xs font-bold text-gray-800">最近记录</p>
-                    <span class="text-[10px] text-gray-400">仅展示最近3次</span>
-                </div>
-                <div class="space-y-2">
-                    ${_viewMenstrual.records.filter(r => r.endDate).sort((a, b) => parseDate(b.startDate) - parseDate(a.startDate)).slice(0, 3).map(r => {
-                        const start = r.startDate.slice(5).replace('-', '/');
-                        const end = r.endDate.slice(5).replace('-', '/');
-                        const days = Math.round((parseDate(r.endDate) - parseDate(r.startDate)) / (1000 * 60 * 60 * 24)) + 1;
-                        return `
-                        <div class="flex justify-between items-center bg-gray-50 rounded-lg px-3 py-2">
-                            <div class="flex items-center gap-2">
-                                <div class="w-1.5 h-1.5 rounded-full bg-pink-400"></div>
-                                <span class="text-xs text-gray-600">${start} ~ ${end}</span>
-                            </div>
-                            <span class="text-[10px] font-medium text-pink-500">${days} 天</span>
-                        </div>
-                        `;
-                    }).join('')}
-                </div>
-            </div>
-            ` : ''}
         </div>
     </div>
 `;
@@ -5233,6 +5608,9 @@ function updateBillDate(val) {
 let billFilter = { category: null, payMethod: null, recordType: null };
 let currentBillWeek = 1;
 
+// 记账列表：用户手动调整过的日期展开状态
+let billDayExpandedOverrides = new Map();
+
 // 记账弹窗草稿：null 表示未打开
 // 结构：{ date, type, category, subCategory, payMethod, editingId }
 let billDraft = null;
@@ -5375,6 +5753,11 @@ const MENSTRUAL_TIPS = {
     'pms_late': [
         "大姨妈即将到达战场！小腹是不是已经开始隐隐作痛了？记得包里备好卫生巾和止痛药，今晚早点睡。"
     ],
+    // 预测经期
+    'predicted_period': [
+        "已经进入预计经期窗口啦，记得准备好卫生用品。实际开始日期以你的真实记录为准。",
+        "这几天可以多留意身体变化，注意休息。预测日期只是参考，不代表经期一定会在今天开始。"
+    ],
     // 推迟预警
     'delayed_short': [
         "大姨妈迟到了？别慌，压力大、熬夜、换季都会让它晚来几天。放松心情，静静等它。"
@@ -5508,6 +5891,13 @@ function renderBillView() {
 
     const sortedDates = Object.keys(recordsInWeek).sort((a,b) => b.localeCompare(a)); 
 
+    // 今天和昨天默认展开
+    const todayStr = formatDateLocal(new Date());
+
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayStr = formatDateLocal(yesterdayDate);
+
     let listHtml = '';
     if (sortedDates.length === 0) {
         listHtml = `<div class="text-center text-gray-400 text-xs py-10">这段时间还没有记录哦</div>`;
@@ -5525,34 +5915,48 @@ function renderBillView() {
                 return timeB - timeA;
             });
             
-            const isToday = dateStr === formatDateLocal(new Date());
+                        const isToday = dateStr === todayStr;
+            const defaultExpanded = isToday || dateStr === yesterdayStr;
+
+            const isExpanded = billDayExpandedOverrides.has(dateStr)
+                ? billDayExpandedOverrides.get(dateStr)
+                : defaultExpanded;
+
             return `
     <!-- 🌟 按天分组的无边框包裹层 -->
     <div class="mb-5">
-        
-        <!-- 日期头：微光氛围渐变 -->
-<div class="flex justify-between items-center bg-gradient-to-r from-blue-50/80 to-purple-50/80 rounded-[12px] px-3 py-2 mb-2 border border-white/60 shadow-sm">
+
+        <!-- 日期头：可点击展开或收起 -->
+        <button
+            type="button"
+            onclick="toggleBillDay('${dateStr}')"
+            aria-expanded="${isExpanded}"
+            class="w-full text-left flex justify-between items-center bg-gradient-to-r from-blue-50/80 to-purple-50/80 rounded-[12px] px-3 py-2 mb-2 border border-white/60 shadow-sm active:scale-[0.99] transition-transform"
+        >
             <span class="font-bold text-[12px] ${isToday ? 'text-blue-500' : 'text-gray-600'} tracking-wider">
                 ${dateObj.getMonth()+1}月${dateObj.getDate()}日 <span class="text-[10px] text-gray-400 font-normal ml-0.5">${weekStr}</span>
             </span>
-            
+
             <!-- 收支金额统计 -->
             <div class="flex gap-1 items-center">
                 ${dayIn > 0 ? `<span class="text-emerald-500 text-[10px] font-bold">收 ${toPlainNumber(dayIn)}</span>` : ''}
                 ${dayIn > 0 && dayOut > 0 ? `<span class="text-gray-300 text-[10px]">/</span>` : ''}
                 ${dayOut > 0 ? `<span class="text-red-400 text-[10px] font-bold">支 ${toPlainNumber(dayOut)}</span>` : ''}
-            </div>
-        </div>
 
-        <!-- 下方直接悬浮的白色卡片列表 -->
-        <div class="flex flex-col gap-2">
+                <!-- 状态箭头，不添加文字标签 -->
+                <i data-lucide="${isExpanded ? 'chevron-up' : 'chevron-down'}" class="w-3.5 h-3.5 text-gray-400 ml-1 flex-shrink-0"></i>
+            </div>
+        </button>
+
+        <!-- 当天记录：根据日期卡片状态展开或收起 -->
+        <div class="flex flex-col gap-2" style="${isExpanded ? '' : 'display: none;'}">
             ${allRecords.map(r => {
                 let typeName = '';
                 let icon = '';
                 if (r.isIncome) {
-                    if (r.recordType === 'work') { typeName = '工时'; icon = '🔧'; }
+                    if (r.recordType === 'work') { typeName = '日结'; icon = '🔧'; }
                     else if (r.recordType === 'monthly') { typeName = '月薪'; icon = '💼'; }
-                    else { typeName = '日结'; icon = '🦺'; }
+                    else { typeName = '兼职'; icon = '🐠'; }
                 } else {
                     typeName = r.subCategory || r.category || '其他';
                     const catConfig = EXPENSE_CATEGORIES.find(c => c.name === r.category);
@@ -5615,8 +6019,8 @@ function renderBillView() {
     const _filterLabel = billFilter.category 
         || billFilter.payMethod 
         || (billFilter.recordType === 'monthly' ? '月薪'
-          : billFilter.recordType === 'work'  ? '工时'
-          : billFilter.recordType === 'daily' ? '日结'
+          : billFilter.recordType === 'work'  ? '日结'
+          : billFilter.recordType === 'daily' ? '兼职'
           : billFilter.recordType === '__other__' ? '其他收入'
           : null);
 
@@ -6069,8 +6473,8 @@ async function showStatsModal(type = 'category') {
     if (isIncomeView) {
         monthIncomes.forEach(i => {
             const key = i.recordType === 'monthly' ? '月薪'
-                      : i.recordType === 'work'    ? '工时'
-                      : i.recordType === 'daily'   ? '日结'
+                      : i.recordType === 'work'    ? '日结'
+                      : i.recordType === 'daily'   ? '兼职'
                       : '其他';
             statsMap[key] = (statsMap[key] || 0) + i.amount;
         });
@@ -6091,8 +6495,8 @@ async function showStatsModal(type = 'category') {
         let icon = '⭕';
         if (isIncomeView) {
             if (key === '月薪') icon = '💼';
-            else if (key === '工时') icon = '🔧';
-            else if (key === '日结') icon = '🦺';
+            else if (key === '日结') icon = '🔧';
+            else if (key === '兼职') icon = '🦺';
             else icon = '💰';
         } else if (activeTab === 'category') {
             icon = EXPENSE_CATEGORIES.find(c => c.name === key)?.icon || '⭕';
@@ -6114,7 +6518,7 @@ async function showStatsModal(type = 'category') {
         '微信': '#10B981', '支付宝': '#3B82F6', '花呗': '#38BDF8',
         '信用卡': '#EAB308', '现金': '#22C55E', '未记录方式': '#9CA3AF'
     };
-    const incomeColorMap = { '月薪': '#10B981', '工时': '#34D399', '日结': '#6EE7B7', '其他': '#9CA3AF' };
+    const incomeColorMap = { '月薪': '#10B981', '日结': '#34D399', '兼职': '#6EE7B7', '其他': '#9CA3AF' };
     const fallbackColors = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444'];
     const GRAY_COLOR = '#9CA3AF';
     const getColor = (name, index) => {
@@ -6262,7 +6666,7 @@ function applyBillFilter(el) {
         billFilter.category = null;
         billFilter.recordType = null;
     } else if (type === 'income') {
-        const map = { '月薪': 'monthly', '工时': 'work', '日结': 'daily', '其他': '__other__' };
+        const map = { '月薪': 'monthly', '日结': 'work', '兼职': 'daily', '其他': '__other__' };
         billFilter.recordType = map[target] || null;
         billFilter.category = null;
         billFilter.payMethod = null;
@@ -6306,6 +6710,29 @@ function switchBillWeek(w) {
         updateIcons(pageDiv);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+}
+
+// 切换某一天的记录展开状态
+function toggleBillDay(dateStr) {
+    const today = new Date();
+    const todayStr = formatDateLocal(today);
+
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = formatDateLocal(yesterday);
+
+    // 今天和昨天默认展开，其余日期默认收起
+    const defaultExpanded =
+        dateStr === todayStr || dateStr === yesterdayStr;
+
+    const currentExpanded = billDayExpandedOverrides.has(dateStr)
+        ? billDayExpandedOverrides.get(dateStr)
+        : defaultExpanded;
+
+    billDayExpandedOverrides.set(dateStr, !currentExpanded);
+
+    // 重新渲染记账列表
+    softRefreshCurrentTab();
 }
 
 // ==================== 主引擎：滚轮日期选择器 ====================
@@ -6469,9 +6896,9 @@ const sortedPayMethods = [...PAY_METHODS].sort((a, b) => (payStats[b] || 0) - (p
 const typeTabHtml = `
     <div class="flex bg-gray-100/70 p-0.5 rounded-xl mb-3">
         <button id="type-btn-expense" onclick="switchRecordType('expense')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${billDraft.type === 'expense' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-400 font-medium'}">支出</button>
-        <button id="type-btn-daily" onclick="switchRecordType('daily')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${billDraft.type === 'daily' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-400 font-medium'}">日结</button>
+        <button id="type-btn-daily" onclick="switchRecordType('daily')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${billDraft.type === 'daily' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-400 font-medium'}">兼职</button>
         <button id="type-btn-monthly" onclick="switchRecordType('monthly')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${billDraft.type === 'monthly' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-400 font-medium'}">月薪</button>
-        <button id="type-btn-work" onclick="switchRecordType('work')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${billDraft.type === 'work' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-400 font-medium'}">工时</button>
+        <button id="type-btn-work" onclick="switchRecordType('work')" class="flex-1 py-1.5 text-xs rounded-lg transition-all ${billDraft.type === 'work' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-400 font-medium'}">日结</button>
     </div>
 `;
 
@@ -6520,7 +6947,7 @@ const buildCapsuleList = (items, selectedVal, type, showMore = true) => {
 </div>
 
 <div id="insurance-wrap" style="display: ${billDraft.type === 'daily' || billDraft.type === 'work' ? 'block' : 'none'};" class="mt-2">
-    <input type="tel" id="insurance-amount" class="finance-input" placeholder="扣除保险 (可选)" value="${insuranceVal}" style="border: 1px dashed #FCA5A5; background: #FEF2F2; color: #EF4444;">
+    <input type="tel" id="insurance-amount" class="finance-input" placeholder="手续费(可选)" value="${insuranceVal}" style="border: 1px dashed #FCA5A5; background: #FEF2F2; color: #EF4444;">
 </div>
 <div id="tax-social-wrap" style="display: ${billDraft.type === 'monthly' ? 'flex' : 'none'};" class="flex gap-2 mt-2">
     <input type="tel" id="tax-amount" class="finance-input" placeholder="扣除个税(可选)" value="${taxVal}" style="border: 1px dashed #FCD34D; background: #FFFBEB; color: #D97706;">
@@ -7071,13 +7498,13 @@ function mergeGoals(localGoals, remoteGoals, deletedIdSet) {
     });
 }
 
-function mergeAppData(localData, remoteData, deletedIdSet) {
+function mergeAppData(localData, remoteData, deletedIdSet, useSyncBaseline = true) {
     if (!remoteData) return { merged: localData };
     if (!remoteData.menstrual) remoteData.menstrual = { records: [], loveDates: [] };
     if (!localData.menstrual) localData.menstrual = { records: [], loveDates: [] };
     const isReadOnlyMenstrual = !!appData.settings.syncMenstrualFrom;
 
-    if (lastSyncData) {
+    if (useSyncBaseline && lastSyncData) {
         try {
             const prevData = JSON.parse(lastSyncData);
             const getLocalDeletes = (prevArr, currArr) => {
@@ -7092,6 +7519,7 @@ function mergeAppData(localData, remoteData, deletedIdSet) {
             remoteData.incomes = filterRemote(remoteData.incomes || [], getLocalDeletes(prevData.incomes || [], localData.incomes || []));
             remoteData.expenses = filterRemote(remoteData.expenses || [], getLocalDeletes(prevData.expenses || [], localData.expenses || []));
             remoteData.notes = filterRemote(remoteData.notes || [], getLocalDeletes(prevData.notes || [], localData.notes || []));
+            remoteData.countdowns = filterRemote(remoteData.countdowns || [], getLocalDeletes(prevData.countdowns || [], localData.countdowns || []));
             if (!isReadOnlyMenstrual) {
                 remoteData.menstrual.records = filterRemote(remoteData.menstrual.records || [], getLocalDeletes(prevData.menstrual?.records || [], localData.menstrual?.records || []));
                 remoteData.menstrual.loveDates = filterRemote(remoteData.menstrual.loveDates || [], getLocalDeletes(prevData.menstrual?.loveDates || [], localData.menstrual?.loveDates || []));
@@ -7099,26 +7527,157 @@ function mergeAppData(localData, remoteData, deletedIdSet) {
         } catch(e) {}
     }
 
-    if (lastSyncData) {
-        try {
-            const prevData = JSON.parse(lastSyncData);
-            const removeDeleted = (localArr, prevArr, remoteArr) => {
-                const prevIds = new Set(prevArr.map(item => item.id).filter(id => id));
-                const remoteIds = new Set(remoteArr.map(item => item.id).filter(id => id));
-                const toRemove = new Set();
-                prevIds.forEach(id => { if (!remoteIds.has(id)) toRemove.add(id); });
-                return localArr.filter(item => !toRemove.has(item.id));
-            };
-            localData.tasks = removeDeleted(localData.tasks || [], prevData.tasks || [], remoteData.tasks || []);
-            localData.incomes = removeDeleted(localData.incomes || [], prevData.incomes || [], remoteData.incomes || []);
-            localData.expenses = removeDeleted(localData.expenses || [], prevData.expenses || [], remoteData.expenses || []);
-            localData.notes = removeDeleted(localData.notes || [], prevData.notes || [], remoteData.notes || []);
-            if (!isReadOnlyMenstrual) {
-                localData.menstrual.records = removeDeleted(localData.menstrual.records || [], prevData.menstrual?.records || [], remoteData.menstrual.records || []);
-                localData.menstrual.loveDates = removeDeleted(localData.menstrual.loveDates || [], prevData.menstrual?.loveDates || [], remoteData.menstrual.loveDates || []);
-            }
-        } catch(e) {}
-    }
+    if (useSyncBaseline && lastSyncData) {
+    try {
+        const prevData = JSON.parse(lastSyncData);
+
+        const removeDeleted = (localArr, prevArr, remoteArr) => {
+            const prevIds = new Set(prevArr.map(item => item.id).filter(id => id));
+            const remoteIds = new Set(remoteArr.map(item => item.id).filter(id => id));
+            const toRemove = new Set();
+
+            prevIds.forEach(id => {
+                if (!remoteIds.has(id)) toRemove.add(id);
+            });
+
+            return localArr.filter(item => !toRemove.has(item.id));
+        };
+
+        // 同步远端删除的普通记录
+        localData.tasks = removeDeleted(
+            localData.tasks || [],
+            prevData.tasks || [],
+            remoteData.tasks || []
+        );
+
+        localData.incomes = removeDeleted(
+            localData.incomes || [],
+            prevData.incomes || [],
+            remoteData.incomes || []
+        );
+
+        localData.expenses = removeDeleted(
+            localData.expenses || [],
+            prevData.expenses || [],
+            remoteData.expenses || []
+        );
+
+        localData.notes = removeDeleted(
+            localData.notes || [],
+            prevData.notes || [],
+            remoteData.notes || []
+        );
+
+        // 同步远端删除的任务打卡记录
+        if (
+            Array.isArray(prevData.tasks) &&
+            Array.isArray(remoteData.tasks)
+        ) {
+            prevData.tasks.forEach(prevTask => {
+                const localTask = localData.tasks.find(
+                    task => task.id === prevTask.id
+                );
+
+                const remoteTask = remoteData.tasks.find(
+                    task => task.id === prevTask.id
+                );
+
+                if (
+                    !localTask ||
+                    !remoteTask ||
+                    !Array.isArray(prevTask.completions) ||
+                    !Array.isArray(remoteTask.completions)
+                ) {
+                    return;
+                }
+
+                localTask.completions = removeDeleted(
+                    localTask.completions || [],
+                    prevTask.completions,
+                    remoteTask.completions
+                );
+            });
+        }
+
+        // 只读共享经期不参与个人数据的删除判断
+        if (!isReadOnlyMenstrual) {
+            localData.menstrual.records = removeDeleted(
+                localData.menstrual.records || [],
+                prevData.menstrual?.records || [],
+                remoteData.menstrual.records || []
+            );
+
+            localData.menstrual.loveDates = removeDeleted(
+                localData.menstrual.loveDates || [],
+                prevData.menstrual?.loveDates || [],
+                remoteData.menstrual.loveDates || []
+            );
+        }
+
+        // 同步远端删除的心愿
+        if (
+            Array.isArray(prevData.goals) &&
+            Array.isArray(remoteData.goals)
+        ) {
+            localData.goals = removeDeleted(
+                localData.goals || [],
+                prevData.goals,
+                remoteData.goals
+            );
+
+            // 同步远端删除的心愿存入记录
+            prevData.goals.forEach(prevGoal => {
+                const localGoal = localData.goals.find(
+                    goal => goal.id === prevGoal.id
+                );
+
+                const remoteGoal = remoteData.goals.find(
+                    goal => goal.id === prevGoal.id
+                );
+
+                if (
+                    !localGoal ||
+                    !remoteGoal ||
+                    !Array.isArray(prevGoal.records) ||
+                    !Array.isArray(remoteGoal.records)
+                ) {
+                    return;
+                }
+
+                localGoal.records = removeDeleted(
+                    localGoal.records || [],
+                    prevGoal.records,
+                    remoteGoal.records
+                );
+            });
+        }
+
+        // 同步远端删除的分期记录
+        if (
+            Array.isArray(prevData.installments) &&
+            Array.isArray(remoteData.installments)
+        ) {
+            localData.installments = removeDeleted(
+                localData.installments || [],
+                prevData.installments,
+                remoteData.installments
+            );
+        }
+
+        // 同步远端删除的倒数日
+        if (
+            Array.isArray(prevData.countdowns) &&
+            Array.isArray(remoteData.countdowns)
+        ) {
+            localData.countdowns = removeDeleted(
+                localData.countdowns || [],
+                prevData.countdowns,
+                remoteData.countdowns
+            );
+        }
+
+    } catch(e) {}
+}
 
     const mergedTasks = mergeTasks(localData.tasks || [], remoteData.tasks || [], deletedIdSet);
     const mergedIncomes = mergeArrayById(localData.incomes, remoteData.incomes, deletedIdSet);
@@ -7153,12 +7712,17 @@ const bestShareModules = (remoteData.shareModulesUpdatedAt || 0) > (localData.sh
 const merged = {
     tasks: mergedTasks, incomes: mergedIncomes, expenses: mergedExpenses, notes: mergedNotes,
     menstrual: { records: mergedMenstrualRecords, loveDates: mergedLoveDates },
-     goals: mergedGoals,
-     installments: mergedInstallments,
-     countdowns: mergedCountdowns, // 🌟 新增
+
+    // 共享数据只在本地保留，不参与个人云端同步
+    menstrualRemote: localData.menstrualRemote || { records: [], loveDates: [] },
+    goalsRemote: localData.goalsRemote || [],
+
+    goals: mergedGoals,
+    installments: mergedInstallments,
+    countdowns: mergedCountdowns, // 🌟 新增
     shareModules: bestShareModules,
-    shareModulesUpdatedAt: Math.max(remoteData.shareModulesUpdatedAt || 0, localData.shareModulesUpdatedAt || 0), // 🌟 补上逗号
-    settings: { ...localData.settings, shareModules: bestShareModules, lastSyncTime: Date.now(), lastSyncType: 'merge' } // 🌟 让 settings 内部也同步最新状态
+    shareModulesUpdatedAt: Math.max(remoteData.shareModulesUpdatedAt || 0, localData.shareModulesUpdatedAt || 0),
+    settings: { ...localData.settings, shareModules: bestShareModules, lastSyncTime: Date.now(), lastSyncType: 'merge' }
 };
     return { merged };
 }
@@ -7193,15 +7757,25 @@ async function handleSyncClick() {
     smartSync(true, false);
 }
 
-async function smartSync(showResult = true, isAuto = false) {
+async function smartSync(showResult = true, isAuto = false, allowDuringAccountSwitch = false) {
+    // 账号切换期间，禁止外部同步任务插入
+    // 只有切号流程明确授权的同步可以继续执行
+    if (_accountSwitching && !allowDuringAccountSwitch) {
+        if (showResult) showToast('账号切换中，请稍后再同步');
+        return false;
+    }
+
     if (NetworkScheduler.isMainInFlow()) {
         _pendingSync = true;
         if (showResult) showToast('正在同步中，完成后会自动继续');
-        return;
+        return false;
     }
 
-    const { giteeToken, giteeRepo, giteeFilename, syncMenstrualFrom } = appData.settings;
-    if (!giteeToken || !giteeRepo) { if (showResult) showToast('请先配置 Gitee 仓库信息'); return; }
+    // 先检查当前是否已经配置云同步
+    if (!appData.settings.giteeToken || !appData.settings.giteeRepo) {
+        if (showResult) showToast('请先配置 Gitee 仓库信息');
+        return false;
+    }
 
     await NetworkScheduler.acquireMain();
 
@@ -7212,6 +7786,13 @@ async function smartSync(showResult = true, isAuto = false) {
     setSyncIndicator('syncing', '同步中，请勿退出');
 
     try {
+        // 获取网络锁后重新读取配置，避免等待期间使用旧账号信息
+        const { giteeToken, giteeRepo, giteeFilename, syncMenstrualFrom } = appData.settings;
+
+        if (!giteeToken || !giteeRepo) {
+            throw new Error('云同步配置已发生变化，请重新检查配置');
+        }
+
         let remoteData = null;
         let fileSha = null;
         let fileExists = false;
@@ -7220,21 +7801,59 @@ async function smartSync(showResult = true, isAuto = false) {
             const getRes = await fetchWithTimeout(`https://gitee.com/api/v5/repos/${giteeRepo}/contents/${encodeURIComponent(fetchFilename)}?access_token=${giteeToken}`, { timeout: 8000 });
             if (getRes.ok) {
                 const fileInfo = await getRes.json();
-                if (fileInfo && fileInfo.sha && fileInfo.content) {
-                    fileExists = true;
-                    fileSha = fileInfo.sha;
-                    try { remoteData = await decryptData(fileInfo.content); }
-                    catch (decryptErr) { remoteData = null; }
-                } else { fileExists = false; remoteData = null; }
+
+                // HTTP 200 不代表文件内容一定完整
+                // 缺少 sha 或 content 时，必须终止同步，不能当作空文件
+                if (
+                    !fileInfo ||
+                    !fileInfo.sha ||
+                    typeof fileInfo.content !== 'string' ||
+                    !fileInfo.content.trim()
+                ) {
+                    throw new Error('云端文件信息不完整，已取消同步，避免误判为空文件');
+                }
+
+                fileExists = true;
+                fileSha = fileInfo.sha;
+
+                try {
+    remoteData = await decryptData(fileInfo.content);
+
+    // 解密成功后，还必须确认结果是有效的数据对象
+    // 防止数组、字符串等异常内容被当成正常云端数据合并
+    if (
+        !remoteData ||
+        typeof remoteData !== 'object' ||
+        Array.isArray(remoteData)
+    ) {
+        throw new Error('云端数据格式无效');
+    }
+
+} catch (decryptErr) {
+    remoteData = null;
+}
+
             } else if (getRes.status === 404) {
-                fileExists = false; remoteData = null;
+                // 只有明确的 404 才允许创建云端初始文件
+                fileExists = false;
+                remoteData = null;
             } else {
                 const err = await getRes.json();
                 throw new Error(`获取云端文件失败: ${err.message}`);
             }
         } catch (e) {
-            if (e.message.includes('损坏')) throw e;
             console.warn('获取云端数据异常:', e);
+
+            // 云端读取失败时立即终止，不能把读取失败当成云端没有文件
+            throw new Error(
+                '获取云端文件失败，已取消同步：' +
+                (e?.message || '网络请求异常')
+            );
+        }
+
+        // 云端文件存在，但没有成功解密时，禁止用本地数据覆盖
+        if (fileExists && !remoteData) {
+            throw new Error('云端文件存在但无法解密，已取消同步，避免覆盖原数据');
         }
 
         let mergedData;
@@ -7246,6 +7865,10 @@ async function smartSync(showResult = true, isAuto = false) {
         };
 
         let syncLocalData = JSON.parse(JSON.stringify(appData));
+
+// 保存本次同步使用的本地快照。
+// 后续上传期间如果用户又修改了数据，就不能用旧合并结果覆盖新数据。
+const syncLocalSnapshot = JSON.stringify(syncLocalData);
 
         if (fileExists && remoteData) {
             const deletedIdSet = new Set();
@@ -7288,11 +7911,14 @@ async function smartSync(showResult = true, isAuto = false) {
             };
 
             if (_strip(uploadData) === remoteStripBeforeMerge) {
-                if (!_pendingSync) {
-                    appData = mergedData;
-                    lastSyncData = JSON.stringify(appData);
-                    saveLastSyncData();
-                }
+                if (
+    !_pendingSync &&
+    JSON.stringify(appData) === syncLocalSnapshot
+) {
+    appData = mergedData;
+    lastSyncData = JSON.stringify(appData);
+    saveLastSyncData();
+}
                 appData.settings.lastSyncTime = Date.now();
 saveData(true);
 _syncConfigEditing = false;
@@ -7307,12 +7933,32 @@ if (showResult) showToast('云端已是最新');
             }
         } else {
             mergedData = syncLocalData;
-            uploadData = syncLocalData;
-            if (showResult && !fileExists) showToast('云端无数据，创建初始备份');
+
+            // 首次创建云端文件时，只上传业务数据和共享设置。
+            // 不上传本地 Gitee Token、仓库配置等敏感设置。
+            // 使用浅拷贝，避免修改 mergedData，防止同步成功后
+            // 把本地 settings 中的账号配置也一并覆盖掉。
+            uploadData = {
+                ...syncLocalData,
+                settings: {
+                    shareModules: syncLocalData.shareModules || appData.settings.shareModules
+                }
+            };
+
+            if (showResult && !fileExists) {
+                showToast('云端无数据，创建初始备份');
+            }
         }
 
-        const content = await encryptData(uploadData);
-        const message = `智能合并同步 - ${new Date().toLocaleString()}`;
+        // 共享经期和共享心愿单数据都属于只读拉取缓存，
+// 不属于个人云同步内容，上传前统一剔除。
+if (uploadData && typeof uploadData === 'object') {
+    delete uploadData.menstrualRemote;
+    delete uploadData.goalsRemote;
+}
+
+const content = await encryptData(uploadData);
+const message = `智能合并同步 - ${new Date().toLocaleString()}`;
 
         const uploadFilename = giteeFilename;
         const url = `https://gitee.com/api/v5/repos/${giteeRepo}/contents/${encodeURIComponent(uploadFilename)}`;
@@ -7324,11 +7970,14 @@ if (showResult) showToast('云端已是最新');
         const response = await fetchWithTimeout(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), timeout: 10000 });
 
         if (response.ok) {
-            if (!_pendingSync) {
-                appData = mergedData;
-                lastSyncData = JSON.stringify(appData);
-                saveLastSyncData();
-            }
+            if (
+    !_pendingSync &&
+    JSON.stringify(appData) === syncLocalSnapshot
+) {
+    appData = mergedData;
+    lastSyncData = JSON.stringify(appData);
+    saveLastSyncData();
+}
             appData.settings.lastSyncTime = Date.now();
             appData.settings.lastSyncType = 'merge';
             _syncConfigEditing = false;
@@ -7362,23 +8011,30 @@ if (showResult) { logOp('同步成功', `${countTotalRecords(appData)} 条`); sh
 
         if (typeof AssetEngine !== 'undefined') AssetEngine.processAssetQueue();
 
+        // 记录本次同步结束时是否还有排队中的同步操作
+        const hadPendingSync = _pendingSync;
+
         if (_pendingSync) {
-    // 队列还有后续操作：保持 syncing，不刷页、不打标记
-    _pendingSync = false;
-    setSyncIndicator('syncing', '正在同步新操作...');
-    setTimeout(() => { smartSync(false, true); }, 100);
-} else if (syncSuccess) {
-    setSyncIndicator('success', '同步完成');
-    if (isAuto) {
-        // 自动同步（含后台切回前台）：不重绘，打标记，下次切页时由 switchTab 强制重建
-        _needsRefresh.add(currentTab);
-    } else {
-        // 手动同步：用户预期数据刷新，走软刷新保留滚动位置
-        softRefreshCurrentTab();
-    }
-} else {
-    setSyncIndicator('error', '同步失败');
-}
+            // 队列还有后续操作：保持 syncing，不刷页、不打标记
+            _pendingSync = false;
+            setSyncIndicator('syncing', '正在同步新操作...');
+            setTimeout(() => { smartSync(false, true); }, 100);
+        } else if (syncSuccess) {
+            setSyncIndicator('success', '同步完成');
+
+            if (isAuto) {
+                // 自动同步（含后台切回前台）：不重绘，打标记，下次切页时由 switchTab 强制重建
+                _needsRefresh.add(currentTab);
+            } else {
+                // 手动同步：用户预期数据刷新，走软刷新保留滚动位置
+                softRefreshCurrentTab();
+            }
+        } else {
+            setSyncIndicator('error', '同步失败');
+        }
+
+        // 只有同步成功且没有遗留排队操作，才向调用方确认完成
+        return syncSuccess && !hadPendingSync;
     }
 }
 
@@ -7388,31 +8044,96 @@ async function safeSwitchAccount(newToken, newRepo, newFilename) {
     const oldFilename = appData.settings.giteeFilename || '';
 
     if (newToken === oldToken && newRepo === oldRepo && newFilename === oldFilename) return 'same';
+
     if (!newToken || !newRepo || !newFilename) {
-        showToast('配置不完整，请填完后再试'); return 'aborted';
+        showToast('配置不完整，请填完后再试');
+        return 'aborted';
     }
+
     if (_accountSwitching) return 'aborted';
+
+    // 如果已有同步正在执行或排队，先不允许切号
+    // 避免切号流程与旧账号同步交错
+    if (NetworkScheduler.isMainInFlow() || _pendingSync) {
+        showToast('当前仍有同步任务，请等待同步完成后再切换账号');
+        return 'aborted';
+    }
+
+    // 清除尚未触发的自动同步定时器
+    if (_syncTimer) {
+        clearTimeout(_syncTimer);
+        _syncTimer = null;
+    }
+
     _accountSwitching = true;
 
     try {
         // ===== Step 1: 切号前对账 =====
         if (oldToken && oldRepo) {
-            const currentStrip = JSON.stringify(appData); // 简化比对，直接用整体
-            if (lastSyncData && currentStrip !== lastSyncData) {
-                const choice = await showChoiceConfirm(
-                    '未同步数据提醒',
-                    '本地有未同步的数据。直接切换账号可能导致这些数据仅留在本地。',
-                    [
-                        { label: '立即同步到当前账号', value: 'sync', primary: true },
-                        { label: '跳过，直接切（有丢失风险）', value: 'skip', danger: true },
-                        { label: '取消切号', value: 'cancel' }
-                    ]
-                );
+            // 只比较真正参与个人云同步的数据，
+// 排除共享缓存及本地状态，避免产生误报。
+const syncFields = [
+    'tasks',
+    'incomes',
+    'expenses',
+    'notes',
+    'menstrual',
+    'goals',
+    'installments',
+    'shareModules',
+    'countdowns'
+];
+
+const getSyncComparableData = data => {
+    const result = {};
+
+    syncFields.forEach(key => {
+        result[key] = data?.[key];
+    });
+
+    return JSON.stringify(result);
+};
+
+let hasUnsyncedData = false;
+
+if (lastSyncData) {
+    try {
+        const previousData = JSON.parse(lastSyncData);
+
+        hasUnsyncedData =
+            getSyncComparableData(appData) !==
+            getSyncComparableData(previousData);
+
+    } catch (e) {
+        // 同步基准异常时，保守地提醒用户，
+        // 不直接认定当前数据已经同步。
+        hasUnsyncedData = true;
+    }
+}
+
+if (hasUnsyncedData) {
+    const choice = await showChoiceConfirm(
+        '未同步数据提醒',
+        '本地有未同步的数据。直接切换账号可能导致这些数据仅留在本地。',
+        [
+            { label: '立即同步到当前账号', value: 'sync', primary: true },
+            { label: '跳过，直接切（有丢失风险）', value: 'skip', danger: true },
+            { label: '取消切号', value: 'cancel' }
+        ]
+    );
                 
                 if (choice === 'cancel' || choice === null) { _accountSwitching = false; return 'aborted'; }
                 if (choice === 'sync') {
                     showToast('正在同步当前账号...');
-                    await smartSync(false, true);
+
+                    const syncOk = await smartSync(false, true, true);
+
+                    // 同步失败或仍有排队操作时，取消切号
+                    if (!syncOk) {
+                        _accountSwitching = false;
+                        showToast('当前账号同步未能确认完成，已取消切号。请检查网络后重试。');
+                        return 'aborted';
+                    }
                 }
                 // choice === 'skip' 则直接往下走
             }
@@ -7436,21 +8157,50 @@ async function safeSwitchAccount(newToken, newRepo, newFilename) {
         let fileCorrupted = false;
 
         try {
-            const getRes = await fetchUnderMainScheduler(`https://gitee.com/api/v5/repos/${newRepo}/contents/${encodeURIComponent(newFilename)}?access_token=${newToken}`, { timeout: 5000 });
+            const getRes = await fetchUnderMainScheduler(
+                `https://gitee.com/api/v5/repos/${newRepo}/contents/${encodeURIComponent(newFilename)}?access_token=${newToken}`,
+                { timeout: 5000 }
+            );
+
             if (getRes.ok) {
                 const fileInfo = await getRes.json();
-                if (fileInfo && fileInfo.sha && fileInfo.content) {
-                    fileExists = true;
-                    fileSha = fileInfo.sha;
-                    try {
-                        remoteData = await decryptData(fileInfo.content);
-                    } catch (err) {
+
+                // HTTP 200 不代表云端文件信息一定完整
+                // 缺少必要字段时，不能将其当作空账号
+                if (
+                    !fileInfo ||
+                    !fileInfo.sha ||
+                    typeof fileInfo.content !== 'string' ||
+                    !fileInfo.content.trim()
+                ) {
+                    throw new Error('新账号云端文件信息不完整，已取消切号，避免误判为空账号');
+                }
+
+                fileExists = true;
+                fileSha = fileInfo.sha;
+
+                try {
+                    remoteData = await decryptData(fileInfo.content);
+
+                    // 解密成功但结果不是有效对象，也按文件损坏处理
+                    if (
+                        !remoteData ||
+                        typeof remoteData !== 'object' ||
+                        Array.isArray(remoteData)
+                    ) {
                         fileCorrupted = true;
                     }
+
+                } catch (err) {
+                    fileCorrupted = true;
                 }
+
             } else if (getRes.status !== 404) {
                 throw new Error('获取新账号文件信息失败');
             }
+
+            // 只有明确返回 404，才允许进入新账号为空的迁移流程
+
         } catch (e) {
             _accountSwitching = false;
             showToast('❌ 探测新账号失败：' + e.message);
@@ -7521,7 +8271,13 @@ updateIcons(globalIndicator);
             finalLocalData = finalUploadData;
         } else if (executeAction === 'merge') {
             const deletedIdSet = new Set(); // 切号合并暂不处理跨账号删除
-            const mergeRes = mergeAppData(JSON.parse(JSON.stringify(appData)), remoteData, deletedIdSet);
+            // 切换账号时不能使用旧账号的同步基准判断删除
+            const mergeRes = mergeAppData(
+                JSON.parse(JSON.stringify(appData)),
+                remoteData,
+                deletedIdSet,
+                false
+            );
             finalUploadData = mergeRes.merged;
             finalLocalData = finalUploadData;
         } else if (executeAction === 'use_remote') {
@@ -7532,26 +8288,38 @@ updateIcons(globalIndicator);
         // 如果有需要上传的数据，执行 PUT
 if (finalUploadData) {
     finalUploadData.settings = { shareModules: appData.settings.shareModules };
+
+    // 共享经期和共享心愿单缓存属于只读拉取数据，
+// 不应作为个人数据上传到新账号。
+delete finalUploadData.menstrualRemote;
+delete finalUploadData.goalsRemote;
+
     // 🌟 修复：mergedData 未定义，直接使用 appData 的时间戳或当前时间
     finalUploadData.shareModulesUpdatedAt = appData.shareModulesUpdatedAt || Date.now();
+
     const content = await encryptData(finalUploadData);
-            const url = `https://gitee.com/api/v5/repos/${newRepo}/contents/${encodeURIComponent(newFilename)}`;
-            const method = fileExists ? 'PUT' : 'POST';
-            const body = { access_token: newToken, content, message: `切号同步 - ${new Date().toLocaleString()}` };
-            if (fileSha) body.sha = fileSha;
+    const url = `https://gitee.com/api/v5/repos/${newRepo}/contents/${encodeURIComponent(newFilename)}`;
+    const method = fileExists ? 'PUT' : 'POST';
+    const body = {
+        access_token: newToken,
+        content,
+        message: `切号同步 - ${new Date().toLocaleString()}`
+    };
 
-            const putRes = await fetchUnderMainScheduler(url, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-                timeout: 10000
-            });
+    if (fileSha) body.sha = fileSha;
 
-            if (!putRes.ok) {
-                const err = await putRes.json();
-                throw new Error(err.message || '上传新账号失败');
-            }
-        }
+    const putRes = await fetchUnderMainScheduler(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        timeout: 10000
+    });
+
+    if (!putRes.ok) {
+        const err = await putRes.json();
+        throw new Error(err.message || '上传新账号失败');
+    }
+}
 
         // 原子替换配置与本地数据
         appData.settings.giteeToken = newToken;
@@ -7561,15 +8329,32 @@ if (finalUploadData) {
         appData.settings.lastSyncType = executeAction;
         
         if (finalLocalData) {
-            const keepSettings = appData.settings;
-            appData = finalLocalData;
-            appData.settings = keepSettings;
-            if (!appData.menstrualRemote) appData.menstrualRemote = { records: [], loveDates: [] };
-        }
+    const keepSettings = appData.settings;
+    appData = finalLocalData;
+    appData.settings = keepSettings;
+}
 
-        const accountKey = newFilename || '_default';
+// 切换账号后，旧账号的共享缓存一律清空
+// 后续由当前账号配置重新拉取共享数据
+appData.menstrualRemote = {
+    records: [],
+    loveDates: []
+};
+
+appData.goalsRemote = [];
+
+// 新账号的共享状态尚未重新验证，不能沿用旧账号的状态。
+appData.settings.partnerShareMenstrual = null;
+
+        const accountKey = getSyncAccountKey();
+
         lastSyncData = JSON.stringify(appData);
-        localStorage.setItem('life_manager_last_sync_data_' + accountKey, lastSyncData);
+
+        localStorage.setItem(
+            'life_manager_last_sync_data_' + accountKey,
+            lastSyncData
+        );
+
         localStorage.setItem(LAST_SYNC_ACCOUNT_KEY, accountKey);
         
         saveData(true);
@@ -8025,17 +8810,24 @@ function calcCountdownInfo(cd, todayDate = new Date()) {
     } else {
         // 处理每年（生日/纪念日）
         if (cd.repeat === 'yearly') {
-            target.setFullYear(today.getFullYear());
-            // 特殊处理2月29日（平年变2月28）
-            if (target.getMonth() === 1 && target.getDate() === 29 && target.getFullYear() % 4 !== 0) {
-                target.setDate(28);
-            }
-            // 如果今年的已经过了，就推算到明年
-            if (target < today) {
-                target.setFullYear(today.getFullYear() + 1);
-                if (target.getMonth() === 1 && target.getDate() === 29 && target.getFullYear() % 4 !== 0) {
-                    target.setDate(28);
+            // 根据原始月日生成指定年份的日期，避免闰日被自动滚动到3月1日
+            const buildYearlyTarget = (year) => {
+                const isLeapYear = year % 4 === 0 &&
+                    (year % 100 !== 0 || year % 400 === 0);
+
+                // 2月29日遇到平年，按2月28日处理
+                if (targetParts[1] === 2 && targetParts[2] === 29 && !isLeapYear) {
+                    return new Date(year, 1, 28);
                 }
+
+                return new Date(year, targetParts[1] - 1, targetParts[2]);
+            };
+
+            target = buildYearlyTarget(today.getFullYear());
+
+            // 如果今年的日期已经过去，就推算到明年
+            if (target < today) {
+                target = buildYearlyTarget(today.getFullYear() + 1);
             }
         } 
         // 处理每月（发工资）
@@ -8428,8 +9220,12 @@ function calcInstallmentPlan(contract, asOfDate = new Date()) {
 // ---- 顶部卡片总览 ----
 function calcInstallmentsSummary(contracts, asOfDate = new Date()) {
     let totalPrincipal = 0, totalRepay = 0, totalPaid = 0, totalRemaining = 0, totalRemainingAmount = 0;
-    let totalNextPrincipal = 0, totalNextInterest = 0, totalNextPayment = 0; 
+    let totalNextPrincipal = 0, totalNextInterest = 0, totalNextPayment = 0;
+    let totalMonthPrincipal = 0, totalMonthInterest = 0, totalMonthPayment = 0;
+    let totalMonthPendingCount = 0, totalNextPeriodCount = 0;
     let activeCount = 0, finishedCount = 0;
+
+    const currentMonth = formatDateLocal(asOfDate).slice(0, 7);
 
     for (const c of (contracts || [])) {
         const plan = calcInstallmentPlan(c, asOfDate);
@@ -8438,24 +9234,45 @@ function calcInstallmentsSummary(contracts, asOfDate = new Date()) {
         totalPaid += plan.totalPaid;
         totalRemaining += plan.remainingPrincipal;
         totalRemainingAmount += plan.remainingAmount;
-        
+
+        // 统计本月尚未还款的期数
+        const monthPendingPeriods = plan.schedule.filter(s =>
+            s.date.slice(0, 7) === currentMonth &&
+            (s.status === 'due' || s.status === 'upcoming')
+        );
+
+        for (const period of monthPendingPeriods) {
+            totalMonthPrincipal += period.principal;
+            totalMonthInterest += period.interest;
+            totalMonthPayment += period.total;
+            totalMonthPendingCount++;
+        }
+
         if (plan.remainingPeriods === 0 || c.prepaid) {
             finishedCount++;
         } else {
             activeCount++;
-            const nextPeriod = plan.schedule.find(s => s.status === 'due' || s.status === 'upcoming');
+
+            // 保留原有下期金额统计方式
+            const nextPeriod = plan.schedule.find(s =>
+                s.status === 'due' || s.status === 'upcoming'
+            );
+
             if (nextPeriod) {
                 totalNextPrincipal += nextPeriod.principal;
                 totalNextInterest += nextPeriod.interest;
                 totalNextPayment += nextPeriod.total;
+                totalNextPeriodCount++;
             }
         }
     }
 
-    return { 
-        totalPrincipal, totalRepay, totalPaid, totalRemaining, totalRemainingAmount, 
+    return {
+        totalPrincipal, totalRepay, totalPaid, totalRemaining, totalRemainingAmount,
         totalNextPrincipal, totalNextInterest, totalNextPayment,
-        activeCount, finishedCount 
+        totalMonthPrincipal, totalMonthInterest, totalMonthPayment,
+        totalMonthPendingCount, totalNextPeriodCount,
+        activeCount, finishedCount
     };
 }
 
@@ -8487,43 +9304,85 @@ const repName = repLabels[c.repaymentType] || '自定义';
             const badgeColor = isFinished ? 'text-green-600 bg-green-50' : (plan.paidPeriods > 0 ? 'text-blue-600 bg-blue-50' : 'text-orange-500 bg-orange-50');
 
             return `
-            <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 active:scale-[0.98] transition-transform cursor-pointer mb-3" onclick="showInstallmentDetail('${c.id}')">
+            <div class="relative bg-white rounded-2xl p-4 shadow-sm border border-gray-100 active:scale-[0.98] transition-transform cursor-pointer mb-3" onclick="showInstallmentDetail('${c.id}')">
                 <div class="flex justify-between items-start mb-2">
-                    <div class="flex items-center gap-2">
-                        <div class="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-500">
-                            <i data-lucide="credit-card" class="w-4 h-4"></i>
-                        </div>
-                        <div>
-                            <p class="text-sm font-bold text-gray-800">${escapeHtml(c.name)}</p>
-                            <p class="text-[10px] text-gray-400">${repName} · ${c.periods}期</p>
-                        </div>
+                    <div>
+                        <p class="text-sm font-bold text-gray-800">${escapeHtml(c.name)}</p>
+                        <p class="text-[10px] text-gray-400">${repName} · ${c.periods}期</p>
                     </div>
                     <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${badgeColor}">${badgeText}</span>
                 </div>
                 
-<div class="flex justify-between items-end mt-3 mb-2">
-    <!-- 左侧：下期需还 -->
-    <div>
-        <p class="text-[10px] text-gray-400 mb-0.5">${isFinished ? '已还总额' : '下期需还'}</p>
-        <p class="text-[17px] font-bold text-gray-800">¥${toPlainNumber(isFinished ? plan.totalPaid : (plan.schedule.find(s => s.status === 'due' || s.status === 'upcoming')?.total || plan.monthlyPayment))}</p>
-        ${!isFinished ? (() => {
-            const next = plan.schedule.find(s => s.status === 'due' || s.status === 'upcoming');
-            return next ? `<p class="text-[9px] text-gray-400 mt-0.5 whitespace-nowrap">本 ¥${toPlainNumber(next.principal)} + 息 ¥${toPlainNumber(next.interest)}</p>` : '';
-        })() : ''}
-    </div>
-    
-    <!-- 右侧：总待还本息 -->
-    <div class="text-right">
-        ${isFinished ? `
-            <p class="text-[10px] text-gray-400 mb-0.5">状态</p>
-            <p class="text-[13px] font-bold text-green-500">已全部结清</p>
-        ` : `
-            <p class="text-[10px] text-gray-400 mb-0.5">待还本息</p>
-            <p class="text-[15px] font-bold text-red-500">¥${toPlainNumber(plan.remainingAmount)}</p>
-            <p class="text-[9px] text-gray-400 mt-0.5">本 ¥${toPlainNumber(plan.remainingPrincipal)} + 息 ¥${toPlainNumber(plan.remainingAmount - plan.remainingPrincipal)}</p>
-        `}
-    </div>
-</div>
+                                <div class="flex justify-between items-end mt-3 mb-2">
+                    <!-- 左侧：本月需还 / 下期需还 / 已结清 -->
+                    <div>
+                        ${isFinished ? `
+                            <p class="text-[10px] text-green-500 mb-0.5">已结清</p>
+                            <p class="text-[17px] font-bold text-gray-800">¥${toPlainNumber(plan.totalPaid)}</p>
+                            <p class="text-[9px] text-gray-400 mt-0.5">已还总额</p>
+                        ` : (() => {
+                            const currentMonth = formatDateLocal(new Date()).slice(0, 7);
+                            const monthPending = plan.schedule.filter(s =>
+                                s.date.slice(0, 7) === currentMonth &&
+                                (s.status === 'due' || s.status === 'upcoming')
+                            );
+
+                            if (monthPending.length > 0) {
+                                const monthPayment = monthPending.reduce((sum, s) => sum + s.total, 0);
+
+                                return `
+                                    <p class="text-[10px] text-gray-400 mb-0.5">本月需还</p>
+                                    <p class="text-[17px] font-bold text-gray-800">¥${toPlainNumber(monthPayment)}</p>
+                                `;
+                            }
+
+                            const next = plan.schedule.find(s =>
+                                s.status === 'due' || s.status === 'upcoming'
+                            );
+
+                            if (next) {
+                                return `
+                                    <p class="text-[10px] text-gray-400 mb-0.5">下期需还</p>
+                                    <p class="text-[17px] font-bold text-gray-800">¥${toPlainNumber(next.total)}</p>
+
+                                    <!-- 本月已还清：半透明钢印 -->
+                                    <div class="pointer-events-none absolute left-[52%] top-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-12 z-10 opacity-30">
+                                        <div class="border-2 border-double border-red-600 rounded-sm p-1">
+                                            <div class="border border-red-600 px-3 py-1">
+                                                <span class="text-red-600 text-[15px] font-black tracking-widest whitespace-nowrap">本月已还清</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                            }
+
+                                                        return `
+                                <p class="text-[10px] text-gray-400 mb-0.5">已还总额</p>
+                                <p class="text-[17px] font-bold text-gray-800">¥${toPlainNumber(plan.totalPaid)}</p>
+
+                                <!-- 全部结清：翡翠绿钢印 -->
+                                <div class="pointer-events-none absolute left-[52%] top-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-6 z-10 opacity-40">
+                                    <div class="border-[3px] border-double border-green-600 rounded-sm p-1">
+                                        <div class="border border-green-600 px-3 py-1">
+                                            <span class="text-green-600 text-[17px] font-black tracking-widest whitespace-nowrap">全部结清</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        })()}
+                    </div>
+
+                    <!-- 右侧：总待还本息 -->
+                    <div class="text-right">
+                        ${isFinished ? `
+                            <p class="text-[10px] text-gray-400 mb-0.5">状态</p>
+                            <p class="text-[13px] font-bold text-green-500">已全部结清</p>
+                        ` : `
+                            <p class="text-[10px] text-gray-400 mb-0.5">待还本息</p>
+                            <p class="text-[15px] font-bold text-red-500">¥${toPlainNumber(plan.remainingAmount)}</p>
+                        `}
+                    </div>
+                </div>
 
                 <div class="flex items-center gap-2 mt-3">
                     <div class="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -8548,20 +9407,33 @@ const repName = repLabels[c.repaymentType] || '自定义';
     <div class="grid grid-cols-2 gap-2">
         <!-- 左侧：总待还 -->
         <div>
-            <p class="text-[11px] text-orange-100 mb-0.5">总待还金额</p>
+            <p class="text-[11px] text-orange-100 mb-0.5">总待还</p>
             <p class="text-[22px] font-bold tracking-tight mb-1">¥${toPlainNumber(summary.totalRemainingAmount)}</p>
             <p class="text-[10px] text-orange-200">
                 本金 ¥${toPlainNumber(summary.totalRemaining)} + 利息 ¥${toPlainNumber(summary.totalRemainingAmount - summary.totalRemaining)}
             </p>
         </div>
         
-        <!-- 右侧：下期月供 -->
+        <!-- 右侧：本月需还 / 下期需还 -->
         <div class="text-right">
-            <p class="text-[11px] text-orange-100 mb-0.5">下期需还</p>
-            <p class="text-[22px] font-bold tracking-tight mb-1">¥${toPlainNumber(summary.totalNextPayment)}</p>
-            <p class="text-[10px] text-orange-200">
-                本金 ¥${toPlainNumber(summary.totalNextPrincipal)} + 利息 ¥${toPlainNumber(summary.totalNextInterest)}
-            </p>
+            ${summary.totalMonthPendingCount > 0 ? `
+                <p class="text-[11px] text-orange-100 mb-0.5">本月还需还</p>
+                <p class="text-[22px] font-bold tracking-tight mb-1">¥${toPlainNumber(summary.totalMonthPayment)}</p>
+                <p class="text-[10px] text-orange-200">
+                    本金 ¥${toPlainNumber(summary.totalMonthPrincipal)} + 利息 ¥${toPlainNumber(summary.totalMonthInterest)}
+                </p>
+            ` : summary.totalNextPeriodCount > 0 ? `
+                <p class="text-[11px] text-orange-100 mb-0.5">本月已还清</p>
+                <p class="text-[11px] text-orange-200 mb-0.5">下期需还</p>
+                <p class="text-[22px] font-bold tracking-tight mb-1">¥${toPlainNumber(summary.totalNextPayment)}</p>
+                <p class="text-[10px] text-orange-200">
+                    本金 ¥${toPlainNumber(summary.totalNextPrincipal)} + 利息 ¥${toPlainNumber(summary.totalNextInterest)}
+                </p>
+            ` : `
+                <p class="text-[11px] text-orange-100 mb-0.5">还款状态</p>
+                <p class="text-[17px] font-bold tracking-tight mb-1">暂无待还款项</p>
+                <p class="text-[10px] text-orange-200">本月已还清</p>
+            `}
         </div>
     </div>
     
@@ -9113,9 +9985,14 @@ async function confirmImport() {
     if (document.getElementById('import-module-expenses')?.checked) selectedModules.push('expenses');
     if (document.getElementById('import-module-notes')?.checked) selectedModules.push('notes');
     if (document.getElementById('import-module-menstrual')?.checked) selectedModules.push('menstrual');
-if (document.getElementById('import-module-installments')?.checked) selectedModules.push('installments'); // 👈 新增
-if (document.getElementById('import-module-goals')?.checked) selectedModules.push('goals'); // 👈 新增
-    if (selectedModules.length === 0) { showToast('请至少选择一个模块'); return; }
+    if (document.getElementById('import-module-installments')?.checked) selectedModules.push('installments');
+    if (document.getElementById('import-module-goals')?.checked) selectedModules.push('goals');
+    if (document.getElementById('import-module-countdowns')?.checked) selectedModules.push('countdowns');
+
+    if (selectedModules.length === 0) {
+        showToast('请至少选择一个模块');
+        return;
+    }
     const confirmed = await showCustomConfirm('确定导入选中的模块吗？对应模块的现有数据将被覆盖。');
     if (!confirmed) return;
     const details = [];
@@ -9167,8 +10044,12 @@ if (selectedModules.includes('goals') && Array.isArray(data.goals)) { // 👈 �
         details.push(`经期 ${appData.menstrual.records.length} 条`);
     }
     lastSyncData = null;
-    const _accountKey = appData.settings.giteeFilename || '_default';
-    localStorage.removeItem('life_manager_last_sync_data_' + _accountKey);
+
+    const _accountKey = getSyncAccountKey();
+
+    localStorage.removeItem(
+        'life_manager_last_sync_data_' + _accountKey
+    );
     window._pendingImportData = null;
     saveData();
     logOp('导入数据', details.join(' / '));
@@ -9316,14 +10197,17 @@ async function executeSelectiveClear() {
         appData.notes = [];
         details.push(`记事 ${count} 条`);
     }
-    if (clearMenstrual) {
+        if (clearMenstrual) {
         const count = appData.menstrual.records.length + appData.menstrual.loveDates.length;
+
         appData.menstrual = { records: [], loveDates: [] };
-appData.menstrualRemote = { records: [], loveDates: [] };
-appData.goals = [];
-appData.goalsRemote = [];
-appData.settings.syncMenstrualFrom = '';
-        
+        appData.menstrualRemote = { records: [], loveDates: [] };
+
+        // 清除对方共享的心愿缓存，但保留自己的心愿及存入记录
+        appData.goalsRemote = [];
+
+        appData.settings.syncMenstrualFrom = '';
+
         details.push(`经期 ${count} 条`);
     }
 
@@ -9349,7 +10233,7 @@ async function clearAllData() {
 const confirmed = await showCustomConfirm(message);
 if (!confirmed) return;
 if (_syncTimer) { clearTimeout(_syncTimer); _syncTimer = null; }
-    const _oldAccountKey = appData.settings.giteeFilename || '_default';
+    const _oldAccountKey = getSyncAccountKey();
 appData = {
     tasks: [], incomes: [], expenses: [], notes: [],
     menstrual: { records: [], loveDates: [] },
