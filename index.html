@@ -5915,11 +5915,19 @@ function renderBillView() {
                 return timeB - timeA;
             });
             
-                        const isToday = dateStr === todayStr;
-            const defaultExpanded = isToday || dateStr === yesterdayStr;
+            const isToday = dateStr === todayStr;
 
-            const isExpanded = billDayExpandedOverrides.has(dateStr)
-                ? billDayExpandedOverrides.get(dateStr)
+            // 普通列表和筛选列表使用独立的展开状态
+            const expansionKey = `${hasFilter ? 'filter' : 'normal'}:${dateStr}`;
+
+            // 筛选状态下所有日期默认展开
+            // 普通状态下今天和昨天默认展开
+            const defaultExpanded = hasFilter ||
+                isToday ||
+                dateStr === yesterdayStr;
+
+            const isExpanded = billDayExpandedOverrides.has(expansionKey)
+                ? billDayExpandedOverrides.get(expansionKey)
                 : defaultExpanded;
 
             return `
@@ -6721,15 +6729,26 @@ function toggleBillDay(dateStr) {
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = formatDateLocal(yesterday);
 
-    // 今天和昨天默认展开，其余日期默认收起
-    const defaultExpanded =
-        dateStr === todayStr || dateStr === yesterdayStr;
+    // 判断当前是否处于筛选状态
+    const hasFilter = !!(
+        billFilter.category ||
+        billFilter.payMethod ||
+        billFilter.recordType
+    );
 
-    const currentExpanded = billDayExpandedOverrides.has(dateStr)
-        ? billDayExpandedOverrides.get(dateStr)
+    // 普通列表和筛选列表分别保存展开状态，互不影响
+    const expansionKey = `${hasFilter ? 'filter' : 'normal'}:${dateStr}`;
+
+    // 筛选列表默认全部展开；普通列表仅今天和昨天默认展开
+    const defaultExpanded = hasFilter ||
+        dateStr === todayStr ||
+        dateStr === yesterdayStr;
+
+    const currentExpanded = billDayExpandedOverrides.has(expansionKey)
+        ? billDayExpandedOverrides.get(expansionKey)
         : defaultExpanded;
 
-    billDayExpandedOverrides.set(dateStr, !currentExpanded);
+    billDayExpandedOverrides.set(expansionKey, !currentExpanded);
 
     // 重新渲染记账列表
     softRefreshCurrentTab();
